@@ -521,14 +521,17 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                 tags_demandes = inventaire.get("hashtags_croises", [])
                 tags_valides = hashtags_correspondants(
                     video, tags_demandes, inventaire.get("operateur", "OR"))
-                # Chaque vidéo justificative doit satisfaire les deux critères.
+                # Les inventaires historiques sans hashtags conservent leur
+                # fonctionnement d'origine, sans preuve thématique présumée.
+                hashtags_valides = not tags_demandes or bool(tags_valides)
+                # Toute nouvelle collecte à hashtags vérifie les deux critères.
                 if not localisation_valide:
                     inventaire["videos_hors_territoire"] = (
                         inventaire.get("videos_hors_territoire", 0) + 1)
-                if not tags_valides:
+                if not hashtags_valides:
                     inventaire["videos_sans_hashtag"] = (
                         inventaire.get("videos_sans_hashtag", 0) + 1)
-                if not localisation_valide or not tags_valides:
+                if not localisation_valide or not hashtags_valides:
                     inventaire["videos_ecartees"] = (
                         inventaire.get("videos_ecartees", 0) + 1)
                     continue
@@ -554,7 +557,7 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                     compte["videos_trouvees"] += 1
                     inventaire["videos_retenues"] = (
                         inventaire.get("videos_retenues", 0) + 1)
-                    if not compte.get("video_preuve"):
+                    if tags_demandes and not compte.get("video_preuve"):
                         # Enregistrer la première vidéo effectivement conforme.
                         # Le Place ID fourni n'est jamais présenté comme vérifié.
                         compte["video_preuve"] = {
