@@ -64,5 +64,84 @@ class LanguageTests(unittest.TestCase):
                 "Students are marching in the city because they want "
                 "better conditions at school and more public investment."), "other")
 
+    def test_legende_francaise_avec_determinants_courants(self):
+        """Un classement étranger erroné ne doit pas exclure du français."""
+        faux_detecteur = Mock()
+        faux_detecteur.get_probabilities.return_value = [
+            SimpleNamespace(lang="es", prob=0.999999)]
+        fabrique = Mock()
+        fabrique.create.return_value = faux_detecteur
+        legende = (
+            "Le conseil municipal annonce la fermeture de la rue et "
+            "un rassemblement en centre ville au sujet de la réforme.")
+        with patch("language_filter.detector_factory", return_value=fabrique):
+            self.assertEqual(classify_description(legende), "unknown")
+
+    def test_legende_francaise_avec_apostrophes_et_accents(self):
+        """Les formes apostrophées et accentuées doivent protéger le corpus."""
+        faux_detecteur = Mock()
+        faux_detecteur.get_probabilities.return_value = [
+            SimpleNamespace(lang="nl", prob=0.999999)]
+        fabrique = Mock()
+        fabrique.create.return_value = faux_detecteur
+        legende = (
+            "Les élèves étaient réunis devant l'établissement pour "
+            "s'opposer à une décision et réclamer davantage de moyens.")
+        with patch("language_filter.detector_factory", return_value=fabrique):
+            self.assertEqual(classify_description(legende), "unknown")
+
+    def test_legende_bilingue_non_exclue(self):
+        """Une longue légende ne doit pas être rejetée si les segments divergent."""
+        fabrique = Mock()
+        langues = iter(("en", "en", "fr"))
+        def produire_detecteur():
+            detecteur = Mock()
+            detecteur.get_probabilities.return_value = [
+                SimpleNamespace(lang=next(langues), prob=0.999999)]
+            return detecteur
+        fabrique.create.side_effect = produire_detecteur
+        texte = (
+            "Today students gathered outside their school to speak about "
+            "new policies, puis la manifestation s'est poursuivie "
+            "dans les rues avec les familles et les enseignants.")
+        # Neutraliser ici les indices lexicaux pour exercer la validation
+        # des deux segments indépendamment de l'autre garde-fou.
+        with patch("language_filter.detector_factory", return_value=fabrique), \
+                patch("language_filter.INDICES_FRANCAIS", frozenset()), \
+                patch("language_filter.INDICES_FRANCAIS_COURANTS", frozenset()):
+            self.assertEqual(classify_description(texte), "unknown")
+        self.assertEqual(fabrique.create.call_count, 3)
+
+    def test_deux_segments_concordants_rejettent_langue_etrangere(self):
+        """La règle continue d'exclure un long texte certainement non français."""
+        fabrique = Mock()
+        detecteur = Mock()
+        detecteur.get_probabilities.return_value = [
+            SimpleNamespace(lang="en", prob=0.999999)]
+        fabrique.create.return_value = detecteur
+        texte = (
+            "Students are marching in the city because they want better "
+            "conditions at school and more public investment this year.")
+        with patch("language_filter.detector_factory", return_value=fabrique):
+            self.assertEqual(classify_description(texte), "other")
+        self.assertEqual(fabrique.create.call_count, 3)
+
+    def test_prediction_unique_insuffisante_pour_exclure(self):
+        """Un segment court indéterminé ne suffit pas à écarter une légende."""
+        fabrique = Mock()
+        langues = iter(("en", "en", "es"))
+        def produire_detecteur():
+            detecteur = Mock()
+            detecteur.get_probabilities.return_value = [
+                SimpleNamespace(lang=next(langues), prob=0.999999)]
+            return detecteur
+        fabrique.create.side_effect = produire_detecteur
+        texte = (
+            "People gather outside city hall to demand safer working "
+            "conditions and greater respect for all members of society.")
+        with patch("language_filter.detector_factory", return_value=fabrique):
+            self.assertEqual(classify_description(texte), "unknown")
+        self.assertEqual(fabrique.create.call_count, 3)
+
     def test_results_are_repeatable(self):
         self.assertEqual([classify_description(FR) for _ in range(3)], ["fr"] * 3)
