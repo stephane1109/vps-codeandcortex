@@ -70,7 +70,7 @@ def correspond_hashtags(video, hashtags, operateur="OR"):
             continue
     # Certaines réponses Research ne fournissent que la description.
     description = _normaliser_texte(video.get("video_description") or "")
-    for nom in re.findall(r"#([\\w]+)", description):
+    for nom in re.findall(r"#([\w]+)", description):
         try:
             trouves.add(nettoyer_terme(nom))
         except ValueError:
