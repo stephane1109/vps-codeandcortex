@@ -186,31 +186,6 @@ if "initialise" not in st.session_state:
                 if ancienne else True)
             for nom in ("following_count", "follower_count", "likes_count", "video_count")
         },
-        # Les nouvelles collectes cochent les deux destinations. Une ancienne
-        # collecte retrouve ses valeurs CSV sans ajouter de variables TXT
-        # qu'elle ne possédait pas lors de sa création.
-        **{
-            "profil_media_" + nom + "_" + format_: (
-                bool(ancienne.get("profils_medias_" + cle_nouvelle, []))
-                if False else
-                (nom in (ancienne.get("profils_medias_" + cle_nouvelle)
-                         if ancienne.get("profils_medias_" + cle_nouvelle) is not None
-                         else (ancienne.get("profils_medias_variables") or [])
-                         if suffixe == "brut"
-                         else (ancienne.get("profils_medias_classes") or [])))
-                if ancienne and destination == "csv" else
-                (nom in (ancienne.get("profils_medias_" + cle_nouvelle) or [])
-                 if ancienne.get("profils_medias_" + cle_nouvelle) is not None
-                 else False)
-                if ancienne else True)
-            for nom in ("following_count", "follower_count", "likes_count", "video_count")
-            for destination, suffixe, cle_nouvelle, format_ in (
-                ("txt", "brut", "txt_bruts", "txt_brut"),
-                ("txt", "classe", "txt_classes", "txt_classe"),
-                ("csv", "brut", "csv_bruts", "csv_brut"),
-                ("csv", "classe", "csv_classes", "csv_classe"),
-            )
-        },
         "collecter_is_verified":ancienne.get("collecter_is_verified",True),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",True),
@@ -226,6 +201,26 @@ if "initialise" not in st.session_state:
         "limite_commentaires":ancienne.get("limite_commentaires",50),
         "test_research_10_publications":ancienne.get("test_research_10_publications",False),
         "nom_sauvegarde": ancienne.get("nom_sauvegarde", "")}
+
+    # Retrouver les choix explicites sans transformer des archives historiques
+    # en nouvelles variables TXT. Pour une nouvelle collecte, tout cocher.
+    for nom in ("following_count", "follower_count", "likes_count", "video_count"):
+        for destination in ("txt", "csv"):
+            for type_, champ in (
+                    ("brut", "bruts"), ("classe", "classes")):
+                sauvegarde = ancienne.get("profils_medias_" + destination + "_" + champ)
+                if sauvegarde is not None:
+                    coche = nom in sauvegarde
+                elif ancienne:
+                    coche = (
+                        destination == "csv" and
+                        nom in (ancienne.get(
+                            "profils_medias_variables" if type_ == "brut"
+                            else "profils_medias_classes") or []))
+                else:
+                    coche = True
+                valeurs["profil_media_" + nom + "_" +
+                        destination + "_" + type_] = coche
 
     variables = ancienne.get("variables_txt")
     if variables is None:
