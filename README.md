@@ -1056,16 +1056,39 @@ lorsqu'il est réellement fourni, sans l'assimiler à un identifiant unique.
 Ce champ ne peut pas servir à calculer un réseau d'auteurs fiables.
 
 Dans **Analyse sociométrique à partir de fichiers CSV**, la présence de
-commentaires Research est désormais signalée, ainsi que les liens de réponse
-potentiels. Sans auteur de page visible, le mode **Commentaires : graphe des
-réponses** est proposé à l'import, car il peut exploiter `id` et
-`parent_id`, à condition d'avoir collecté des réponses. Les graphes
-auteurs–vidéos et vidéos–vidéos ne sont pas inférés à partir des noms
-affichés. Pour de nouvelles collectes avec Research, l'option de collecte
-des réponses doit être activée si un graphe des réponses est attendu ;
-elle ne permet pas de retrouver les identités des commentateurs.
+commentaires Research est signalée, ainsi que les liens de réponse
+potentiels. Les trois analyses historiques restent sélectionnables :
+**Auteurs–vidéos**, **Vidéos–vidéos : commentateurs communs** et
+**Commentaires : graphe des réponses**. Aucune sélection automatique du
+graphe des réponses ne modifie le choix de l'utilisateur. Ce dernier
+peut exploiter `id` et `parent_id` si les réponses ont été collectées.
+Les graphes auteurs–vidéos et vidéos–vidéos ne sont pas inférés à partir
+des noms affichés. Pour de nouvelles collectes avec Research, l'option de
+collecte des réponses doit être activée si un graphe des réponses est
+attendu ; elle ne permet pas de retrouver les identités des commentateurs.
 Les archives historiques ne peuvent pas être enrichies automatiquement
 en `username` par cette API.
+
+Un troisième choix **Réseau de similarité de l'engagement** permet d'importer
+directement un ou plusieurs `engagement.csv` ou `publications.csv`, sans
+commentaires. Chaque nœud représente une vidéo et chaque lien une proximité
+des compteurs sélectionnés : `vues` (`view_count`), `likes`
+(`like_count`), `commentaires` (`comment_count`) et `partages`
+(`share_count`). Chaque variable suit la transformation `log(1+x)`,
+puis un centrage-réduction ; la similarité vaut
+`1/(1+distance euclidienne moyenne quadratique)`. Le seuil de similarité,
+le nombre de voisins et le nombre maximal de vidéos sont paramétrables.
+Les vidéos dont une métrique sélectionnée manque sont exclues du calcul,
+sans remplacer les valeurs absentes par zéro ; les dimensions constantes
+ne déterminent aucune distance. Le nombre de vidéos éventuellement écartées
+par limitation est affiché. Les exports CSV, GraphML et GEXF sont conservés,
+avec matrice d'adjacence jusqu'à 250 nœuds. La comparaison est limitée
+à 1 000 vidéos par calcul pour contrôler le coût quadratique.
+
+**Attention à l'interprétation** : ce réseau statistique représente des
+similarités de volumes d'engagement, non des liens sociaux ou des audiences
+communes. Les quatre compteurs TikTok sont des indicateurs agrégés, sans
+identité ni coactivité des personnes qui ont visionné ou réagi.
 
 ### Dossier local de téléchargement et noms de fichiers
 
