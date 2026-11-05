@@ -4209,6 +4209,13 @@ with onglet_sociometrie:
                         "Aucune paire de vidéos n'atteint le seuil choisi. "
                         "Réduisez le seuil ou sélectionnez d'autres métriques.")
                 st.subheader("Exporter le réseau de similarité")
+
+                def preparer_telechargement_reseau(graphe, format_sortie):
+                    """Générer les octets seulement après un clic utilisateur."""
+                    def produire_fichier():
+                        return exporter(graphe, format_sortie)
+                    return produire_fichier
+
                 for nom, libelle, mime in (
                     ("noeuds.csv", "Nœuds CSV", "text/csv"),
                     ("liens.csv", "Liens CSV", "text/csv"),
@@ -4219,8 +4226,8 @@ with onglet_sociometrie:
                     # ne préparer GraphML/GEXF/CSV qu'au clic de téléchargement.
                     st.download_button(
                         libelle,
-                        data=lambda format_sortie=nom, reseau=reseau_mesures: (
-                            exporter(reseau, format_sortie)),
+                        data=preparer_telechargement_reseau(
+                            reseau_mesures, nom),
                         file_name="similarite_engagement_" + nom,
                         mime=mime,
                         on_click="ignore",
@@ -4228,8 +4235,8 @@ with onglet_sociometrie:
                 if len(reseau_mesures["noeuds"]) <= 250:
                     st.download_button(
                         "Matrice de similarité CSV",
-                        data=lambda reseau=reseau_mesures: (
-                            exporter(reseau, "matrice.csv")),
+                        data=preparer_telechargement_reseau(
+                            reseau_mesures, "matrice.csv"),
                         file_name="similarite_engagement_matrice.csv",
                         mime="text/csv",
                         on_click="ignore",
