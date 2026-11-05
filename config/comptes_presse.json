@@ -884,6 +884,24 @@
       "source": "fourni_par_utilisateur",
       "statut": "declare_utilisateur",
       "url": "https://www.tiktok.com/@immersion.docs"
+    },
+    {
+      "id": "lejournaldeboudene",
+      "nom": "Le Journal de Boudène",
+      "compte": "lejournaldeboudene",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lejournaldeboudene"
+    },
+    {
+      "id": "parisreportage",
+      "nom": "Paris Reportage",
+      "compte": "parisreportage",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parisreportage"
     }
   ]
 }
