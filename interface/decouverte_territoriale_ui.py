@@ -8,7 +8,7 @@ from datetime import date, timedelta
 import streamlit as st
 
 
-def afficher_decouverte_territoriale(api, *, occupe=False):
+def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
     """Créer, poursuivre et consulter un inventaire de comptes par territoire."""
     st.caption(
         "Recherche exclusivement avec la TikTok Research API. Le mode Place TikTok "
@@ -80,8 +80,13 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     if st.button(
         "Collecte de compte",
         key="territoire_creer", disabled=occupe, type="primary"):
+        cle = str(st.session_state.get("research_client_key") or "").strip()
+        secret = str(st.session_state.get("research_client_secret") or "").strip()
         try:
             resultat = api("/api/decouverte-territoriale", {
+                "demarrer": True,
+                "research_client_key": cle or None,
+                "research_client_secret": secret or None,
                 "ville": ville.strip(),
                 "variantes": [
                     v.strip() for v in variantes.split(",") if v.strip()],
@@ -95,7 +100,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                 "date_fin": date_fin.isoformat(),
             })
         except RuntimeError as erreur:
-            st.error("Création impossible : " + str(erreur))
+            st.error("Collecte impossible : " + str(erreur))
         else:
             st.session_state["territoire_inventaire_id"] = resultat["id"]
             st.rerun()
@@ -105,7 +110,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         st.warning("Inventaires indisponibles : " + str(erreur))
         return
     if not inventaires:
-        st.info("Cliquez sur le bouton Collecte de compte, puis démarrez la recherche pour identifier les comptes.")
+        st.info("Cliquez sur Collecte de compte pour créer et démarrer immédiatement la recherche.")
         return
     index = {ligne["id"]: ligne for ligne in inventaires}
     identifiant_precedent = st.session_state.get("territoire_inventaire_id")
@@ -179,28 +184,28 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                 st.error("Arrêt impossible : " + str(erreur))
     elif not inventaire["terminee"]:
         st.caption(
-            "La découverte utilise les identifiants Research du formulaire "
-            "principal s'ils sont renseignés. À défaut, elle utilise ceux "
-            "configurés dans Coolify. Les clés ne sont pas enregistrées "
-            "avec l'inventaire.")
-        cle = str(st.session_state.get("research_client_key") or "").strip()
-        secret = str(st.session_state.get("research_client_secret") or "").strip()
+            "La collecte utilise vos clés Research de l'interface lorsqu'elles "
+            "sont saisies, sinon celles de Coolify. Les clés ne sont pas "
+            "enregistrées dans l'inventaire.")
+        # La reprise reste réservée aux collectes déjà créées et inactives.
+        etat_precedent = inventaire.get("etat", "en_attente")
+        libelle_reprise = (
+            "Reprendre la collecte interrompue"
+            if etat_precedent == "interrompue"
+            else "Lancer cette collecte enregistrée")
         if st.button(
-            "Démarrer / reprendre la recherche complète",
-            key="territoire_poursuivre", disabled=occupe):
-            if bool(cle) != bool(secret):
-                st.error(
-                    "Renseignez les deux identifiants Research : "
-                    "Client key et Client secret.")
-            else:
-                try:
-                    api(
-                        f"/api/decouverte-territoriale/{selection_id}/poursuivre",
-                        {"research_client_key": cle or None,
-                         "research_client_secret": secret or None})
-                    st.rerun()
-                except RuntimeError as erreur:
-                    st.error("Découverte interrompue : " + str(erreur))
+            libelle_reprise, key="territoire_poursuivre",
+            disabled=occupe, type="secondary"):
+            cle = str(st.session_state.get("research_client_key") or "").strip()
+            secret = str(st.session_state.get("research_client_secret") or "").strip()
+            try:
+                api(
+                    f"/api/decouverte-territoriale/{selection_id}/poursuivre",
+                    {"research_client_key": cle or None,
+                     "research_client_secret": secret or None})
+                st.rerun()
+            except RuntimeError as erreur:
+                st.error("Reprise impossible : " + str(erreur))
     else:
         st.success("Période parcourue : recherche terminée.")
     comptes = inventaire["comptes"]
@@ -225,17 +230,33 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         key="territoire_comptes_selectionnes",
         help="Sélectionnez les comptes souhaités. Ils seront transférés "
              "par lots de 10, conformément au formulaire de collecte existant.")
-    colonne_txt, colonne_csv = st.columns(2)
-    with colonne_txt:
-        st.link_button(
-            "Télécharger les @comptes en TXT",
-            f"/api/decouverte-territoriale/{selection_id}/comptes.txt",
-            use_container_width=True)
-    with colonne_csv:
-        st.link_button(
-            "Télécharger les @comptes en CSV",
-            f"/api/decouverte-territoriale/{selection_id}/comptes.csv",
-            use_container_width=True)
+    # Les liens directs ne transmettent pas les cookies privés de Streamlit.
+    # Les fichiers sont obtenus côté serveur via le client API authentifié.
+    try:
+        fichier_txt = telecharger(
+            f"/api/decouverte-territoriale/{selection_id}/comptes.txt")
+        fichier_csv = telecharger(
+            f"/api/decouverte-territoriale/{selection_id}/comptes.csv")
+    except RuntimeError as erreur:
+        st.error("Téléchargement impossible : " + str(erreur))
+    else:
+        colonne_txt, colonne_csv = st.columns(2)
+        with colonne_txt:
+            st.download_button(
+                "Télécharger les @comptes en TXT",
+                data=fichier_txt,
+                file_name=f"comptes_{selection_id[:8]}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key="territoire_telecharger_txt")
+        with colonne_csv:
+            st.download_button(
+                "Télécharger les @comptes en CSV",
+                data=fichier_csv,
+                file_name=f"comptes_{selection_id[:8]}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="territoire_telecharger_csv")
     if selection:
         lots = [selection[i:i+10] for i in range(0, len(selection), 10)]
         lot = st.number_input(
