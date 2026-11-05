@@ -1377,130 +1377,104 @@ with onglet_collecte:
             def effacer_dates():
                 st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
             st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
-        st.write("Variables à inclure avant chaque post dans le TXT")
+        st.write("Variables des publications : destinations TXT et CSV")
         st.caption(
-            "Recoder la variable continue en variables catégorielles : "
-            "chaque recodage ajoute une variable catégorielle en plus de "
-            "la valeur numérique réelle, sans la remplacer. Les deux "
-            "peuvent figurer dans le TXT. Les valeurs numériques exactes "
-            "restent dans engagement.csv et publications.csv. "
-            "Valeur manquante : classe « indéterminé » (jamais zéro)."
-        )
-        # Les variables TXT forment une liste compacte, sans ligne vide entre
-        # les cases à cocher. Les intitulés, les clés et les options sont conservés.
+            "Sur chaque ligne, TXT ajoute la variable dans l'en-tête IRaMuTeQ "
+            "et CSV ajoute la colonne au tableau correspondant. Les deux cases "
+            "sont indépendantes et peuvent être cochées simultanément. "
+            "Les identifiants techniques nécessaires aux jointures sont conservés "
+            "dans les CSV, même si leur affichage descriptif est désactivé. "
+            "Les valeurs manquantes ne deviennent jamais des zéros.")
         with st.container(key="bloc_variables_txt"):
             st.html("""
             <style>
-            /* Réduire uniquement les espacements du bloc des variables TXT. */
-            .st-key-bloc_variables_txt [data-testid="stVerticalBlock"] {
+            /* Une ligne compacte par variable, sans blanc entre les cases. */
+            .st-key-bloc_variables_txt [data-testid="stVerticalBlock"],
+            .st-key-bloc_variables_txt [data-testid="stHorizontalBlock"] {
                 gap: 0 !important;
                 row-gap: 0 !important;
             }
-            .st-key-bloc_variables_txt [data-testid="stHorizontalBlock"] {
-                gap: 0.5rem !important;
-                row-gap: 0 !important;
-                align-items: flex-start !important;
-            }
             .st-key-bloc_variables_txt [data-testid="stElementContainer"],
-            .st-key-bloc_variables_txt [data-testid="stCheckbox"] {
-                margin-block: 0 !important;
-                padding-block: 0 !important;
-                min-height: 0 !important;
-            }
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"],
             .st-key-bloc_variables_txt [data-testid="stCheckbox"] label {
-                margin-block: 0 !important;
                 padding-block: 0 !important;
+                margin-block: 0 !important;
                 min-height: 0 !important;
             }
             .st-key-bloc_variables_txt [data-testid="stCheckbox"] p {
                 margin-block: 0 !important;
                 line-height: 1.25 !important;
             }
+            .st-key-bloc_variables_txt [data-testid="stCaptionContainer"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
+            }
             </style>
             """)
-            # Chaque variable d'identification occupe une ligne distincte.
-            # Les clés et conditions restent inchangées pour préserver les choix.
-            for nom in ("date", "profil", "id"):
-                st.checkbox(VARIABLES_TXT[nom], key="txt_" + nom, disabled=occupe)
-                if nom == "profil":
-                    # Options d'abonnés des auteurs immédiatement sous Profil,
-                    # dans tous les modes, en conservant leurs clés et conditions.
-                    st.checkbox(
-                        "Récupérer le nombre d'abonnés des auteurs (follower_count)",
-                        key="collecter_follower_count",
-                        disabled=occupe or moteur_formulaire != "research",
-                        help="Disponible uniquement avec la Research API officielle. "
-                             "Une seule requête par auteur distinct ; valeur à la date de collecte. "
-                             "Les autres moteurs et options conservent leur comportement.")
-                    st.checkbox(
-                        "Abonnés : valeur numérique réelle dans le TXT",
-                        key="follower_count_illustratif",
-                        disabled=occupe or moteur_formulaire != "research"
-                                 or not st.session_state.get("collecter_follower_count", False),
-                        help="Valeur numérique exacte, par exemple : *follower_count_12345.")
-                    st.checkbox(
-                        "Abonnés : recoder la variable continue en variable catégorielle "
-                        "(codage proposé : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
-                        "100 000–999 999 ; ≥1 000 000)",
-                        key="abonnes_classe_illustratif",
-                        disabled=occupe or moteur_formulaire != "research"
-                                 or not st.session_state.get("collecter_follower_count", False),
-                        help="Variable supplémentaire, en plus du nombre réel d'abonnés. "
-                             "Les deux modalités peuvent figurer dans le TXT. "
-                             "La valeur exacte reste dans les exports CSV. "
-                             "Classe possible : *abonnes_10k_100k ; "
-                             "absence de donnée : *abonnes_indetermine.")
-                if nom == "profil" and source in {"presse", "hashtags"}:
-                    st.caption(
-                        ("Métriques des comptes médias — fichier profils_medias.csv "
-                         "(une ligne par compte sélectionné, même sans vidéo retenue). "
-                         if source == "presse" else
-                         "Métriques des comptes auteurs — fichier profils_medias.csv "
-                         "(une ligne par auteur distinct des vidéos collectées). ")
-                        + "Disponibles avec la Research API officielle. "
-                          "Une requête par auteur distinct utilise le quota Research.")
-                    for variable in VARIABLES_PROFILS_MEDIAS:
-                        libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
-                        cle_brute = "profil_media_" + variable + "_brut"
-                        cle_classe = "profil_media_" + variable + "_classe"
-                        colonne_nombre, colonne_classe = st.columns(
-                            [1.05, 3.5], gap="small", vertical_alignment="top")
-                        colonne_nombre.checkbox(
-                            libelle + " : valeur numérique réelle",
-                            key=cle_brute,
-                            disabled=occupe or moteur_formulaire != "research",
-                            help="Métrique agrégée du compte public, distincte des "
-                                 "compteurs de chacune de ses vidéos. Une seule "
-                                 "requête officielle par compte et par collecte.")
-                        colonne_classe.checkbox(
-                            "Recoder en variable catégorielle (codage proposé : "
-                            + intervalles + ")",
-                            key=cle_classe,
-                            disabled=(occupe or moteur_formulaire != "research"
-                                      or not st.session_state.get(cle_brute, False)),
-                            help="Ajoute une colonne classe_" + variable
-                                 + " au CSV, en plus de la valeur numérique. "
-                                 "Donnée manquante : indetermine, jamais zéro.")
-            st.caption("Catégorie du compte : *presse_nationale, *presse_regio_dpt, "
-                       "*presse_indep ou *presse_autre, ajoutée automatiquement "
-                       "au TXT lorsque le profil appartient à l’inventaire des médias. "
-                       "Quatre colonnes indicatrices correspondantes figurent dans les CSV.")
-            st.checkbox(
-                "Region Code (pays d'enregistrement du compte)",
-                key="txt_region_code",
-                disabled=occupe or moteur_formulaire != "research",
-                help="Code à deux lettres fourni par la Research API. "
-                     "Ce n'est pas nécessairement le pays de résidence de l'auteur. "
-                     "Donnée manquante : *region_indetermine.")
-            st.checkbox(
-                "Is Verified (compte vérifié par TikTok)",
-                key="txt_is_verified",
-                disabled=occupe or moteur_formulaire != "research",
-                help="Statut du profil public via la Research API. "
-                     "Modalités : *is_verified_oui, *is_verified_non ou "
-                     "*is_verified_indetermine. Réutilise la requête des abonnés "
-                     "lorsque celle-ci est également sélectionnée.")
 
+            def ligne_variable(libelle, cle_txt, cle_csv, *, aide=None,
+                               seulement_research=False):
+                """Placer l'intitulé et les deux cases sur une seule rangée."""
+                desactive = occupe or (
+                    seulement_research and moteur_formulaire != "research")
+                colonne_libelle, colonne_txt, colonne_csv = st.columns(
+                    [8, 1, 1], gap="small", vertical_alignment="center")
+                with colonne_libelle:
+                    st.caption(libelle)
+                with colonne_txt:
+                    st.checkbox(
+                        "TXT", key=cle_txt, disabled=desactive,
+                        help=aide or "Inclure cette variable dans le TXT IRaMuTeQ.")
+                with colonne_csv:
+                    st.checkbox(
+                        "CSV", key=cle_csv, disabled=desactive,
+                        help=aide or "Inclure cette variable dans les CSV de publications.")
+
+            ligne_variable("Date", "txt_date", "csv_date")
+            ligne_variable("Profil", "txt_profil", "csv_profil")
+            ligne_variable(
+                "Récupérer le nombre d'abonnés des auteurs (follower_count)",
+                "txt_collecter_follower_count", "csv_recuperer_abonnes",
+                seulement_research=True,
+                aide="L'une ou l'autre case demande le compteur officiel : "
+                     "TXT insère *follower_count_, CSV conserve follower_count. "
+                     "La sélection de la valeur réelle ou de la classe ci-dessous "
+                     "déclenche également la récupération si nécessaire.")
+            ligne_variable(
+                "Abonnés : valeur numérique réelle",
+                "follower_count_illustratif", "csv_follower_count",
+                seulement_research=True,
+                aide="Valeur exacte de follower_count. La récupérer n'ajoute "
+                     "pas une seconde fois la même variable dans le TXT.")
+            ligne_variable(
+                "Abonnés : recoder la variable continue en variable catégorielle "
+                "(0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
+                "100 000–999 999 ; ≥1 000 000)",
+                "abonnes_classe_illustratif", "csv_abonnes_classe",
+                seulement_research=True)
+            ligne_variable("ID vidéo", "txt_id", "csv_id")
+            if source == "comptes":
+                ligne_variable(
+                    "Ville associée au corpus (par exemple *ville_toulouse)",
+                    "txt_ville_etude", "csv_ville_etude",
+                    aide="Variable de sélection du corpus, non résidence "
+                         "du compte ou localisation vérifiée de la vidéo.")
+            ligne_variable(
+                "Catégorie du compte : *presse_nationale, *presse_regio_dpt, "
+                "*presse_indep ou *presse_autre",
+                "txt_categorie_compte", "csv_categorie_compte",
+                aide="La catégorie est ajoutée uniquement si le compte "
+                     "figure dans l'inventaire des médias. CSV produit "
+                     "les quatre colonnes indicatrices correspondantes.")
+            ligne_variable(
+                "Region Code (pays d'enregistrement du compte)",
+                "txt_region_code", "csv_region_code",
+                seulement_research=True,
+                aide="Le pays d'enregistrement ne précise pas la ville.")
+            ligne_variable(
+                "Is Verified (compte vérifié par TikTok)",
+                "txt_is_verified", "csv_is_verified",
+                seulement_research=True)
             classes_numeriques = {
                 "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
                 "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; 1 000–9 999 ; ≥10 000"),
@@ -1510,30 +1484,64 @@ with onglet_collecte:
                 "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
             }
             for nom, (libelle, intervalles) in classes_numeriques.items():
-                colonne_brute, colonne_classe = st.columns([1.05, 3.5], gap="small",
-                                                            vertical_alignment="top")
-                colonne_brute.checkbox(
+                ligne_variable(
                     libelle + " : valeur numérique réelle",
-                    key="txt_" + nom, disabled=occupe)
-                colonne_classe.checkbox(
-                    libelle + " : recoder la variable continue en variable catégorielle "
-                    "(codage proposé : " + intervalles + ")",
-                    key="txt_classe_" + nom, disabled=occupe,
-                    help="Variable catégorielle supplémentaire, en plus de la valeur "
-                         "numérique réelle. Les deux peuvent figurer dans le TXT. "
-                         "La valeur exacte reste dans engagement.csv et publications.csv ; les "
-                         "données absentes sont codées « indéterminé ».")
+                    "txt_" + nom, "csv_" + nom)
+                ligne_variable(
+                    libelle + " : recoder la variable continue en variable "
+                    "catégorielle (codage proposé : " + intervalles + ")",
+                    "txt_classe_" + nom, "csv_" + nom + "_classe",
+                    aide="La classe est indépendante de la valeur numérique. "
+                         "Une donnée absente reste indéterminée.")
+            ligne_variable(
+                "Taux d'engagement : valeur numérique réelle",
+                "txt_taux_engagement_brut", "csv_taux_engagement",
+                aide="(Likes + commentaires + partages + favoris) / vues × 100.")
+            ligne_variable(
+                "Taux d'engagement : classe (< 1 % ; 1–3 % ; "
+                "3–5 % ; 5–10 % ; ≥ 10 %)",
+                "txt_taux_engagement_classe", "csv_classe_taux_engagement")
+            # La collecte des textes est une action distincte des compteurs.
+            st.checkbox(
+                "Collecter les textes des commentaires",
+                key="collecter_commentaires", disabled=occupe,
+                help="Récupère les commentaires dans commentaires.csv ; les "
+                     "options d'inclusion TXT restent dans l'expandeur suivant. "
+                     "L'API Research ne fournit pas l'identifiant unique "
+                     "du commentateur.")
 
-            # Cette option collecte les textes des commentaires ; elle est distincte
-            # de la variable numérique « Nombre de commentaires » du TXT.
-            # La placer dans le même conteneur supprime le saut visuel final.
-            st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
-                help="Récupère les commentaires dans commentaires.csv. "
-                     "L'ajout des textes au TXT est une option indépendante. "
-                     "La variable numérique « Nombre de commentaires » reste disponible. "
-                     "Avec la Research API, TikTok ne fournit pas l'identifiant unique "
-                     "des commentateurs : la colonne auteur reste vide. "
-                     "Pour un réseau de réponses, activer aussi la collecte des réponses.")
+        if source in {"presse", "hashtags"}:
+            st.caption(
+                ("Métriques des comptes médias — fichier profils_medias.csv "
+                 "(une ligne par compte sélectionné, même sans vidéo retenue). "
+                 if source == "presse" else
+                 "Métriques des comptes auteurs — fichier profils_medias.csv "
+                 "(une ligne par auteur distinct des vidéos collectées). ")
+                + "Disponibles avec la Research API officielle. "
+                  "Une requête par auteur distinct utilise le quota Research.")
+            for variable in VARIABLES_PROFILS_MEDIAS:
+                libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
+                cle_brute = "profil_media_" + variable + "_brut"
+                cle_classe = "profil_media_" + variable + "_classe"
+                colonne_nombre, colonne_classe = st.columns(
+                    [1.05, 3.5], gap="small", vertical_alignment="top")
+                colonne_nombre.checkbox(
+                    libelle + " : valeur numérique réelle",
+                    key=cle_brute,
+                    disabled=occupe or moteur_formulaire != "research",
+                    help="Métrique agrégée du compte public, distincte des "
+                         "compteurs de chacune de ses vidéos. Une seule "
+                         "requête officielle par compte et par collecte.")
+                colonne_classe.checkbox(
+                    "Recoder en variable catégorielle (codage proposé : "
+                    + intervalles + ")",
+                    key=cle_classe,
+                    disabled=(occupe or moteur_formulaire != "research"
+                              or not st.session_state.get(cle_brute, False)),
+                    help="Ajoute une colonne classe_" + variable
+                         + " au CSV, en plus de la valeur numérique. "
+                         "Donnée manquante : indetermine, jamais zéro.")
+
         with st.expander("Options des commentaires", expanded=bool(
                 st.session_state.get("collecter_commentaires", False))):
             def respecter_choix_commentaires():
