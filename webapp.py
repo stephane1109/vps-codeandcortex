@@ -102,6 +102,9 @@ class CreerDecouverteTerritorialePayload(BaseModel):
     mode_territoire: Literal["texte", "region_code", "place_reference"] = "texte"
     reference_lieu: str | None = Field(default=None, max_length=350)
     region_code: str | None = Field(default=None, max_length=2)
+    demarrer: bool = False
+    research_client_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    research_client_secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
     date_debut: str = Field(min_length=10, max_length=10)
     date_fin: str = Field(min_length=10, max_length=10)
 
@@ -4131,6 +4134,22 @@ def create_app(manager=None):
         from collecte.tiktok_limitation import consulter_limitation
         return consulter_limitation()
 
+    def identifiants_pour_decouverte(payload):
+        """Lire les clés Research sans les enregistrer dans l'inventaire."""
+        from collecte.researchapi import identifiants_disponibles
+        cle = (payload.research_client_key.get_secret_value().strip()
+               if payload.research_client_key else "")
+        secret = (payload.research_client_secret.get_secret_value().strip()
+                  if payload.research_client_secret else "")
+        if bool(cle) != bool(secret):
+            raise HTTPException(
+                422, "Renseignez ensemble Client key et Client secret Research.")
+        if not cle and not identifiants_disponibles():
+            raise HTTPException(
+                422, "Renseignez les clés Research dans le formulaire ou "
+                "configurez-les dans Coolify.")
+        return (cle, secret) if cle else None
+
     @app.get("/api/decouverte-territoriale")
     def lister_decouvertes_territoriales(request: Request):
         owner(request)
@@ -4141,19 +4160,35 @@ def create_app(manager=None):
     @app.post("/api/decouverte-territoriale")
     def creer_decouverte_territoriale(
             payload: CreerDecouverteTerritorialePayload, request: Request):
+        """Créer l'inventaire puis lancer la recherche avec le même clic."""
         exiger_ticket(request)
-        from collecte.decouverte_territoriale import creer_inventaire
+        from collecte.decouverte_territoriale import (
+            creer_inventaire, lancer_recherche)
+        credentiels = None
+        if payload.demarrer:
+            credentiels = identifiants_pour_decouverte(payload)
+            if any(tache.busy for tache in manager.jobs.values()):
+                raise HTTPException(
+                    409, "Une collecte est déjà en cours : terminez-la avant "
+                    "de lancer la collecte de comptes.")
         try:
-            return creer_inventaire(
-                manager.data_dir, owner_historique(request),
+            proprietaire = owner_historique(request)
+            resultat = creer_inventaire(
+                manager.data_dir, proprietaire,
                 payload.ville, payload.variantes,
                 payload.date_debut, payload.date_fin,
                 operateur=payload.operateur,
                 mode_territoire=payload.mode_territoire,
                 region_code=payload.region_code,
                 reference_lieu=payload.reference_lieu)
+            if payload.demarrer:
+                lancer_recherche(
+                    manager.data_dir, proprietaire, resultat["id"],
+                    credentiels=credentiels)
+                resultat["recherche_lancee"] = True
+            return resultat
         except ValueError as erreur:
-            raise HTTPException(422, str(erreur)) from None
+            raise HTTPException(409 if payload.demarrer else 422, str(erreur)) from None
 
     @app.get("/api/decouverte-territoriale/{identifiant}")
     def consulter_decouverte_territoriale(identifiant: str, request: Request):
@@ -4176,22 +4211,11 @@ def create_app(manager=None):
                 409, "Une collecte est déjà en cours : terminez-la avant "
                 "de lancer une découverte territoriale.")
         from collecte.decouverte_territoriale import lancer_recherche
-        from collecte.researchapi import identifiants_disponibles
-        cle = (payload.research_client_key.get_secret_value().strip()
-               if payload.research_client_key else "")
-        secret = (payload.research_client_secret.get_secret_value().strip()
-                  if payload.research_client_secret else "")
-        if bool(cle) != bool(secret):
-            raise HTTPException(
-                422, "Renseignez ensemble Client key et Client secret Research.")
-        if not cle and not identifiants_disponibles():
-            raise HTTPException(
-                422, "Renseignez les clés Research dans le formulaire ou "
-                "configurez-les dans Coolify.")
+        credentiels = identifiants_pour_decouverte(payload)
         try:
             lancer_recherche(
                 manager.data_dir, owner_historique(request), identifiant,
-                credentiels=(cle, secret) if cle else None)
+                credentiels=credentiels)
             return {"id": identifiant, "recherche_lancee": True}
         except ValueError as erreur:
             raise HTTPException(409, str(erreur)) from None
