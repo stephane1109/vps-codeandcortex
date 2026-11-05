@@ -11,6 +11,7 @@ from collecte.decouverte_territoriale import (
     creer_inventaire, charger, exporter_csv, exporter_txt, lister_inventaires,
     poursuivre_inventaire, correspond_territoire, correspond_hashtags,
     requete_territoriale, extraire_reference_lieu,
+    hashtags_publication, hashtags_correspondants,
     lancer_recherche, arreter_recherche, recherche_active,
     recherche_arret_demande, recherche_en_cours,
 )
@@ -245,7 +246,7 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         self.assertEqual(export[0]["statut_localisation"],
                          "non_verifiee_recherche_textuelle")
         self.assertEqual(exporter_txt(sauvegarde).decode("utf-8"),
-                         "@toulouse.media\\n")
+                         "@toulouse.media\n")
 
     def test_place_id_seul_et_validation_domaine(self):
         """L'identifiant seul exige une ville et les domaines externes sont exclus."""
@@ -259,6 +260,106 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         with self.assertRaises(ValueError):
             extraire_reference_lieu(
                 "https://www.tiktok.com/place/Toulouse-invalide")
+
+    def test_video_microbalade_sans_hashtags_demandes_est_exclue(self):
+        """Une vidéo #toulouse sans #manifestation ni #lyceen est rejetée."""
+        donnees = [
+            {
+                "id": "7702191252325862176",
+                "username": "microbalade",
+                "video_description": (
+                    "Bienvenue à Toulouse #france #toulouse #microbalade"),
+                "hashtag_names": ["france", "toulouse", "microbalade"],
+            },
+            {
+                "id": "7702191252325862177",
+                "username": "manifestants31",
+                "video_description": "Manifestation des lycéens à Toulouse",
+                "hashtag_names": ["manifestation", "lyceen"],
+            },
+        ]
+
+        def requete(url, *, data, headers):
+            import json
+            corps = json.loads(data)
+            self.assertEqual(
+                [critere["field_name"]
+                 for critere in corps["query"]["and"]],
+                ["keyword", "hashtag_name"])
+            self.assertEqual(
+                corps["query"]["and"][1]["field_values"],
+                ["manifestation", "lyceen"])
+            return {"data": {"videos": donnees, "has_more": False}}
+
+        with patch("collecte.decouverte_territoriale._jeton",
+                   return_value="jeton"):
+            resultat = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=requete, nombre_pages=1)
+
+        self.assertEqual(resultat["nombre_comptes"], 1)
+        self.assertEqual(resultat["comptes"][0]["username"], "@manifestants31")
+        self.assertEqual(resultat["videos_sans_hashtag"], 1)
+        self.assertEqual(resultat["videos_retenues"], 1)
+        preuve = resultat["comptes"][0]["video_preuve"]
+        self.assertEqual(preuve["hashtags_correspondants"],
+                         ["lyceen", "manifestation"])
+        self.assertIn("/@manifestants31/video/", preuve["url_video"])
+        export = list(csv.DictReader(io.StringIO(exporter_csv(charger(
+            self.racine, PROPRIETAIRE, self.inventaire["id"]
+        )).decode("utf-8-sig")), delimiter=";"))
+        self.assertEqual(len(export), 1)
+        self.assertEqual(export[0]["statut_preuve"],
+                         "video_conforme_enregistree")
+        self.assertEqual(export[0]["hashtags_correspondants_preuve"],
+                         "lyceen, manifestation")
+
+    def test_un_compte_est_retenu_par_une_autre_video_conforme(self):
+        """L'activité générale du profil ne remplace jamais la preuve vidéo."""
+        def requete(url, *, data, headers):
+            return {"data": {"videos": [
+                {
+                    "id": "7702191252325862176",
+                    "username": "microbalade",
+                    "video_description": (
+                        "Bienvenue à Toulouse #france #toulouse #microbalade"),
+                    "hashtag_names": ["france", "toulouse", "microbalade"],
+                },
+                {
+                    "id": "7702191252325862178",
+                    "username": "microbalade",
+                    "video_description": "Toulouse #manifestation",
+                    "hashtag_names": ["toulouse", "manifestation"],
+                },
+            ], "has_more": False}}
+
+        with patch("collecte.decouverte_territoriale._jeton",
+                   return_value="jeton"):
+            resultat = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=requete, nombre_pages=1)
+        self.assertEqual(resultat["comptes"][0]["username"], "@microbalade")
+        self.assertEqual(resultat["comptes"][0]["videos_trouvees"], 1)
+        self.assertEqual(resultat["videos_ecartees"], 1)
+        self.assertEqual(
+            resultat["comptes"][0]["video_preuve"]["url_video"],
+            "https://www.tiktok.com/@microbalade/video/7702191252325862178")
+
+    def test_seuls_les_hashtags_explicites_sont_retenus(self):
+        """Le mot manifestation sans dièse n'est pas un hashtag."""
+        message = {
+            "video_description": "Manifestation à Toulouse #toulouse",
+            "hashtag_names": ["toulouse", "france"],
+        }
+        self.assertEqual(hashtags_publication(message), {"toulouse", "france"})
+        self.assertFalse(correspond_hashtags(
+            message, ["manifestation", "lyceen"], "OR"))
+        self.assertTrue(correspond_hashtags(
+            {"video_description": "Toulouse #manifestation #lyceen"},
+            ["manifestation", "lyceen"], "AND"))
+        self.assertFalse(hashtags_correspondants(
+            {"hashtag_names": ["manifestation"]},
+            ["manifestation", "lyceen"], "AND"))
 
     def test_pays_region_code_fr_avec_hashtag(self):
         """Ne conserver que les comptes dont region_code vaut FR."""
