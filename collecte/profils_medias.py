@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 VARIABLES_PROFILS_MEDIAS = (
     "following_count", "follower_count", "likes_count", "video_count",
 )
+# Une variable IRaMuTeQ se reconnaît avant son premier caractère "_".
+# Ne pas utiliser *profil_... : ce nom entre en conflit avec *profil_auteur.
+NOMS_VARIABLES_PROFILS_TXT = {
+    "following_count": "profilfollowing",
+    "follower_count": "profilfollower",
+    "likes_count": "profillikes",
+    "video_count": "profilvideos",
+}
 SEGMENTATIONS_PROFILS_MEDIAS = {
     "following_count": (
         (0, "0"), (9, "1_9"), (99, "10_99"),
@@ -120,18 +128,19 @@ def enrichir_publications_profils_txt(publications, profils, bruts, classes):
             continue
         balises = []
         for variable in VARIABLES_PROFILS_MEDIAS:
+            nom_iramuteq = NOMS_VARIABLES_PROFILS_TXT[variable]
             if variable in selection_brute:
                 valeur = fiche.get(variable)
                 nombre = (
                     str(valeur) if isinstance(valeur, int)
                     and not isinstance(valeur, bool) and valeur >= 0
                     else "indetermine")
-                balises.append("*profil_" + variable + "_" + nombre)
+                balises.append("*" + nom_iramuteq + "_" + nombre)
             if variable in selection_classe:
                 classe = fiche.get("classe_" + variable)
                 if not isinstance(classe, str) or not classe:
                     classe = segmenter_profil_media(variable, fiche.get(variable))
                 balises.append(
-                    "*profil_" + variable + "_classe_" + classe)
+                    "*" + nom_iramuteq + "classe_" + classe)
         resultat.append({**publication, "balises_profils_txt": balises})
     return resultat
