@@ -4163,14 +4163,19 @@ def create_app(manager=None):
         """Créer l'inventaire puis lancer la recherche avec le même clic."""
         exiger_ticket(request)
         from collecte.decouverte_territoriale import (
-            creer_inventaire, lancer_recherche)
+            creer_inventaire, lancer_recherche, recherche_en_cours)
         credentiels = None
         if payload.demarrer:
             credentiels = identifiants_pour_decouverte(payload)
             if any(tache.busy for tache in manager.jobs.values()):
                 raise HTTPException(
-                    409, "Une collecte est déjà en cours : terminez-la avant "
+                    409, "Une autre collecte est déjà en cours : terminez-la avant "
                     "de lancer la collecte de comptes.")
+            if recherche_en_cours():
+                raise HTTPException(
+                    409, "Une collecte de comptes est déjà active. "
+                    "Sélectionnez la collecte en cours dans l'historique "
+                    "et utilisez 'Arrêter la collecte' avant d'en créer une autre.")
         try:
             proprietaire = owner_historique(request)
             resultat = creer_inventaire(
@@ -4210,7 +4215,16 @@ def create_app(manager=None):
             raise HTTPException(
                 409, "Une collecte est déjà en cours : terminez-la avant "
                 "de lancer une découverte territoriale.")
-        from collecte.decouverte_territoriale import lancer_recherche
+        from collecte.decouverte_territoriale import (
+            lancer_recherche, charger, recherche_active)
+        try:
+            etat = charger(manager.data_dir, owner_historique(request), identifiant)
+        except ValueError as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        if etat.get("terminee"):
+            raise HTTPException(409, "La collecte est déjà terminée.")
+        if recherche_active(identifiant):
+            raise HTTPException(409, "Cette collecte est déjà en cours.")
         credentiels = identifiants_pour_decouverte(payload)
         try:
             lancer_recherche(
@@ -4229,7 +4243,14 @@ def create_app(manager=None):
             charger(manager.data_dir, owner_historique(request), identifiant)
         except ValueError as erreur:
             raise HTTPException(404, str(erreur)) from None
-        return {"arret_demande": arreter_recherche(identifiant)}
+        demande = arreter_recherche(identifiant)
+        return {
+            "arret_demande": demande,
+            "message": ("Arrêt demandé : la page en cours sera achevée "
+                        "avant de permettre la reprise."
+                        if demande else
+                        "Aucune recherche active pour cette collecte."),
+        }
 
     @app.get("/api/decouverte-territoriale/{identifiant}/comptes.csv")
     def exporter_decouverte_territoriale(identifiant: str, request: Request):
