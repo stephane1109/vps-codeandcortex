@@ -85,6 +85,10 @@ class TestDecouverteTerritoriale(unittest.TestCase):
             delimiter=";"))
         self.assertEqual(len(lignes), 2)
         self.assertEqual(lignes[0]["username"], "@toulouse.media")
+        self.assertEqual(lignes[0]["url_compte"],
+                         "https://www.tiktok.com/@toulouse.media")
+        self.assertEqual(lignes[1]["url_compte"],
+                         "https://www.tiktok.com/@media31")
         self.assertEqual(
             exporter_txt(fichier).decode("utf-8"),
             "@toulouse.media\n@media31\n")
@@ -136,6 +140,8 @@ class TestDecouverteTerritoriale(unittest.TestCase):
             delimiter=";"))
         self.assertEqual(export[0]["place_id_reference"],
                          "22535796483363264")
+        self.assertEqual(export[0]["url_compte"],
+                         "https://www.tiktok.com/@toulouse.media")
         self.assertEqual(export[0]["statut_localisation"],
                          "non_verifiee_recherche_textuelle")
         self.assertEqual(exporter_txt(sauvegarde).decode("utf-8"),
