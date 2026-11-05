@@ -79,8 +79,8 @@ class TestProfilsMediasTxtCsv(unittest.TestCase):
         enrichies = enrichir_publications_profils_txt(
             publications, [fiche], [], ["following_count"])
         header = entete_publication(enrichies[0], ["id"])
-        self.assertIn("*profil_following_count_classe_10_99", header)
-        self.assertNotIn("*profil_following_count_98", header)
+        self.assertIn("*profilfollowingclasse_10_99", header)
+        self.assertNotIn("*profilfollowing_98", header)
         self.assertNotIn("balises_profils_txt", enrichies[1])
         self.assertNotIn("balises_profils_txt", publications[0])
 
@@ -91,8 +91,8 @@ class TestProfilsMediasTxtCsv(unittest.TestCase):
             [creer_fiche()],
             ["following_count"], ["following_count"])
         entete = entete_publication(enrichies[0], ["id"])
-        self.assertIn("*profil_following_count_98", entete)
-        self.assertIn("*profil_following_count_classe_10_99", entete)
+        self.assertIn("*profilfollowing_98", entete)
+        self.assertIn("*profilfollowingclasse_10_99", entete)
         colonnes = colonnes_profils_medias(
             ["following_count"], ["following_count"],
             csv_bruts=[], csv_classes=[])
@@ -109,8 +109,8 @@ class TestProfilsMediasTxtCsv(unittest.TestCase):
             [{"id": "101", "author": "microbalade"}], [fiche],
             ["video_count"], ["video_count"])
         entete = entete_publication(texte[0], ["id"])
-        self.assertIn("*profil_video_count_indetermine", entete)
-        self.assertIn("*profil_video_count_classe_indetermine", entete)
+        self.assertIn("*profilvideos_indetermine", entete)
+        self.assertIn("*profilvideosclasse_indetermine", entete)
 
     def test_txt_original_et_resume_ia(self):
         """L'annotation de compte figure dans les deux segments textuels."""
@@ -123,9 +123,9 @@ class TestProfilsMediasTxtCsv(unittest.TestCase):
         texte = text_export(
             publications, include_sources=True,
             variables_txt=["id"], inclure_texte_genere_ia=True)
-        self.assertEqual(texte.count("*profil_likes_count_200000"), 2)
+        self.assertEqual(texte.count("*profillikes_200000"), 2)
         self.assertEqual(
-            texte.count("*profil_likes_count_classe_100k_1m"), 2)
+            texte.count("*profillikesclasse_100k_1m"), 2)
 
     def test_requete_comptes_research_classes_seules_autorisee(self):
         """Les classes seules sont disponibles dans Autres comptes TikTok."""
@@ -163,8 +163,8 @@ class TestProfilsMediasTxtCsv(unittest.TestCase):
             }]
             job.profils_medias = [creer_fiche()]
             texte = job.texte_a_exporter()
-            self.assertIn("*profil_following_count_98", texte)
-            self.assertIn("*profil_following_count_classe_10_99", texte)
+            self.assertIn("*profilfollowing_98", texte)
+            self.assertIn("*profilfollowingclasse_10_99", texte)
 
     def test_code_interface_deux_cases_et_texte_en_infobulle(self):
         """Vérifier la grille compacte sur une ligne, dans les trois modes."""
