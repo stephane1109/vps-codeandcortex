@@ -937,11 +937,11 @@ with onglet_collecte:
             st.text_input(
                 "Comptes TikTok", key="comptes",
                 placeholder="@lemondefr, @franceinfo",
-                help="Jusqu’à 10 comptes séparés par des virgules ou espaces.",
+                help="Saisissez un ou plusieurs comptes séparés par des virgules ou espaces.",
                 disabled=occupe)
             st.caption(
                 "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
-                "Jusqu’à 10 profils, séparés par des virgules ou des espaces. "
+                 "Les comptes peuvent être transférés en totalité depuis la collecte de compte. "
                 "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
             if transfert_territorial is not None:
                 st.success(
