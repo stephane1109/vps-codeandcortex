@@ -80,6 +80,22 @@ class TestImportSociometriqueCSV(unittest.TestCase):
         self.assertEqual(graphe["statistiques"]["auteurs_distincts"], 0)
         self.assertEqual(graphe["statistiques"]["liens"], 0)
 
+    def test_csv_uniquement_entetes(self):
+        """Signaler explicitement une collecte sans commentaire exporté."""
+        contenu = tableau_csv(
+            ["id", "publication_id", "parent_id", "source", "auteur"], [])
+        with self.assertRaisesRegex(ValueError, "uniquement les en-têtes"):
+            preparer_import([("commentaires_vide.csv", contenu)])
+
+    def test_identifiants_vides(self):
+        """Distinguer une ligne vide d'un commentaire sans ID."""
+        contenu = tableau_csv(
+            ["id", "publication_id", "parent_id", "source", "auteur"],
+            [{"id": "", "publication_id": "7001", "parent_id": "",
+              "source": "research", "auteur": ""}])
+        with self.assertRaisesRegex(ValueError, "1 ligne\\(s\\) lue\\(s\\)"):
+            preparer_import([("commentaires_sans_id.csv", contenu)])
+
     def test_csv_incomplet(self):
         """L'identifiant du commentaire et celui de la vidéo sont requis."""
         contenu = tableau_csv(["publication_id"], [{"publication_id": "7001"}])
