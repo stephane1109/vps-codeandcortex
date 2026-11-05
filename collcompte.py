@@ -375,5 +375,7 @@ def afficher_collecte_de_compte(api, *, telecharger, occupe=False):
     nombre_transfere = st.session_state.pop("territoire_transfert_nombre", None)
     if nombre_transfere is not None:
         st.success(
-            f"{nombre_transfere} compte(s) transmis au champ Profils. "
-            "Ouvrez cet onglet pour préparer et lancer la collecte avec vos critères habituels.")
+            f"{nombre_transfere} compte(s) transmis dans "
+            "Collecte → Autres comptes TikTok. "
+            "Ouvrez l'onglet Collecte pour préparer et lancer "
+            "la collecte de profils avec vos critères habituels.")
