@@ -1027,15 +1027,32 @@ elles remplissent des fonctions indépendantes du téléchargement final.
 
 ### Fichiers publications.csv : variables complètes
 
-Les exports `publications.csv` issus des programmes Research, des
-téléchargements PostgreSQL et des archives ZIP des collectes ponctuelles
-partagent maintenant un schéma commun de 61 colonnes, sans suppression des
-champs historiques. Ce schéma comprend toutes les variables sélectionnables
-dans l'interface : identifiants, dates, profil, `region_code`,
+Les collectes ponctuelles conservent par défaut les colonnes
+historiques de `publications.csv` et `engagement.csv`. Chaque variable
+du formulaire dispose maintenant de deux cases indépendantes sur la même
+ligne : **TXT** ajoute la modalité à l'en-tête IRaMuTeQ et **CSV** ajoute
+la ou les colonnes descriptives correspondantes à `publications.csv`
+et `engagement.csv`. Le recodage en classe est un choix distinct de la
+valeur numérique réelle ; les deux peuvent être activés simultanément,
+dans chacun des deux formats. Le choix s'applique aussi à l'export de
+republications lorsqu'il existe. Les identifiants de liaison techniques
+(`publication_id`) sont toujours conservés pour réimporter les tableaux
+et joindre les commentaires. Les archives anciennes, qui n'ont pas de
+`variables_csv`, continuent de produire toutes leurs colonnes historiques.
+Les exports de profils, commentaires et ratios conservent leurs propres
+structures ; la colonne `ville_etude` des commentaires suit aussi son
+choix CSV. Les JSON gardent les données collectées indépendamment du
+choix de présentation des tableaux.
+
+Les indicateurs proposés comprennent identifiants, dates, profil, `region_code`,
 `is_verified`, abonnés, vues, likes, partages, commentaires, favoris, durée,
-valeurs brutes et catégories, taux d'engagement et classe, hashtags et résumé
-TikTok généré par IA. Les états de récupération et les références MP4 sont
-également conservés lorsqu'ils sont disponibles.
+valeurs numériques et classes, taux d'engagement, catégories de presse.
+Les intervalles de recodage sont conservés dans les aides des lignes.
+Pour le compteur `follower_count`, la sélection d'au moins une case
+TXT ou CSV de récupération, de valeur brute ou de classe déclenche la
+requête Research correspondante. L'option de récupération et celle de
+valeur brute renvoient au même compteur : il n'est pas dupliqué.
+La récupération des textes des commentaires reste indépendante.
 
 Une case cochée dans l'interface ne garantit pas que TikTok fournisse la
 valeur correspondante : dans ce cas, la cellule CSV reste vide. Les vrais
@@ -1043,6 +1060,24 @@ zéros sont conservés. La collecte des textes des commentaires reste dans
 `commentaires.csv` pour respecter la relation plusieurs commentaires /
 une publication. Les exports téléchargés après mise à jour utilisent le
 nouveau schéma ; les ZIP anciens déjà téléchargés ne changent pas.
+
+### Ville du corpus pour IRaMuTeQ
+
+En mode **Autres comptes TikTok**, le champ **Ville associée au corpus**
+permet de déclarer la provenance sociologique du lot de comptes. La saisie
+`Toulouse` est normalisée en `toulouse` ; cocher TXT ajoute
+`*ville_toulouse` avant chaque texte original ou résumé IA dans le TXT
+IRaMuTeQ. Cocher CSV ajoute `ville_etude` aux exports correspondants,
+avec la valeur `toulouse`. Les deux choix sont indépendants.
+La ville est préremplie lors du transfert d'un inventaire territorial
+ou d'un CSV de comptes possédant une provenance unique. Les CSV mixtes
+ne reçoivent pas arbitrairement une seule ville.
+
+La variable décrit le **critère de constitution du corpus**, non la
+résidence de chaque auteur ni la géolocalisation de ses vidéos. La
+fonction de découverte TikTok utilise une mention de ville dans les
+vidéos et éventuellement une référence de lieu indirecte. La modalité
+ne doit pas être utilisée pour conclure à une localisation vérifiée.
 
 ### Commentaires Research et analyse sociométrique
 
