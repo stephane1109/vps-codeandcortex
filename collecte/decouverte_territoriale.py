@@ -40,8 +40,14 @@ def correspond_territoire(video, termes):
     hashtags = video.get("hashtag_names") or []
     if not isinstance(hashtags, list):
         hashtags = []
-    formes = {nettoyer_terme(tag) for tag in hashtags
-              if isinstance(tag, str) and 2 <= len(tag.strip().lstrip("#")) <= 45}
+    formes = set()
+    for tag in hashtags:
+        if not isinstance(tag, str):
+            continue
+        try:
+            formes.add(nettoyer_terme(tag))
+        except ValueError:
+            continue
     if formes.intersection(termes):
         return True
     description = _normaliser_texte(video.get("video_description") or "")
@@ -90,6 +96,18 @@ def lancer_recherche(racine, proprietaire, identifiant):
                 poursuivre_inventaire(
                     racine, proprietaire, identifiant, nombre_pages=None,
                     arret=arret)
+            except Exception as erreur:
+                # Ne pas exposer les réponses brutes de l'API ni les jetons.
+                chemin = chemin_inventaire(racine, proprietaire, identifiant)
+                try:
+                    etat = charger(racine, proprietaire, identifiant)
+                    etat["etat"] = "interrompue"
+                    etat["erreur"] = (
+                        "Erreur interne pendant la découverte : "
+                        + type(erreur).__name__)
+                    sauvegarder(chemin, etat)
+                except (OSError, ValueError):
+                    pass
             finally:
                 with _VERROU:
                     _TRAVAUX.pop(identifiant, None)
