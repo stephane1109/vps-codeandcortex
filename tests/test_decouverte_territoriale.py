@@ -104,6 +104,35 @@ class TestDecouverteTerritoriale(unittest.TestCase):
             c["field_name"] for c in requete["query"]["or"]})
         self.assertEqual(requete["max_count"], 100)
 
+    def test_reprise_ancien_inventaire_termine(self):
+        """Une recherche hashtag ancienne peut être relancée avec keyword."""
+        from collecte.decouverte_territoriale import chemin_inventaire, sauvegarder
+        fichier = chemin_inventaire(
+            self.racine, PROPRIETAIRE, self.inventaire["id"])
+        ancien = charger(self.racine, PROPRIETAIRE, self.inventaire["id"])
+        ancien.pop("version_requete", None)
+        ancien["terminee"] = True
+        ancien["cursor"] = 100
+        ancien["search_id"] = "ancienne_recherche"
+        sauvegarder(fichier, ancien)
+        appels = []
+        def reponse(url, *, data, headers):
+            import json
+            corps = json.loads(data)
+            appels.append(corps)
+            return {"data": {"videos": [
+                {"id": "1234567890", "username": "compte.tlse",
+                 "video_description": "Manifestation à Toulouse",
+                 "hashtag_names": ["manifestation", "lyceen"]}],
+                 "has_more": False}}
+        with patch("collecte.decouverte_territoriale._jeton", return_value="token"):
+            resultat = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=reponse, nombre_pages=1)
+        self.assertEqual(resultat["nombre_comptes"], 1)
+        self.assertNotIn("cursor", appels[0])
+        self.assertIn("keyword", str(appels[0]))
+
     def test_protection_contre_curseur_invalide(self):
         """Un curseur manquant interrompt sans recommencer à la première page."""
         def reponse_invalide(url, *, data, headers):
