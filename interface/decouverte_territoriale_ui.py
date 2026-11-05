@@ -77,9 +77,25 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         date_debut = st.date_input(
             "Début des publications", value=date.today()-timedelta(days=29),
             key="territoire_recherche_debut", disabled=occupe)
+    # Identifier une collecte existante avant de proposer une création.
+    try:
+        existantes = api("/api/decouverte-territoriale").get("inventaires", [])
+    except RuntimeError as erreur:
+        st.warning("État des collectes indisponible : " + str(erreur))
+        return
+    actives = [
+        entree for entree in existantes
+        if entree.get("etat") == "en_cours"]
+    if actives:
+        st.info(
+            "Une collecte de comptes est en cours : "
+            + ", ".join(entree["ville"] for entree in actives)
+            + ". Arrêtez-la avant de démarrer une autre collecte.")
+
     if st.button(
         "Collecte de compte",
-        key="territoire_creer", disabled=occupe, type="primary"):
+        key="territoire_creer",
+        disabled=occupe or bool(actives), type="primary"):
         cle = str(st.session_state.get("research_client_key") or "").strip()
         secret = str(st.session_state.get("research_client_secret") or "").strip()
         try:
@@ -103,6 +119,7 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
             st.error("Collecte impossible : " + str(erreur))
         else:
             st.session_state["territoire_inventaire_id"] = resultat["id"]
+            st.session_state["territoire_inventaire_choix"] = resultat["id"]
             st.success(
                 "Collecte de compte lancée : la recherche Research a démarré. "
                 "Consultez ci-dessous son état et les résultats progressifs.")
@@ -123,9 +140,40 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         format_func=lambda identifiant: (
             f"{index[identifiant]['ville']} — "
             f"{index[identifiant]['nombre_comptes']} compte(s)"
-            + (" — terminé" if index[identifiant]["terminee"] else " — à poursuivre")),
+            + (" — arrêt demandé" if index[identifiant].get("arret_demande")
+               else " — en cours" if index[identifiant].get("etat") == "en_cours"
+               else " — terminé" if index[identifiant]["terminee"]
+               else " — interrompue" if index[identifiant].get("etat") == "interrompue"
+               else " — à démarrer")),
         key="territoire_inventaire_choix")
     st.session_state["territoire_inventaire_id"] = selection_id
+    # Même si un autre inventaire est sélectionné, pouvoir arrêter
+    # la collecte active sans créer de deuxième processus.
+    active_non_selectionnee = next(
+        (entree for entree in inventaires
+         if entree.get("etat") == "en_cours" and entree["id"] != selection_id),
+        None)
+    if active_non_selectionnee:
+        st.caption(
+            "Collecte active : " + active_non_selectionnee["ville"]
+            + ". Vous pouvez l'arrêter depuis cet écran.")
+        if active_non_selectionnee.get("arret_demande"):
+            st.info("Arrêt demandé : traitement de la page en cours.")
+        elif st.button(
+                "Arrêter la collecte active",
+                key="territoire_arreter_autre", disabled=occupe):
+            try:
+                reponse = api(
+                    f"/api/decouverte-territoriale/{active_non_selectionnee['id']}/arreter",
+                    {})
+                if reponse.get("arret_demande"):
+                    st.session_state["territoire_inventaire_choix"] = (
+                        active_non_selectionnee["id"])
+                    st.rerun()
+                else:
+                    st.info(reponse.get("message", "Collecte déjà arrêtée."))
+            except RuntimeError as erreur:
+                st.error("Arrêt impossible : " + str(erreur))
     try:
         inventaire = api(f"/api/decouverte-territoriale/{selection_id}")
     except RuntimeError as erreur:
@@ -170,20 +218,31 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         st.warning("Dernier diagnostic Research : " + inventaire["erreur"])
     en_cours = inventaire.get("etat") == "en_cours"
     if en_cours:
-        st.info(
-            "Recherche en cours : les pages sont lues automatiquement jusqu'à "
-            "la fin, à une interruption ou à la limite de requêtes officielle. "
-            "Les résultats sont enregistrés à chaque page.")
         from streamlit_autorefresh import st_autorefresh
         st_autorefresh(interval=5000, limit=None, key="territoire_actualisation")
-        if st.button(
-            "Arrêter après la page en cours", key="territoire_arreter"):
-            try:
-                api(
-                    f"/api/decouverte-territoriale/{selection_id}/arreter", {})
-                st.rerun()
-            except RuntimeError as erreur:
-                st.error("Arrêt impossible : " + str(erreur))
+        if inventaire.get("arret_demande"):
+            st.info(
+                "Arrêt demandé. La page Research en cours sera achevée "
+                "avant l'enregistrement du curseur et l'activation "
+                "du bouton Redémarrer la collecte.")
+        else:
+            st.info(
+                "Collecte en cours : les résultats sont sauvegardés "
+                "à chaque page. Vous pouvez demander l'arrêt sans "
+                "effacer les comptes déjà trouvés.")
+            if st.button(
+                    "Arrêter la collecte", key="territoire_arreter",
+                    type="secondary"):
+                try:
+                    reponse = api(
+                        f"/api/decouverte-territoriale/{selection_id}/arreter",
+                        {})
+                    if reponse.get("arret_demande"):
+                        st.rerun()
+                    else:
+                        st.info(reponse.get("message", "Collecte déjà arrêtée."))
+                except RuntimeError as erreur:
+                    st.error("Arrêt impossible : " + str(erreur))
     elif not inventaire["terminee"]:
         st.caption(
             "La collecte utilise vos clés Research de l'interface lorsqu'elles "
@@ -192,12 +251,12 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         # La reprise reste réservée aux collectes déjà créées et inactives.
         etat_precedent = inventaire.get("etat", "en_attente")
         libelle_reprise = (
-            "Reprendre la collecte interrompue"
+            "Redémarrer la collecte"
             if etat_precedent == "interrompue"
-            else "Lancer cette collecte enregistrée")
+            else "Démarrer cette collecte enregistrée")
         if st.button(
             libelle_reprise, key="territoire_poursuivre",
-            disabled=occupe, type="secondary"):
+            disabled=occupe or bool(actives), type="secondary"):
             cle = str(st.session_state.get("research_client_key") or "").strip()
             secret = str(st.session_state.get("research_client_secret") or "").strip()
             try:
