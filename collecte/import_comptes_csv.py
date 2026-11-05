@@ -80,14 +80,24 @@ def lire_comptes_csv(contenu):
         indice = 0
         premiere_valeur = premiere_ligne[indice]
 
-    lignes = ([premiere_valeur] if premiere_valeur is not None else [])
-    lignes.extend(
-        ligne[indice] if indice < len(ligne) else ""
-        for ligne in lecteur
-        if any(valeur.strip() for valeur in ligne)
+    # Lire le territoire explicite du CSV sans confondre une ville avec
+    # un region_code national. Un fichier sans colonne de ville reste valide.
+    indice_territoire = next((
+        entetes.index(colonne) for colonne in (
+            "territoire", "ville_etude", "ville")
+        if colonne in entetes), None)
+    lignes_completes = (
+        ([premiere_ligne] if premiere_valeur is not None else [])
+        + [ligne for ligne in lecteur if any(valeur.strip() for valeur in ligne)]
     )
+    lignes = [
+        ligne[indice] if indice < len(ligne) else ""
+        for ligne in lignes_completes
+    ]
 
     comptes = []
+    territoires = set()
+    lignes_sans_territoire = 0
     deja_vus = set()
     invalides = []
     doublons = 0
@@ -103,6 +113,15 @@ def lire_comptes_csv(contenu):
             continue
         deja_vus.add(compte)
         comptes.append(compte)
+        if indice_territoire is not None:
+            ligne_source = lignes_completes[position - 1]
+            territoire = (
+                ligne_source[indice_territoire].strip()
+                if indice_territoire < len(ligne_source) else "")
+            if territoire:
+                territoires.add(territoire)
+            else:
+                lignes_sans_territoire += 1
 
     if not comptes:
         raise ValueError("Aucun compte TikTok valide n'a été trouvé dans le CSV.")
@@ -111,6 +130,9 @@ def lire_comptes_csv(contenu):
         "doublons": doublons,
         "invalides": invalides,
         "lignes_lues": len(lignes),
+        "territoires": sorted(territoires),
+        "territoire_complet": (
+            indice_territoire is not None and lignes_sans_territoire == 0),
     }
 
 
@@ -126,12 +148,16 @@ def lire_plusieurs_csv(fichiers):
     doublons = 0
     invalides = []
     lignes_lues = 0
+    territoires = set()
+    territoires_complets = True
     for nom, contenu in fichiers:
         try:
             resultat = lire_comptes_csv(contenu)
         except (ValueError, csv.Error) as erreur:
             raise ValueError(f"{nom} : {erreur}") from erreur
         lignes_lues += resultat["lignes_lues"]
+        territoires.update(resultat["territoires"])
+        territoires_complets &= resultat["territoire_complet"]
         doublons += resultat["doublons"]
         invalides.extend([
             {"fichier": nom, **ligne} for ligne in resultat["invalides"]
@@ -146,4 +172,10 @@ def lire_plusieurs_csv(fichiers):
         "comptes": selection, "doublons": doublons,
         "invalides": invalides, "lignes_lues": lignes_lues,
         "fichiers": len(fichiers),
+        # N'attribuer une ville commune que si tous les comptes importés
+        # partagent exactement la même provenance territoriale.
+        "territoires": sorted(territoires),
+        "territoire_commun": (
+            next(iter(territoires)) if territoires_complets
+            and len(territoires) == 1 else ""),
     }
