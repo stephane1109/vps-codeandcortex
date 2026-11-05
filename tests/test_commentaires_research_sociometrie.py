@@ -75,9 +75,9 @@ class TestCommentairesResearchSociometrie(unittest.TestCase):
         interface = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
         ast.parse(export)
         ast.parse(interface)
-        self.assertIn('"auteur","nom_affiche","texte"', export)
-        self.assertIn('st.session_state["sociometrie_csv_mode"] = "reponses"',
-                      interface)
+        self.assertIn('"auteur", "nom_affiche", "ville_etude", "texte"', export)
+        self.assertNotIn('st.session_state["sociometrie_csv_mode"] = "reponses"',
+                         interface)
         self.assertIn("Aucune réponse collectée", interface)
 
 
