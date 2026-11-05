@@ -1079,6 +1079,40 @@ fonction de découverte TikTok utilise une mention de ville dans les
 vidéos et éventuellement une référence de lieu indirecte. La modalité
 ne doit pas être utilisée pour conclure à une localisation vérifiée.
 
+### Métriques de comptes : choix TXT et CSV indépendants
+
+Les huit lignes de métriques de compte (suivis, abonnés, likes reçus,
+vidéos publiées, chacune en valeur brute et classe) possèdent désormais
+une case **TXT** et une case **CSV** sur une ligne compacte. Les seuils de
+classement restent dans les infobulles, sans allonger les intitulés.
+Les deux destinations sont cochées par défaut lors d'une nouvelle
+collecte Research, avec conservation des choix enregistrés lors des
+reprises d'archives. Un choix de classe sans valeur brute est autorisé :
+l'API lit le compteur nécessaire, mais le CSV peut ne conserver que
+la classe.
+
+La case TXT ajoute une variable descriptive du **compte** dans l'en-tête
+IRaMuTeQ de chaque texte de ce compte. Pour éviter toute confusion avec
+la variable existante `*profil_auteur`, les modalités utilisent des noms
+distincts : `*profilfollowing_98`,
+`*profilfollowingclasse_10_99`,
+`*profilfollower_10001`, `*profillikes_200000`,
+`*profilvideos_11` et leurs classes correspondantes.
+
+La case CSV sélectionne indépendamment les colonnes brutes
+(`following_count`, `follower_count`, `likes_count`, `video_count`)
+et recodées (`classe_following_count`, etc.) du fichier distinct
+`profils_medias.csv`. Les colonnes de liaison et de suivi du profil
+sont toujours conservées dans ce fichier. Les valeurs inconnues restent
+inconnues, sans remplacer l'absence par zéro.
+
+La collecte de ces métriques est désormais disponible également dans
+**Autres comptes TikTok**, en plus des modes Hashtags et Presse, lorsque
+la Research API officielle est choisie. Une requête par compte sélectionné
+peut consommer le quota de l'API. Les anciens appels d'export sans
+sélections distinctes conservent le schéma CSV historique et n'ajoutent
+pas de nouvelles variables TXT.
+
 ### Options distinctes TXT et CSV des variables de publication
 
 Les modes **Hashtags**, **Presse et médias** et **Autres comptes TikTok**
