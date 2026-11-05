@@ -105,7 +105,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         st.warning("Inventaires indisponibles : " + str(erreur))
         return
     if not inventaires:
-        st.info("Cliquez sur "Collecte de compte", puis démarrez la recherche pour identifier les comptes.")
+        st.info("Cliquez sur le bouton Collecte de compte, puis démarrez la recherche pour identifier les comptes.")
         return
     index = {ligne["id"]: ligne for ligne in inventaires}
     identifiant_precedent = st.session_state.get("territoire_inventaire_id")
