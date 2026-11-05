@@ -218,6 +218,10 @@ class StartRequest(BaseModel):
     supprimer_arobase_profil: bool = False
     # None conserve les anciennes requêtes ; une liste vide demande le texte seul.
     variables_txt: list[Literal["date", "profil", "id", "vues", "likes", "partages", "commentaires", "favoris", "duree", "region_code", "is_verified", "hashtags"]] | None = Field(default=None, max_length=12)
+    # None conserve le schéma historique complet. Liste explicite : choix CSV.
+    variables_csv: list[str] | None = Field(default=None, max_length=30)
+    categorie_compte_txt: bool = True
+    ville_etude_txt: bool = True
     french_only: bool = False
     date_debut: str | None = Field(default=None, max_length=10)
     date_fin: str | None = Field(default=None, max_length=10)
@@ -234,6 +238,18 @@ class StartRequest(BaseModel):
         if any(ord(caractere) < 32 or ord(caractere) == 127 for caractere in nom):
             raise ValueError("Le nom de la sauvegarde contient un caractère interdit.")
         return nom
+
+    @field_validator("variables_csv")
+    @classmethod
+    def valider_variables_csv(cls, valeurs):
+        if valeurs is None:
+            return None
+        from collecte.selection_variables_csv import VARIABLES_CSV
+        if len(valeurs) != len(set(valeurs)):
+            raise ValueError("Une variable CSV ne peut pas être sélectionnée deux fois.")
+        if set(valeurs) - set(VARIABLES_CSV):
+            raise ValueError("Choisissez des variables CSV reconnues par l'application.")
+        return valeurs
 
     @field_validator("variables_txt", mode="before")
     @classmethod
@@ -789,14 +805,14 @@ def entete_publication(publication: dict, variables=None, supprimer_arobase_prof
             entete = " ".join(classes) + (" " + entete if entete else "")
     # La ville est un attribut déclaré du corpus de comptes, jamais une
     # géolocalisation déduite de region_code ou de la vidéo.
-    if publication.get("ville_etude"):
+    if publication.get("ville_etude") and publication.get("inclure_ville_etude_txt", True):
         from collecte.ville_etude import balise_ville_etude
         entete = (entete + " " if entete else "") + balise_ville_etude(
             publication["ville_etude"])
     # La catégorie du média s'ajoute au profil sans dépendre des autres cases.
     from collecte.presse import code_presse_publication
     code_presse = code_presse_publication(publication)
-    if code_presse:
+    if code_presse and publication.get("inclure_categorie_compte_txt", True):
         entete = (entete + " " if entete else "") + "*" + code_presse
     return entete + "\n" if entete else ""
 
@@ -881,7 +897,10 @@ def text_export(records: list[dict], include_sources: bool, inclure_metadonnees_
             # Même sans métadonnées sélectionnées, le code du média est conservé.
             from collecte.presse import code_presse_publication
             prefix = (entete_publication(record, (), supprimer_arobase_profil)
-                      if code_presse_publication(record) or record.get("ville_etude")
+                      if (code_presse_publication(record)
+                          and record.get("inclure_categorie_compte_txt", True))
+                      or (record.get("ville_etude")
+                          and record.get("inclure_ville_etude_txt", True))
                       else "")
         # Le lien texte/MP4 reste présent même si la case ID vidéo était décochée.
         if record.get("video_id") and not re.search(r"(?:^| )\*id_", prefix):
@@ -1934,6 +1953,9 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                     if (job.settings.source_collecte == "comptes"
                             and job.settings.ville_etude):
                         record["ville_etude"] = job.settings.ville_etude
+                    record["inclure_ville_etude_txt"] = job.settings.ville_etude_txt
+                    record["inclure_categorie_compte_txt"] = (
+                        job.settings.categorie_compte_txt)
                     # La case Htag dans le csv concerne uniquement les exports :
                     # garder intactes les données brutes et le corpus TXT.
                     record["inclure_hashtags_csv"] = job.settings.inclure_hashtags_csv
