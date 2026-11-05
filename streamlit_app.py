@@ -223,6 +223,17 @@ if "initialise" not in st.session_state:
     # collecte conserve ses cases cochées et décochées.
     for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
         valeurs["txt_classe_" + variable] = variable in valeurs["variables_classes_txt"]
+    valeurs["txt_collecter_follower_count"] = ancienne.get(
+        "collecter_follower_count", True)
+    valeurs["txt_categorie_compte"] = ancienne.get("categorie_compte_txt", True)
+    valeurs["txt_ville_etude"] = ancienne.get("ville_etude_txt", True)
+    # Les nouveaux choix CSV sont tous cochés par défaut : cela préserve
+    # les schémas historiques des collectes qui n'avaient pas ces options.
+    from collecte.selection_variables_csv import VARIABLES_CSV
+    ancien_csv = ancienne.get("variables_csv")
+    for nom in VARIABLES_CSV:
+        valeurs["csv_" + nom] = (
+            True if ancien_csv is None else nom in ancien_csv)
     # Rétablir les listes des anciennes collectes à un ou deux hashtags,
     # sans confondre les filtres propres aux modes Hashtags et Profils.
     anciens_hashtags = ancienne.get("hashtags_saisis") or ancienne.get("hashtags") or [
@@ -272,6 +283,12 @@ for variable in VARIABLES_PROFILS_MEDIAS:
     st.session_state.setdefault("profil_media_" + variable + "_brut", True)
     st.session_state.setdefault("profil_media_" + variable + "_classe", True)
 st.session_state.setdefault("collecter_follower_count", True)
+st.session_state.setdefault("txt_collecter_follower_count", True)
+st.session_state.setdefault("txt_categorie_compte", True)
+st.session_state.setdefault("txt_ville_etude", True)
+from collecte.selection_variables_csv import VARIABLES_CSV
+for variable_csv in VARIABLES_CSV:
+    st.session_state.setdefault("csv_" + variable_csv, True)
 st.session_state.setdefault("follower_count_illustratif", True)
 st.session_state.setdefault("abonnes_classe_illustratif", True)
 st.session_state.setdefault("variables_classes_txt",
@@ -1568,23 +1585,6 @@ with onglet_collecte:
                     key="limite_commentaires", disabled=occupe,
                     help="Borne technique contrôlée également côté serveur.")
 
-        st.caption(
-            "Taux d'engagement = (likes + commentaires + partages + favoris) "
-            "/ vues × 100. Un compteur manquant ou zéro vue donne une modalité indéterminée.")
-        colonne_taux_brut, colonne_taux_classe = st.columns([1, 3])
-        colonne_taux_brut.checkbox(
-            "Taux d'engagement : valeur numérique réelle",
-            key="txt_taux_engagement_brut", disabled=occupe)
-        colonne_taux_classe.checkbox(
-            "Taux d'engagement : recoder la variable continue en variable catégorielle "
-            "(codage proposé : < 1 % ; 1 à < 3 % ; 3 à < 5 % ; "
-            "5 à < 10 % ; ≥ 10 %)",
-            key="txt_taux_engagement_classe", disabled=occupe,
-            help="Variable supplémentaire, en plus du taux numérique réel. "
-                 "Les deux peuvent figurer simultanément dans le TXT. "
-                 "La valeur exacte reste dans engagement.csv et publications.csv ; "
-                 "données insuffisantes : *engagement_indetermine.")
-
         st.checkbox(
             "Supprimer le @ devant les profils dans le TXT",
             key="export_profil_sans_arobase",
@@ -1705,10 +1705,41 @@ with onglet_collecte:
                 valeurs["groupes_hashtags"] = (groupes_hashtags if source == "hashtags"
                     and st.session_state.get("utiliser_groupes_hashtags") else [])
                 valeurs["hashtags_exclus"] = liste_hashtags_exclus
-                valeurs["collecter_follower_count"] = bool(moteur_formulaire == "research" and st.session_state.get("collecter_follower_count", False))
-                valeurs["collecter_is_verified"] = bool(moteur_formulaire == "research" and st.session_state.get("txt_is_verified", False))
-                valeurs["follower_count_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("follower_count_illustratif", False))
-                valeurs["abonnes_classe_illustratif"] = bool(valeurs["collecter_follower_count"] and st.session_state.get("abonnes_classe_illustratif", False))
+                # Les sorties TXT et CSV demandent la récupération du
+                # compteur si l'une des cases de la famille abonnés est cochée.
+                choix_abonnes = (
+                    "txt_collecter_follower_count", "csv_recuperer_abonnes",
+                    "follower_count_illustratif", "csv_follower_count",
+                    "abonnes_classe_illustratif", "csv_abonnes_classe")
+                valeurs["collecter_follower_count"] = bool(
+                    moteur_formulaire == "research"
+                    and any(st.session_state.get(nom, False)
+                            for nom in choix_abonnes))
+                valeurs["collecter_is_verified"] = bool(
+                    moteur_formulaire == "research" and (
+                        st.session_state.get("txt_is_verified", False)
+                        or st.session_state.get("csv_is_verified", False)))
+                valeurs["follower_count_illustratif"] = bool(
+                    valeurs["collecter_follower_count"] and (
+                        st.session_state.get("follower_count_illustratif", False)
+                        or st.session_state.get("txt_collecter_follower_count", False)))
+                valeurs["abonnes_classe_illustratif"] = bool(
+                    valeurs["collecter_follower_count"]
+                    and st.session_state.get("abonnes_classe_illustratif", False))
+                valeurs["categorie_compte_txt"] = bool(
+                    st.session_state.get("txt_categorie_compte", True))
+                valeurs["ville_etude_txt"] = bool(
+                    source == "comptes"
+                    and st.session_state.get("txt_ville_etude", True))
+                valeurs["variables_csv"] = [
+                    nom for nom in VARIABLES_CSV
+                    if st.session_state.get("csv_" + nom, True)
+                ]
+                # La première ligne abonnés est également une sélection du
+                # compteur réel : pas de duplication des colonnes CSV.
+                if (("recuperer_abonnes" in valeurs["variables_csv"])
+                        and "follower_count" not in valeurs["variables_csv"]):
+                    valeurs["variables_csv"].append("follower_count")
                 valeurs["variables_classes_txt"] = [
                     nom for nom in ("vues", "likes", "commentaires", "partages",
                                     "favoris", "duree")
