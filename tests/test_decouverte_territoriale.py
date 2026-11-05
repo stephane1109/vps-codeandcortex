@@ -89,6 +89,50 @@ class TestDecouverteTerritoriale(unittest.TestCase):
             exporter_txt(fichier).decode("utf-8"),
             "@toulouse.media\n@media31\n")
 
+    def test_pays_region_code_fr_avec_hashtag(self):
+        """Ne conserver que les comptes dont region_code vaut FR."""
+        inventaire = creer_inventaire(
+            self.racine, PROPRIETAIRE, "", ["manifestation", "lyceen"],
+            "2026-10-01", "2026-10-15",
+            mode_territoire="region_code", region_code="fr")
+        reponses = [
+            {"id": "1234567891", "username": "profil.fr",
+             "region_code": "FR", "hashtag_names": ["manifestation"]},
+            {"id": "1234567892", "username": "profil.us",
+             "region_code": "US", "hashtag_names": ["manifestation"]},
+            {"id": "1234567893", "username": "profil.sans.hashtag",
+             "region_code": "FR", "hashtag_names": ["football"]},
+        ]
+        demandes = []
+        def requete(url, *, data, headers):
+            import json
+            demandes.append(json.loads(data))
+            return {"data": {"videos": reponses, "has_more": False}}
+        with patch("collecte.decouverte_territoriale._jeton", return_value="token"):
+            bilan = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, inventaire["id"],
+                requete=requete, nombre_pages=1)
+        self.assertTrue(bilan["terminee"])
+        self.assertEqual(bilan["nombre_comptes"], 1)
+        self.assertEqual(bilan["comptes"][0]["username"], "@profil.fr")
+        self.assertEqual(bilan["videos_ecartees"], 2)
+        conditions = demandes[0]["query"]["and"]
+        self.assertEqual(conditions[0], {
+            "field_name": "region_code", "operation": "EQ",
+            "field_values": ["FR"]})
+        self.assertEqual(conditions[1]["field_name"], "hashtag_name")
+        self.assertNotIn("keyword", str(demandes[0]))
+
+    def test_region_code_ne_localise_pas_une_ville(self):
+        """Un pays FR ne garantit pas la ville de Toulouse."""
+        inventaire = creer_inventaire(
+            self.racine, PROPRIETAIRE, "", ["lyceen"],
+            "2026-10-01", "2026-10-15",
+            mode_territoire="region_code", region_code="FR")
+        self.assertEqual(inventaire["mode_territoire"], "region_code")
+        self.assertEqual(inventaire["region_code"], "FR")
+        self.assertEqual(inventaire["ville"], "FR")
+
     def test_croisement_et_exige_tous_les_hashtags(self):
         """La ville ET deux hashtags doivent tous être présents."""
         video = {
