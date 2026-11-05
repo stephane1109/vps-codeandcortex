@@ -88,6 +88,14 @@ def texte_commentaires_collectes(job):
     return "\n\n".join(blocs) + ("\n" if blocs else "")
 
 
+class CreerDecouverteTerritorialePayload(BaseModel):
+    """Paramètres d'un inventaire territorial, sans secrets."""
+    ville: str = Field(min_length=2, max_length=80)
+    variantes: list[str] = Field(default_factory=list, max_length=7)
+    date_debut: str = Field(min_length=10, max_length=10)
+    date_fin: str = Field(min_length=10, max_length=10)
+
+
 class ImporterAnnotationCSVPayload(BaseModel):
     """Importer un CSV d'engagement sans lancer de collecte."""
     nom: str = Field(min_length=1, max_length=120)
@@ -4112,6 +4120,64 @@ def create_app(manager=None):
         owner(request)
         from collecte.tiktok_limitation import consulter_limitation
         return consulter_limitation()
+
+    @app.get("/api/decouverte-territoriale")
+    def lister_decouvertes_territoriales(request: Request):
+        owner(request)
+        from collecte.decouverte_territoriale import lister_inventaires
+        return {"inventaires": lister_inventaires(
+            manager.data_dir, owner_historique(request))}
+
+    @app.post("/api/decouverte-territoriale")
+    def creer_decouverte_territoriale(
+            payload: CreerDecouverteTerritorialePayload, request: Request):
+        exiger_ticket(request)
+        from collecte.decouverte_territoriale import creer_inventaire
+        try:
+            return creer_inventaire(
+                manager.data_dir, owner_historique(request),
+                payload.ville, payload.variantes,
+                payload.date_debut, payload.date_fin)
+        except ValueError as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.get("/api/decouverte-territoriale/{identifiant}")
+    def consulter_decouverte_territoriale(identifiant: str, request: Request):
+        owner(request)
+        from collecte.decouverte_territoriale import charger, presenter
+        try:
+            return presenter(charger(
+                manager.data_dir, owner_historique(request), identifiant))
+        except ValueError as erreur:
+            raise HTTPException(404, str(erreur)) from None
+
+    @app.post("/api/decouverte-territoriale/{identifiant}/poursuivre")
+    def poursuivre_decouverte_territoriale(identifiant: str, request: Request):
+        exiger_ticket(request)
+        if any(tache.busy for tache in manager.jobs.values()):
+            raise HTTPException(
+                409, "Une collecte est déjà en cours : terminez-la avant "
+                "de lancer une découverte territoriale.")
+        from collecte.decouverte_territoriale import poursuivre_inventaire
+        try:
+            return poursuivre_inventaire(
+                manager.data_dir, owner_historique(request), identifiant)
+        except (ValueError, RuntimeError) as erreur:
+            raise HTTPException(422, str(erreur)) from None
+
+    @app.get("/api/decouverte-territoriale/{identifiant}/comptes.csv")
+    def exporter_decouverte_territoriale(identifiant: str, request: Request):
+        owner(request)
+        from collecte.decouverte_territoriale import charger, exporter_csv
+        try:
+            inventaire = charger(
+                manager.data_dir, owner_historique(request), identifiant)
+        except ValueError as erreur:
+            raise HTTPException(404, str(erreur)) from None
+        return Response(
+            exporter_csv(inventaire), media_type="text/csv; charset=utf-8",
+            headers=entete_telechargement(nom_fichier_telechargement(
+                inventaire["ville"], "comptes_territoire", "csv")))
 
     @app.get("/api/annotation-csv")
     def liste_annotations_csv(request: Request):
