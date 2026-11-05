@@ -1085,6 +1085,23 @@ par limitation est affiché. Les exports CSV, GraphML et GEXF sont conservés,
 avec matrice d'adjacence jusqu'à 250 nœuds. La comparaison est limitée
 à 1 000 vidéos par calcul pour contrôler le coût quadratique.
 
+Pour éviter les blocages de Streamlit, le calcul se lance désormais
+uniquement en cliquant sur **Calculer le réseau de similarité**. Un
+changement de seuil, de variables ou de taille du corpus n'exécute pas
+l'analyse automatiquement ; les résultats ne sont réutilisés que si les
+paramètres sont identiques. L'algorithme compare toujours les paires
+nécessaires, mais ne conserve en mémoire que les meilleurs voisins
+sélectionnés pour chaque vidéo, plutôt qu'une liste quadratique de paires.
+Le bilan indique le nombre de comparaisons et les paires au seuil.
+
+L'aperçu graphique est facultatif et désactivé après chaque nouveau
+calcul pour éviter les charges de la simulation physique PyVis. Lorsqu'il
+est activé, Graphviz est proposé avant PyVis et le rendu est limité à
+80 nœuds par défaut, avec un maximum réglable de 200 ; l'export conserve
+le réseau complet. Les exports CSV, GraphML, GEXF et matrice restent
+disponibles sans activer l'aperçu et sont générés à la demande lors
+du téléchargement, sans préparer tous les fichiers à chaque rerun.
+
 **Attention à l'interprétation** : ce réseau statistique représente des
 similarités de volumes d'engagement, non des liens sociaux ou des audiences
 communes. Les quatre compteurs TikTok sont des indicateurs agrégés, sans
