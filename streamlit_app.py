@@ -298,7 +298,8 @@ st.session_state.setdefault("groupe_hashtags_2", "lyceen, lyceens, lycéen, lyc�
 st.session_state.setdefault("hashtags_saisis_comptes", "")
 st.session_state.setdefault("hashtags_exclus_saisis", "")
 from collecte.profils_medias import (
-    VARIABLES_PROFILS_MEDIAS, LIBELLES_PROFILS_MEDIAS)
+    VARIABLES_PROFILS_MEDIAS, LIBELLES_PROFILS_MEDIAS,
+    NOMS_VARIABLES_PROFILS_TXT)
 for variable in VARIABLES_PROFILS_MEDIAS:
     st.session_state.setdefault("profil_media_" + variable + "_brut", True)
     st.session_state.setdefault("profil_media_" + variable + "_classe", True)
@@ -1588,12 +1589,13 @@ with onglet_collecte:
             for variable in VARIABLES_PROFILS_MEDIAS:
                 libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
                 cle = "profil_media_" + variable + "_"
+                nom_txt = NOMS_VARIABLES_PROFILS_TXT[variable]
                 ligne_variable(
                     libelle + " : valeur numérique réelle",
                     cle + "txt_brut", cle + "csv_brut",
                     seulement_research=True,
                     aide="Mesure agrégée du compte, non d'une vidéo. "
-                         "TXT : *profil_" + variable + "_valeur ; "
+                         "TXT : *" + nom_txt + "_valeur ; "
                          "CSV : colonne " + variable + " dans profils_medias.csv. "
                          "Une valeur absente reste indéterminée.")
                 ligne_variable(
@@ -1601,7 +1603,7 @@ with onglet_collecte:
                     cle + "txt_classe", cle + "csv_classe",
                     seulement_research=True,
                     aide="Codage proposé : " + intervalles + ". "
-                         "TXT : *profil_" + variable + "_classe_modalite ; "
+                         "TXT : *" + nom_txt + "classe_modalite ; "
                          "CSV : classe_" + variable + " dans profils_medias.csv. "
                          "La classe peut être sélectionnée sans la valeur brute. "
                          "Les classes ne sont pas officielles TikTok.")
