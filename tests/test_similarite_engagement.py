@@ -113,6 +113,44 @@ class TestSimilariteEngagement(unittest.TestCase):
         self.assertIsNone(convertir_nombre("inf"))
         self.assertIsNone(convertir_nombre("non disponible"))
 
+    def test_nombre_de_comparaisons_et_memoire_bornee(self):
+        """Un corpus dense conserve un nombre linéaire de liens, pas toutes les paires."""
+        n = 180
+        donnees = {"videos": [
+            {"id": str(i), "url": "", "vues": 10 + i,
+             "likes": 1 + i % 37, "commentaires": i % 17,
+             "partages": i % 7}
+            for i in range(n)
+        ], "diagnostics": []}
+        reseau = construire_reseau_engagement(
+            donnees, ["vues", "likes", "commentaires", "partages"],
+            seuil=0.01, voisins=3, limite=n)
+        stats = reseau["statistiques"]
+        self.assertEqual(stats["comparaisons"], n * (n - 1) // 2)
+        self.assertEqual(stats["paires_au_seuil"], n * (n - 1) // 2)
+        self.assertLessEqual(len(reseau["liens"]), 3 * n)
+        self.assertEqual(len({(lien["source"], lien["cible"])
+                              for lien in reseau["liens"]}),
+                         len(reseau["liens"]))
+
+    def test_interface_calcul_sur_action_et_exports_differes(self):
+        """Les curseurs n'exécutent ni le calcul, ni la génération de gros fichiers."""
+        source = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
+        ast.parse(source)
+        zone = source.split('elif mode_alimentation == "engagement":', 1)[1]
+        zone = zone.split(
+            'st.subheader("Analyse sociométrique des commentaires")', 1)[0]
+        self.assertIn('"Calculer le réseau de similarité"', zone)
+        self.assertIn('st.session_state["sociometrie_engagement_resultat"]', zone)
+        self.assertIn('if st.button(', zone)
+        self.assertIn('st.checkbox(', zone)
+        self.assertIn('"Afficher l\'aperçu du réseau"', zone)
+        self.assertIn('on_click="ignore"', zone)
+        self.assertIn('data=lambda format_sortie=nom, reseau=reseau_mesures:', zone)
+        self.assertIn('data=lambda reseau=reseau_mesures:', zone)
+        self.assertIn('max_noeuds=taille_apercu_mesures', zone)
+        self.assertIn('st.session_state.pop("sociometrie_engagement_resultat", None)', zone)
+
     def test_aucune_metrique_selectionnee_est_refusee(self):
         """Une sélection vide ne réactive pas les quatre métriques en secret."""
         donnees = importer_engagement([("engagement.csv", creer_csv([
