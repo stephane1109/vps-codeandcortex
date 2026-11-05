@@ -3652,6 +3652,31 @@ with onglet_sociometrie:
             "Fichiers engagement.csv (facultatifs)",
             type=["csv"], accept_multiple_files=True,
             key="sociometrie_csv_engagement")
+        if fichiers_commentaires:
+            from analyse_sociometrique.import_csv import lire_csv
+            for fichier in fichiers_commentaires:
+                try:
+                    colonnes_verifiees, lignes_verifiees = lire_csv(
+                        fichier.getvalue(), fichier.name)
+                except (ValueError, csv.Error) as erreur:
+                    st.error("Contrôle du fichier : " + str(erreur))
+                    continue
+                completes = sum(
+                    bool((ligne.get("id") or "").strip())
+                    and bool((ligne.get("publication_id") or "").strip())
+                    for ligne in lignes_verifiees)
+                st.caption(
+                    f"{fichier.name} : {len(lignes_verifiees)} ligne(s) de données, "
+                    f"{completes} commentaire(s) avec ID vidéo et ID commentaire.")
+                if not lignes_verifiees:
+                    st.warning(
+                        "Ce fichier ne contient que les en-têtes : aucun "
+                        "commentaire n'y a été enregistré. L'import ne "
+                        "peut pas construire un réseau sociométrique.")
+                elif not completes:
+                    st.warning(
+                        "Aucune ligne ne possède simultanément id et "
+                        "publication_id. Vérifiez les données exportées.")
         if st.button("Importer et vérifier les fichiers CSV",
                      key="sociometrie_csv_valider", type="primary"):
             from analyse_sociometrique.import_csv import preparer_import
