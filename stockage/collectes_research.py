@@ -486,6 +486,16 @@ def exporter(dossier, identifiant, proprietaire, format_):
     options = (parametres_export_plan(dossier, identifiant, proprietaire)
                if format_ in {"csv", "commentaires.csv", "txt", "zip"} else {})
     choix_csv = options.get("variables_csv")
+    # Pour les programmes créés avec une ville de corpus, la provenance
+    # déclarée reste attachée aux lignes même après une reprise de collecte.
+    if (options.get("source_collecte") == "comptes"
+            and options.get("ville_etude")):
+        retenues = [
+            {**publication,
+             "ville_etude": publication.get("ville_etude")
+             or options["ville_etude"]}
+            for publication in retenues
+        ]
     if format_ == "json":
         return json.dumps({"publications": publications, "commentaires": commentaires},
                           ensure_ascii=False, indent=2).encode("utf-8")
