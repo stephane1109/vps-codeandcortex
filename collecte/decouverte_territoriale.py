@@ -85,27 +85,51 @@ def correspond_territoire(video, termes):
                          + r"(?![a-z0-9_])", description) for mot in termes)
 
 
+def hashtags_publication(video):
+    """Extraire les hashtags explicites renvoyés par Research pour une vidéo."""
+    if not isinstance(video, dict):
+        return set()
+    trouves = set()
+    champs = video.get("hashtag_names") or []
+    if isinstance(champs, list):
+        for nom in champs:
+            if not isinstance(nom, str):
+                continue
+            try:
+                trouves.add(nettoyer_terme(nom))
+            except ValueError:
+                continue
+    # Si Research omet hashtag_names, lire seulement les hashtags #explicites.
+    description = _normaliser_texte(video.get("video_description") or "")
+    for nom in re.findall(r"#([\\w]+)", description):
+        try:
+            trouves.add(nettoyer_terme(nom))
+        except ValueError:
+            continue
+    return trouves
+
+
+def hashtags_correspondants(video, hashtags, operateur="OR"):
+    """Retourner les hashtags demandés réellement présents dans la vidéo.
+
+    Un mot du texte sans # n'est pas considéré comme un hashtag.
+    """
+    trouves = hashtags_publication(video)
+    attendus = set(hashtags or [])
+    correspondants = attendus & trouves
+    if not attendus or operateur not in ("OR", "AND"):
+        return set()
+    if operateur == "AND" and not attendus.issubset(trouves):
+        return set()
+    return correspondants
+
+
 def correspond_hashtags(video, hashtags, operateur="OR"):
-    """Contrôler les hashtags présents, indépendamment de la ville."""
+    """Contrôler strictement les hashtags de la vidéo, pas ceux du profil."""
     if not hashtags:
         return True
-    trouves = set()
-    for nom in (video.get("hashtag_names") or []):
-        if not isinstance(nom, str):
-            continue
-        try:
-            trouves.add(nettoyer_terme(nom))
-        except ValueError:
-            continue
-    # Certaines réponses Research ne fournissent que la description.
-    description = _normaliser_texte(video.get("video_description") or "")
-    for nom in re.findall(r"#([\w]+)", description):
-        try:
-            trouves.add(nettoyer_terme(nom))
-        except ValueError:
-            continue
-    attendus = set(hashtags)
-    return attendus.issubset(trouves) if operateur == "AND" else bool(attendus & trouves)
+    return bool(hashtags_correspondants(video, hashtags, operateur))
+
 
 
 def requete_territoriale(termes, debut, fin, curseur=None, search_id=None,
@@ -353,6 +377,8 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, oper
         "comptes": {}, "pages": 0, "candidats": 0,
         "terminee": False, "erreur": "", "version_requete": VERSION_REQUETE,
         "videos_ecartees": 0, "etat": "en_attente",
+        "videos_hors_territoire": 0, "videos_sans_hashtag": 0,
+        "videos_retenues": 0,
         "echecs_serveur": 0, "relances_serveur": 0,
     }
     sauvegarder(chemin_inventaire(racine, proprietaire, identifiant), inventaire)
@@ -388,6 +414,9 @@ def presenter(inventaire):
         "ancienne_recherche": inventaire.get("version_requete", 1) < 2,
         "comptes": comptes, "nombre_comptes": len(comptes),
         "videos_ecartees": inventaire.get("videos_ecartees", 0),
+        "videos_hors_territoire": inventaire.get("videos_hors_territoire", 0),
+        "videos_sans_hashtag": inventaire.get("videos_sans_hashtag", 0),
+        "videos_retenues": inventaire.get("videos_retenues", 0),
         "echecs_serveur": inventaire.get("echecs_serveur", 0),
         "relances_serveur": inventaire.get("relances_serveur", 0),
         "etat": ("en_cours" if recherche_active(inventaire["id"])
@@ -489,11 +518,19 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                     == inventaire.get("region_code")
                     if mode == "region_code"
                     else correspond_territoire(video, inventaire["hashtags"]))
-                if (not localisation_valide
-                        or not correspond_hashtags(
-                            video, inventaire.get("hashtags_croises", []),
-                            inventaire.get("operateur", "OR"))):
-                    inventaire["videos_ecartees"] = inventaire.get("videos_ecartees", 0) + 1
+                tags_demandes = inventaire.get("hashtags_croises", [])
+                tags_valides = hashtags_correspondants(
+                    video, tags_demandes, inventaire.get("operateur", "OR"))
+                # Chaque vidéo justificative doit satisfaire les deux critères.
+                if not localisation_valide:
+                    inventaire["videos_hors_territoire"] = (
+                        inventaire.get("videos_hors_territoire", 0) + 1)
+                if not tags_valides:
+                    inventaire["videos_sans_hashtag"] = (
+                        inventaire.get("videos_sans_hashtag", 0) + 1)
+                if not localisation_valide or not tags_valides:
+                    inventaire["videos_ecartees"] = (
+                        inventaire.get("videos_ecartees", 0) + 1)
                     continue
                 try:
                     auteur = normaliser_compte(video.get("username") or "")
@@ -515,6 +552,21 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                 if identifiant_video not in compte["identifiants_videos"]:
                     compte["identifiants_videos"].append(identifiant_video)
                     compte["videos_trouvees"] += 1
+                    inventaire["videos_retenues"] = (
+                        inventaire.get("videos_retenues", 0) + 1)
+                    if not compte.get("video_preuve"):
+                        # Enregistrer la première vidéo effectivement conforme.
+                        # Le Place ID fourni n'est jamais présenté comme vérifié.
+                        compte["video_preuve"] = {
+                            "id_video": identifiant_video,
+                            "url_video": (
+                                "https://www.tiktok.com/@" + auteur
+                                + "/video/" + identifiant_video),
+                            "hashtags_correspondants": sorted(tags_valides),
+                            "hashtags_video": sorted(hashtags_publication(video)),
+                            "description_video": str(
+                                video.get("video_description") or "")[:1500],
+                        }
             inventaire["pages"] += 1
             pages_traitees += 1
             inventaire["candidats"] += len(videos)
@@ -567,6 +619,9 @@ def exporter_csv(inventaire):
     entetes = ["territoire", "username", "url_compte", "videos_trouvees"]
     if avec_reference:
         entetes += ["place_id_reference", "statut_localisation"]
+    entetes += [
+        "url_video_preuve", "hashtags_correspondants_preuve",
+        "hashtags_video_preuve", "description_video_preuve", "statut_preuve"]
     writer.writerow(entetes)
     for compte in presenter(inventaire)["comptes"]:
         valeurs = [
@@ -576,6 +631,19 @@ def exporter_csv(inventaire):
         if avec_reference:
             valeurs += [inventaire.get("place_id", ""),
                         "non_verifiee_recherche_textuelle"]
+        preuve = compte.get("video_preuve") or {}
+        description = str(preuve.get("description_video") or "")
+        # Éviter l'interprétation des descriptions TikTok comme formules CSV.
+        if description.lstrip().startswith(("=", "+", "-", "@")):
+            description = "'" + description
+        valeurs += [
+            preuve.get("url_video", ""),
+            ", ".join(preuve.get("hashtags_correspondants", [])),
+            ", ".join(preuve.get("hashtags_video", [])),
+            description,
+            ("video_conforme_enregistree" if preuve
+             else "historique_sans_preuve_enregistree"),
+        ]
         writer.writerow(valeurs)
     return sortie.getvalue().encode("utf-8-sig")
 
