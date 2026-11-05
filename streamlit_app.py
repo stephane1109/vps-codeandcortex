@@ -918,10 +918,32 @@ with onglet_collecte:
         else:
             st.caption(resume_presse)
     elif source == "comptes":
-        st.text_input("Comptes TikTok", key="comptes", placeholder="@lemondefr, @franceinfo", help="Jusqu’à 10 comptes séparés par des virgules ou espaces.", disabled=occupe)
-        st.caption("Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
-                   "Jusqu’à 10 profils, séparés par des virgules ou des espaces. "
-                   "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+        # Appliquer le transfert au début du rendu, avant la création
+        # du widget Streamlit correspondant aux comptes TikTok.
+        transfert_territorial = st.session_state.pop(
+            "comptes_territoire_en_attente", None)
+        if transfert_territorial is not None:
+            st.session_state["comptes"] = transfert_territorial
+        onglet_profils_collecte, onglet_profils_territoire = st.tabs(
+            ["Collecte de profils", "Découverte territoriale"])
+        with onglet_profils_collecte:
+            st.text_input(
+                "Comptes TikTok", key="comptes",
+                placeholder="@lemondefr, @franceinfo",
+                help="Jusqu’à 10 comptes séparés par des virgules ou espaces.",
+                disabled=occupe)
+            st.caption(
+                "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
+                "Jusqu’à 10 profils, séparés par des virgules ou des espaces. "
+                "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+            if transfert_territorial is not None:
+                st.success(
+                    "Comptes de l'inventaire territorial placés dans le champ "
+                    "Profils. Vous pouvez lancer la collecte ci-dessous.")
+        with onglet_profils_territoire:
+            from interface.decouverte_territoriale_ui import (
+                afficher_decouverte_territoriale)
+            afficher_decouverte_territoriale(api, occupe=occupe)
     # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
     moteur_formulaire = st.session_state.get(
         {"presse": "presse_moteur", "comptes": "profil_moteur",
