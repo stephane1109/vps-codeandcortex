@@ -2044,7 +2044,10 @@ with onglet_collecte:
                         "pour restreindre la recherche."
                     )
             if actuel.get("comptes_filtres"):
-                st.write("Filtre des profils : " + ", ".join("@" + compte for compte in actuel["comptes_filtres"]))
+                # Afficher littéralement les identifiants : les caractères _ et *
+                # ne doivent jamais déclencher une mise en forme Markdown.
+                st.text("Filtre des profils : " + ", ".join(
+                    "@" + compte for compte in actuel["comptes_filtres"]))
                 if actuel.get("source_collecte") != "presse":
                     st.caption("Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus.")
             if actuel.get("sauvegarde_progressive") and actuel.get("erreur_sauvegarde"):
@@ -2122,7 +2125,8 @@ with onglet_collecte:
                 with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
                     for identifiant in selection_moteur:
                         media = medias.get(identifiant)
-                        st.write(f"{media['nom']} (@{media['compte']})" if media else identifiant)
+                        # Même précaution pour les noms de médias avec un tiret bas.
+                        st.text(f"{media['nom']} (@{media['compte']})" if media else identifiant)
             if actuel.get("source_collecte") == "hashtags":
                 bilan_sources = actuel.get("bilan_hashtags_sources") or []
                 if bilan_sources:
