@@ -133,6 +133,9 @@ if "initialise" not in st.session_state:
 
     valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
         "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","AND"),
+        "operator_comptes": (
+            ancienne.get("operator", "OR")
+            if ancienne.get("source_collecte") == "comptes" else "OR"),
         "utiliser_groupes_hashtags": bool(ancienne.get("groupes_hashtags")),
         "groupe_hashtags_1": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[0]),
         "groupe_hashtags_2": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[1]),
@@ -296,12 +299,15 @@ for variable in VARIABLES_TXT:
 # clé du session_state à la fin d'une exécution. Le formulaire médias doit
 # rester lançable sans ce widget.
 st.session_state.setdefault("operator", "AND")
+# Les comptes importés héritent d'une logique OU par défaut, comme
+# l'inventaire de découverte territoriale, sans modifier le mode Hashtags.
+st.session_state.setdefault("operator_comptes", "OR")
 st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
 st.session_state.setdefault("region_fr_research", False)
 for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
             "hashtags_saisis", "hashtags_saisis_comptes",
-            "operator", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
+            "operator", "operator_comptes", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
             "collecter_commentaires", "inclure_commentaires_txt",
             "collecter_reponses", "limite_commentaires", "telecharger_mp4",
             "date_debut", "date_fin", "comptes"):
@@ -950,6 +956,11 @@ with onglet_collecte:
             "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
              "Les comptes peuvent être transférés en totalité depuis la collecte de compte. "
             "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+        st.caption(
+            "Un CSV de comptes contient les auteurs découverts, pas toutes leurs "
+            "vidéos territoriales. Une nouvelle collecte de profils n'applique "
+            "pas automatiquement le critère Toulouse : elle croise les comptes "
+            "avec les hashtags et la période choisis ci-dessous.")
         if transfert_territorial is not None:
             st.success(
                 "Comptes de l'inventaire territorial placés dans le champ "
@@ -1126,8 +1137,26 @@ with onglet_collecte:
                     format_func=lambda valeur: (
                         "ET — tous les hashtags" if valeur == "AND"
                         else "OU — au moins un hashtag"),
-                    key="operator", horizontal=True, disabled=occupe,
+                    key=("operator_comptes" if source == "comptes"
+                         else "operator"),
+                    horizontal=True, disabled=occupe,
                 )
+                if source == "comptes" and liste_hashtags:
+                    operateur_profils = st.session_state.get(
+                        "operator_comptes", "OR")
+                    if operateur_profils == "OR":
+                        st.caption(
+                            "Profils : une publication est retenue si elle "
+                            "contient au moins un des hashtags demandés. "
+                            "La Research API applique ce croisement dès "
+                            "la recherche des vidéos de chaque compte.")
+                    elif len(liste_hashtags) > 1:
+                        st.warning(
+                            f"Profils : ET impose les {len(liste_hashtags)} "
+                            "hashtags dans une même publication, et non "
+                            "répartis entre les vidéos du compte. "
+                            "Pour retrouver les vidéos associées à l'un "
+                            "des hashtags, choisissez OU.")
             if source == "hashtags":
                 st.checkbox("Inclure les variantes accentuées des hashtags",
                     key="variantes_accents", disabled=occupe,
@@ -1599,8 +1628,12 @@ with onglet_collecte:
                     moteur_formulaire == "research"
                     and st.session_state.get("test_research_10_publications", False))
                 valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
-                valeurs["operator"] = ("AND" if source == "presse" or
-                    (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags"))
+                valeurs["operator"] = (
+                    "AND" if (source == "presse" or
+                              (source == "hashtags" and
+                               st.session_state.get("utiliser_groupes_hashtags")))
+                    else st.session_state.get("operator_comptes", "OR")
+                    if source == "comptes"
                     else st.session_state.get("operator", "AND"))
                 valeurs["groupes_hashtags"] = (groupes_hashtags if source == "hashtags"
                     and st.session_state.get("utiliser_groupes_hashtags") else [])
