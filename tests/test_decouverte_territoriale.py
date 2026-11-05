@@ -2,6 +2,7 @@
 import csv
 import io
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +11,8 @@ from collecte.decouverte_territoriale import (
     creer_inventaire, charger, exporter_csv, exporter_txt, lister_inventaires,
     poursuivre_inventaire, correspond_territoire, correspond_hashtags,
     requete_territoriale, extraire_reference_lieu,
+    lancer_recherche, arreter_recherche, recherche_active,
+    recherche_arret_demande, recherche_en_cours,
 )
 
 PROPRIETAIRE = "a" * 64
@@ -25,6 +28,103 @@ class TestDecouverteTerritoriale(unittest.TestCase):
 
     def tearDown(self):
         self.temporaire.cleanup()
+
+    def test_arret_et_redemarrage_de_la_meme_collecte(self):
+        """Le bouton d'arrêt libère le worker et autorise la reprise."""
+        demarre = threading.Event()
+        libere = threading.Event()
+        appels = []
+
+        def simuler_collecte(racine, proprietaire, identifiant, *,
+                            nombre_pages, arret, credentiels):
+            appels.append(identifiant)
+            demarre.set()
+            if not libere.wait(3):
+                raise RuntimeError("Le test n'a pas libéré le travail.")
+            if arret.is_set():
+                etat = charger(racine, proprietaire, identifiant)
+                from collecte.decouverte_territoriale import (
+                    chemin_inventaire, sauvegarder)
+                etat["etat"] = "interrompue"
+                sauvegarder(
+                    chemin_inventaire(racine, proprietaire, identifiant),
+                    etat)
+            return {}
+
+        with patch("collecte.decouverte_territoriale.poursuivre_inventaire",
+                   side_effect=simuler_collecte):
+            self.assertTrue(lancer_recherche(
+                self.racine, PROPRIETAIRE, self.inventaire["id"]))
+            self.assertTrue(demarre.wait(2))
+            self.assertTrue(recherche_active(self.inventaire["id"]))
+            self.assertTrue(recherche_en_cours())
+            inventaires = lister_inventaires(self.racine, PROPRIETAIRE)
+            self.assertEqual(inventaires[0]["etat"], "en_cours")
+            self.assertFalse(inventaires[0]["arret_demande"])
+            self.assertTrue(arreter_recherche(self.inventaire["id"]))
+            self.assertTrue(recherche_arret_demande(self.inventaire["id"]))
+            self.assertTrue(lister_inventaires(
+                self.racine, PROPRIETAIRE)[0]["arret_demande"])
+            self.assertTrue(arreter_recherche(self.inventaire["id"]))
+            libere.set()
+            for entree in list(__import__(
+                    "collecte.decouverte_territoriale",
+                    fromlist=["_TRAVAUX"])._TRAVAUX.values()):
+                entree["thread"].join(timeout=3)
+            self.assertFalse(recherche_en_cours())
+            self.assertFalse(recherche_active(self.inventaire["id"]))
+            self.assertEqual(lister_inventaires(
+                self.racine, PROPRIETAIRE)[0]["etat"], "interrompue")
+            demarre.clear()
+            self.assertTrue(lancer_recherche(
+                self.racine, PROPRIETAIRE, self.inventaire["id"]))
+            self.assertTrue(demarre.wait(2))
+            self.assertEqual(len(appels), 2)
+            libere.set()
+            for entree in list(__import__(
+                    "collecte.decouverte_territoriale",
+                    fromlist=["_TRAVAUX"])._TRAVAUX.values()):
+                entree["thread"].join(timeout=3)
+
+    def test_arret_preserve_le_curseur_et_les_comptes(self):
+        """Une page enregistrée doit rester disponible après un arrêt."""
+        arret = threading.Event()
+        corps = []
+
+        def lire_page(url, *, data, headers):
+            import json
+            requete = json.loads(data)
+            corps.append(requete)
+            if len(corps) == 1:
+                arret.set()
+                return {"data": {
+                    "videos": [{
+                        "id": "1234567890", "username": "media31",
+                        "video_description": "Manifestation à Toulouse",
+                        "hashtag_names": ["manifestation"]}],
+                    "has_more": True, "cursor": 100,
+                    "search_id": "toulouse"}}
+            return {"data": {"videos": [{
+                "id": "1234567891", "username": "media31",
+                "video_description": "Toulouse #lyceen",
+                "hashtag_names": ["lyceen"]}], "has_more": False}}
+
+        with patch("collecte.decouverte_territoriale._jeton",
+                   return_value="jeton"):
+            premier = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=lire_page, arret=arret)
+            self.assertEqual(premier["etat"], "interrompue")
+            self.assertEqual(premier["nombre_comptes"], 1)
+            self.assertEqual(premier["pages"], 1)
+            arret.clear()
+            second = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=lire_page)
+        self.assertTrue(second["terminee"])
+        self.assertEqual(second["comptes"][0]["videos_trouvees"], 2)
+        self.assertEqual(corps[1]["cursor"], 100)
+        self.assertEqual(corps[1]["search_id"], "toulouse")
 
     def test_liste_privee(self):
         """Les recherches appartiennent exclusivement à leur historique."""
