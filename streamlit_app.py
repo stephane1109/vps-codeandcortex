@@ -439,8 +439,18 @@ with onglet_collecte:
                           type="password", disabled=occupe)
             st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
                           type="password", disabled=occupe)
-            st.caption("Research API officielle : accès réservé aux projets approuvés. "
-                       "Recherche directe de hashtags ou de comptes ; sans téléchargement MP4.")
+            st.caption(
+                "Research API officielle : accès réservé aux projets approuvés. "
+                "Recherche directe de hashtags ou de comptes ; sans téléchargement MP4."
+                + (
+                    " Importez les bilans CSV pour retrouver le corpus PostgreSQL de "
+                    "la collecte d'origine et ses hashtags inachevés. Aucun ZIP n'est "
+                    "nécessaire si la collecte existe dans PostgreSQL. Sans curseur "
+                    "historique, les premières pages API seront réinterrogées et "
+                    "les publications existantes seront dédupliquées par identifiant."
+                    if source == "hashtags" else ""
+                )
+            )
         elif moteur_courant == "tikhub":
             st.text_input("Clé API TikHub", key="tikhub_api_key",
                           type="password", disabled=occupe,
