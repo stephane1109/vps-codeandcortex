@@ -1489,7 +1489,10 @@ with onglet_collecte:
             st.checkbox("Collecter les textes des commentaires", key="collecter_commentaires", disabled=occupe,
                 help="Récupère les commentaires dans commentaires.csv. "
                      "L'ajout des textes au TXT est une option indépendante. "
-                     "La variable numérique « Nombre de commentaires » reste disponible.")
+                     "La variable numérique « Nombre de commentaires » reste disponible. "
+                     "Avec la Research API, TikTok ne fournit pas l'identifiant unique "
+                     "des commentateurs : la colonne auteur reste vide. "
+                     "Pour un réseau de réponses, activer aussi la collecte des réponses.")
         with st.expander("Options des commentaires", expanded=bool(
                 st.session_state.get("collecter_commentaires", False))):
             def respecter_choix_commentaires():
@@ -3834,6 +3837,17 @@ with onglet_sociometrie:
                     st.warning(
                         "Aucune ligne ne possède simultanément id et "
                         "publication_id. Vérifiez les données exportées.")
+                else:
+                    nombre_research_csv = sum(
+                        (ligne.get("source") or "").strip() == "research_api_officielle"
+                        for ligne in lignes_verifiees)
+                    if nombre_research_csv:
+                        st.info(
+                            f"{nombre_research_csv} commentaire(s) issus de la Research API : "
+                            "l'endpoint officiel ne fournit pas de username de commentateur. "
+                            "La colonne auteur reste vide pour ces commentaires ; "
+                            "le nom affiché éventuel n'est pas un identifiant unique. "
+                            "Le graphe des réponses exploite plutôt parent_id.")
         if st.button("Importer et vérifier les fichiers CSV",
                      key="sociometrie_csv_valider", type="primary"):
             from analyse_sociometrique.import_csv import preparer_import
@@ -3850,6 +3864,10 @@ with onglet_sociometrie:
                 st.error("Import CSV impossible : " + str(erreur))
             else:
                 st.session_state["sociometrie_csv_donnees"] = donnees_sociometriques
+                # Sans identifiant stable d'auteur, ouvrir directement le seul
+                # type de réseau exploitable à partir des liens de réponse.
+                if not donnees_sociometriques["auteurs_candidats"]:
+                    st.session_state["sociometrie_csv_mode"] = "reponses"
                 st.success(
                     f"{len(donnees_sociometriques['commentaires'])} commentaire(s) "
                     f"distinct(s), {len(donnees_sociometriques['publications'])} "
@@ -3858,6 +3876,12 @@ with onglet_sociometrie:
         if donnees_sociometriques:
             for diagnostic in donnees_sociometriques["diagnostics"]:
                 st.warning(diagnostic)
+            if donnees_sociometriques.get("commentaires_research"):
+                st.caption(
+                    f"Research API : {donnees_sociometriques['commentaires_research']} "
+                    "commentaire(s) sans identifiant stable de commentateur ; "
+                    f"{donnees_sociometriques.get('reponses_observees', 0)} "
+                    "lien(s) de réponse potentiel(s) dans les données importées.")
             choix_sociometriques = {
                 "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
                 "videos_communes": "Vidéos–vidéos : commentateurs communs",
@@ -3905,9 +3929,17 @@ with onglet_sociometrie:
                 if (mode_csv != "reponses"
                         and statistiques_csv["auteurs_distincts"] == 0):
                     st.info(
-                        "Les commentaires importés ne disposent d'aucun auteur "
-                        "identifiable à partir d'une page visible. Aucun réseau "
-                        "d'auteurs ne peut être établi à partir de ces données.")
+                        "Aucun identifiant de commentateur exploitable : la Research API "
+                        "ne fournit pas de username de commentateur. "
+                        "Choisissez « Commentaires : graphe des réponses » "
+                        "pour exploiter les liens parent_id éventuellement présents.")
+                if (mode_csv == "reponses"
+                        and statistiques_csv["reponses_observees"] == 0):
+                    st.info(
+                        "Aucune réponse collectée : les commentaires isolés "
+                        "ne permettent pas de reconstruire des liens entre "
+                        "commentaires. Lors d'une nouvelle collecte, activez "
+                        "« Collecter les réponses aux commentaires ».")
                 if graphe_csv["liens"]:
                     moteur_graphique_csv = st.radio(
                         "Visualisation du réseau",
