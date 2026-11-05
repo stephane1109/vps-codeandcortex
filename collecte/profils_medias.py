@@ -53,15 +53,22 @@ def segmenter_profil_media(variable, valeur):
     raise ValueError("Segmentation de profil impossible.")
 
 
-def colonnes_profils_medias(variables, classes):
-    """Créer des colonnes stables, dans l'ordre défini par l'interface."""
+def colonnes_profils_medias(variables, classes, *,
+                           csv_bruts=None, csv_classes=None):
+    """Gérer indépendamment les valeurs brutes et les classes dans le CSV.
+
+    Une absence de nouveau réglage conserve le schéma historique.
+    Même sans compteur choisi, les identifiants de compte restent exportés.
+    """
+    selection_brute = set(variables if csv_bruts is None else csv_bruts)
+    selection_classe = set(classes if csv_classes is None else csv_classes)
     colonnes = ["compte", "nom", "categorie_media", "url", "date_collecte",
                 "statut_profil"]
     for variable in VARIABLES_PROFILS_MEDIAS:
-        if variable in variables:
+        if variable in selection_brute:
             colonnes.append(variable)
-            if variable in classes:
-                colonnes.append("classe_" + variable)
+        if variable in selection_classe:
+            colonnes.append("classe_" + variable)
     return colonnes
 
 
@@ -70,7 +77,7 @@ def ligne_profil_media(media, variables, classes, *, donnees=None,
     """Conserver une ligne par compte même quand l'API refuse de répondre."""
     resultat = {
         "compte": media["compte"],
-        "nom": media["nom"],
+        "nom": media.get("nom") or media["compte"],
         "categorie_media": media["categorie"],
         "url": media.get("url") or "https://www.tiktok.com/@" + media["compte"],
         "date_collecte": date_collecte or datetime.now(timezone.utc).isoformat(),
@@ -86,4 +93,45 @@ def ligne_profil_media(media, variables, classes, *, donnees=None,
             if variable in classes:
                 resultat["classe_" + variable] = segmenter_profil_media(
                     variable, resultat[variable])
+    return resultat
+
+
+def enrichir_publications_profils_txt(publications, profils, bruts, classes):
+    """Associer des métadonnées de compte aux textes des vidéos correspondantes.
+
+    Les compteurs sont une photographie du profil et jamais des métriques
+    de la vidéo. Ne pas modifier les publications stockées ni l'en-tête
+    IRaMuTeQ pour une ancienne collecte dépourvue de choix TXT.
+    """
+    if not bruts and not classes:
+        return publications
+    profils_par_compte = {
+        str(ligne.get("compte") or "").strip().lstrip("@").casefold(): ligne
+        for ligne in profils or [] if isinstance(ligne, dict)
+    }
+    selection_brute = set(bruts)
+    selection_classe = set(classes)
+    resultat = []
+    for publication in publications:
+        compte = str(publication.get("author") or "").strip().lstrip("@").casefold()
+        fiche = profils_par_compte.get(compte)
+        if not fiche:
+            resultat.append(publication)
+            continue
+        balises = []
+        for variable in VARIABLES_PROFILS_MEDIAS:
+            if variable in selection_brute:
+                valeur = fiche.get(variable)
+                nombre = (
+                    str(valeur) if isinstance(valeur, int)
+                    and not isinstance(valeur, bool) and valeur >= 0
+                    else "indetermine")
+                balises.append("*profil_" + variable + "_" + nombre)
+            if variable in selection_classe:
+                classe = fiche.get("classe_" + variable)
+                if not isinstance(classe, str) or not classe:
+                    classe = segmenter_profil_media(variable, fiche.get(variable))
+                balises.append(
+                    "*profil_" + variable + "_classe_" + classe)
+        resultat.append({**publication, "balises_profils_txt": balises})
     return resultat
