@@ -3792,11 +3792,14 @@ with onglet_multimodale:
 with onglet_sociometrie:
     mode_alimentation = st.radio(
         "Origine des données sociométriques",
-        ["collecte", "csv"],
+        ["collecte", "csv", "engagement"],
         key="sociometrie_origine",
         horizontal=True,
-        format_func=lambda valeur: (
-            "Collecte existante" if valeur == "collecte" else "Importer des CSV"))
+        format_func=lambda valeur: {
+            "collecte": "Collecte existante",
+            "csv": "Importer des CSV de commentaires",
+            "engagement": "Réseau de similarité de l'engagement",
+        }[valeur])
     if mode_alimentation == "csv":
         st.subheader("Analyse sociométrique à partir de fichiers CSV")
         st.caption(
@@ -3864,10 +3867,8 @@ with onglet_sociometrie:
                 st.error("Import CSV impossible : " + str(erreur))
             else:
                 st.session_state["sociometrie_csv_donnees"] = donnees_sociometriques
-                # Sans identifiant stable d'auteur, ouvrir directement le seul
-                # type de réseau exploitable à partir des liens de réponse.
-                if not donnees_sociometriques["auteurs_candidats"]:
-                    st.session_state["sociometrie_csv_mode"] = "reponses"
+                # Ne jamais modifier automatiquement le type de réseau choisi :
+                # les trois analyses restent accessibles, même sans auteur fiable.
                 st.success(
                     f"{len(donnees_sociometriques['commentaires'])} commentaire(s) "
                     f"distinct(s), {len(donnees_sociometriques['publications'])} "
@@ -4018,18 +4019,23 @@ with onglet_sociometrie:
             "Aucun appel supplémentaire à TikTok : les comptes observés sur les "
             "pages publiques sont pseudonymisés ; Research conserve les liens de réponses."
         )
+        # Les trois réseaux restent visibles même lorsque la collecte active
+        # ne dispose plus de session : ne jamais masquer leur sélection.
+        modes_reseau = {
+            "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
+            "videos_communes": "Vidéos–vidéos : commentateurs communs",
+            "reponses": "Commentaires : graphe des réponses",
+        }
+        mode_reseau = st.radio(
+            "Type de réseau", list(modes_reseau),
+            key="sociometrie_mode", format_func=lambda m: modes_reseau[m])
         actif_reseau = st.session_state.get("collecte") or {}
         if not actif_reseau.get("id"):
-            st.info("Effectuez ou rouvrez une collecte avec commentaires.")
+            st.info(
+                "Les trois analyses restent disponibles. Effectuez ou rouvrez "
+                "une collecte avec commentaires, ou choisissez « Importer des "
+                "CSV de commentaires » pour analyser des fichiers sauvegardés.")
         else:
-            modes_reseau = {
-                "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
-                "videos_communes": "Vidéos–vidéos : commentateurs communs",
-                "reponses": "Commentaires : graphe des réponses",
-            }
-            mode_reseau = st.radio(
-                "Type de réseau", list(modes_reseau),
-                key="sociometrie_mode", format_func=lambda m: modes_reseau[m])
             seuil_reseau = st.number_input(
                 "Réseau vidéos–vidéos : seuil de commentateurs communs",
                 min_value=1, max_value=1000, value=1, step=1,
