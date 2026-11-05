@@ -186,6 +186,31 @@ if "initialise" not in st.session_state:
                 if ancienne else True)
             for nom in ("following_count", "follower_count", "likes_count", "video_count")
         },
+        # Les nouvelles collectes cochent les deux destinations. Une ancienne
+        # collecte retrouve ses valeurs CSV sans ajouter de variables TXT
+        # qu'elle ne possédait pas lors de sa création.
+        **{
+            "profil_media_" + nom + "_" + format_: (
+                bool(ancienne.get("profils_medias_" + cle_nouvelle, []))
+                if False else
+                (nom in (ancienne.get("profils_medias_" + cle_nouvelle)
+                         if ancienne.get("profils_medias_" + cle_nouvelle) is not None
+                         else (ancienne.get("profils_medias_variables") or [])
+                         if suffixe == "brut"
+                         else (ancienne.get("profils_medias_classes") or [])))
+                if ancienne and destination == "csv" else
+                (nom in (ancienne.get("profils_medias_" + cle_nouvelle) or [])
+                 if ancienne.get("profils_medias_" + cle_nouvelle) is not None
+                 else False)
+                if ancienne else True)
+            for nom in ("following_count", "follower_count", "likes_count", "video_count")
+            for destination, suffixe, cle_nouvelle, format_ in (
+                ("txt", "brut", "txt_bruts", "txt_brut"),
+                ("txt", "classe", "txt_classes", "txt_classe"),
+                ("csv", "brut", "csv_bruts", "csv_brut"),
+                ("csv", "classe", "csv_classes", "csv_classe"),
+            )
+        },
         "collecter_is_verified":ancienne.get("collecter_is_verified",True),
         "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
         "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",True),
@@ -1529,37 +1554,34 @@ with onglet_collecte:
                      "L'API Research ne fournit pas l'identifiant unique "
                      "du commentateur.")
 
-        if source in {"presse", "hashtags"}:
-            st.caption(
-                ("Métriques des comptes médias — fichier profils_medias.csv "
-                 "(une ligne par compte sélectionné, même sans vidéo retenue). "
-                 if source == "presse" else
-                 "Métriques des comptes auteurs — fichier profils_medias.csv "
-                 "(une ligne par auteur distinct des vidéos collectées). ")
-                + "Disponibles avec la Research API officielle. "
-                  "Une requête par auteur distinct utilise le quota Research.")
+        st.caption(
+            "Métriques agrégées des comptes TikTok — Research API officielle. "
+            "Les cases TXT insèrent une métadonnée dans l'en-tête IRaMuTeQ "
+            "de chaque vidéo du compte. Les cases CSV alimentent le fichier "
+            "profils_medias.csv (une ligne par compte), distinct des métriques "
+            "par vidéo. Chaque destination est indépendante. Une requête "
+            "par profil peut consommer le quota Research.")
+        with st.container(key="bloc_metriques_profils"):
             for variable in VARIABLES_PROFILS_MEDIAS:
                 libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
-                cle_brute = "profil_media_" + variable + "_brut"
-                cle_classe = "profil_media_" + variable + "_classe"
-                colonne_nombre, colonne_classe = st.columns(
-                    [1.05, 3.5], gap="small", vertical_alignment="top")
-                colonne_nombre.checkbox(
+                cle = "profil_media_" + variable + "_"
+                ligne_variable(
                     libelle + " : valeur numérique réelle",
-                    key=cle_brute,
-                    disabled=occupe or moteur_formulaire != "research",
-                    help="Métrique agrégée du compte public, distincte des "
-                         "compteurs de chacune de ses vidéos. Une seule "
-                         "requête officielle par compte et par collecte.")
-                colonne_classe.checkbox(
-                    "Recoder en variable catégorielle (codage proposé : "
-                    + intervalles + ")",
-                    key=cle_classe,
-                    disabled=(occupe or moteur_formulaire != "research"
-                              or not st.session_state.get(cle_brute, False)),
-                    help="Ajoute une colonne classe_" + variable
-                         + " au CSV, en plus de la valeur numérique. "
-                         "Donnée manquante : indetermine, jamais zéro.")
+                    cle + "txt_brut", cle + "csv_brut",
+                    seulement_research=True,
+                    aide="Mesure agrégée du compte, non d'une vidéo. "
+                         "TXT : *profil_" + variable + "_valeur ; "
+                         "CSV : colonne " + variable + " dans profils_medias.csv. "
+                         "Une valeur absente reste indéterminée.")
+                ligne_variable(
+                    libelle + " : recoder en variable catégorielle",
+                    cle + "txt_classe", cle + "csv_classe",
+                    seulement_research=True,
+                    aide="Codage proposé : " + intervalles + ". "
+                         "TXT : *profil_" + variable + "_classe_modalite ; "
+                         "CSV : classe_" + variable + " dans profils_medias.csv. "
+                         "La classe peut être sélectionnée sans la valeur brute. "
+                         "Les classes ne sont pas officielles TikTok.")
 
         with st.expander("Options des commentaires", expanded=bool(
                 st.session_state.get("collecter_commentaires", False))):
@@ -1658,8 +1680,11 @@ with onglet_collecte:
                          "aux collectes Research ponctuelles, et n'est pas encore "
                          "prise en charge par la programmation pluri-journalière.")
             elif (mode_programme and source in {"presse", "hashtags"}
-                  and any(st.session_state.get("profil_media_" + nom + "_brut", False)
-                          for nom in VARIABLES_PROFILS_MEDIAS)):
+                  and any(st.session_state.get(
+                      "profil_media_" + nom + "_" + destination + "_" + type_, False)
+                      for nom in VARIABLES_PROFILS_MEDIAS
+                      for destination in ("txt", "csv")
+                      for type_ in ("brut", "classe"))):
                 st.error("Les métriques des comptes médias sont disponibles dans "
                          "les collectes Research ponctuelles ; décochez-les pour "
                          "programmer une collecte pluri-journalière.")
@@ -1770,14 +1795,30 @@ with onglet_collecte:
                     and st.session_state.get("collecter_republications_research", False))
                 valeurs["maximum_republications_par_compte"] = int(
                     st.session_state.get("maximum_republications_par_compte", 100))
+                # Distinguer les champs à récupérer des deux destinations.
+                # Un choix « classe seule » déclenche la même lecture Research,
+                # mais n'impose pas la colonne brute dans le CSV.
+                for destination, suffixe in (
+                        ("txt", "brut"), ("txt", "classe"),
+                        ("csv", "brut"), ("csv", "classe")):
+                    valeurs["profils_medias_" + destination + "_" +
+                            ("bruts" if suffixe == "brut" else "classes")] = [
+                        nom for nom in VARIABLES_PROFILS_MEDIAS
+                        if moteur_selectionne == "research"
+                        and st.session_state.get(
+                            "profil_media_" + nom + "_" +
+                            destination + "_" + suffixe, False)
+                    ]
                 valeurs["profils_medias_variables"] = [
                     nom for nom in VARIABLES_PROFILS_MEDIAS
-                    if source in {"presse", "hashtags"} and moteur_selectionne == "research"
-                    and st.session_state.get("profil_media_" + nom + "_brut", False)
+                    if any(nom in valeurs["profils_medias_" + destination + "_" + suffixe]
+                           for destination in ("txt", "csv")
+                           for suffixe in ("bruts", "classes"))
                 ]
                 valeurs["profils_medias_classes"] = [
-                    nom for nom in valeurs["profils_medias_variables"]
-                    if st.session_state.get("profil_media_" + nom + "_classe", False)
+                    nom for nom in VARIABLES_PROFILS_MEDIAS
+                    if (nom in valeurs["profils_medias_txt_classes"]
+                        or nom in valeurs["profils_medias_csv_classes"])
                 ]
                 if source == "presse" and valeurs["presse_moteur"] == "navigateur":
                     fichier_cookies = st.session_state.get("cookies_presse_fichier")
