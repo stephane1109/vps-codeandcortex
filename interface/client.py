@@ -3,7 +3,7 @@ import os
 import httpx
 
 
-def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historique=""):
+def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historique="", *, contenu_binaire=False):
     cookies = "scraptiktok_session=" + session
     if cookie_historique:
         cookies += "; scraptiktok_historique=" + cookie_historique
@@ -28,4 +28,4 @@ def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historiqu
         except ValueError: detail = None
         if isinstance(detail,list): detail = " / ".join(d.get("msg", "Valeur incorrecte").removeprefix("Value error, ") for d in detail)
         raise RuntimeError(detail or "La requête n’a pas pu aboutir.")
-    return resultat.json()
+    return resultat.content if contenu_binaire else resultat.json()
