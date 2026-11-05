@@ -157,15 +157,32 @@ def recherche_active(identifiant):
         return bool(entree and entree["thread"].is_alive())
 
 
+def recherche_arret_demande(identifiant):
+    """Indiquer si un arrêt a été demandé au travail en cours."""
+    with _VERROU:
+        entree = _TRAVAUX.get(identifiant)
+        return bool(entree and entree["thread"].is_alive()
+                    and entree["arret"].is_set())
+
+
+def recherche_en_cours():
+    """Empêcher une deuxième recherche sur le même processus."""
+    with _VERROU:
+        return any(
+            entree["thread"].is_alive() for entree in _TRAVAUX.values())
+
+
 def lancer_recherche(racine, proprietaire, identifiant, *, credentiels=None):
     """Exécuter toutes les pages disponibles sans bloquer la requête HTTP."""
     charger(racine, proprietaire, identifiant)
     with _VERROU:
         if recherche_active(identifiant):
             return True
-        if any(e["thread"].is_alive() for e in _TRAVAUX.values()):
+        if recherche_en_cours():
             raise ValueError(
-                "Une découverte territoriale est déjà en cours sur ce serveur.")
+                "Une collecte de comptes est déjà active. Sélectionnez-la "
+                "dans les collectes enregistrées puis cliquez sur "
+                "'Arrêter la collecte' avant d'en démarrer une autre.")
         arret = threading.Event()
 
         def travailler():
@@ -376,6 +393,7 @@ def presenter(inventaire):
         "etat": ("en_cours" if recherche_active(inventaire["id"])
                  else inventaire.get("etat", "en_attente")
                  if inventaire.get("etat") != "en_cours" else "interrompue"),
+        "arret_demande": recherche_arret_demande(inventaire["id"]),
     }
 
 
@@ -391,6 +409,11 @@ def lister_inventaires(racine, proprietaire):
                 "nombre_comptes": len(objet["comptes"]),
                 "terminee": (objet.get("terminee", False)
                              and objet.get("version_requete", 1) >= 2),
+                "etat": ("en_cours" if recherche_active(objet["id"])
+                         else "interrompue"
+                         if objet.get("etat") == "en_cours"
+                         else objet.get("etat", "en_attente")),
+                "arret_demande": recherche_arret_demande(objet["id"]),
             })
         except (KeyError, ValueError, OSError):
             continue
