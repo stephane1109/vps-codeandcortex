@@ -541,13 +541,15 @@ def exporter_csv(inventaire):
     sortie = io.StringIO()
     writer = csv.writer(sortie, delimiter=";", lineterminator="\n")
     avec_reference = inventaire.get("mode_territoire") == "place_reference"
-    entetes = ["territoire", "username", "videos_trouvees"]
+    entetes = ["territoire", "username", "url_compte", "videos_trouvees"]
     if avec_reference:
         entetes += ["place_id_reference", "statut_localisation"]
     writer.writerow(entetes)
     for compte in presenter(inventaire)["comptes"]:
         valeurs = [
-            inventaire["ville"], compte["username"], compte["videos_trouvees"]]
+            inventaire["ville"], compte["username"],
+            "https://www.tiktok.com/" + compte["username"],
+            compte["videos_trouvees"]]
         if avec_reference:
             valeurs += [inventaire.get("place_id", ""),
                         "non_verifiee_recherche_textuelle"]
