@@ -4597,12 +4597,14 @@ def create_app(manager=None):
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from erreur
         visible = apercu(graphe)
+        visible_pyvis = apercu(graphe, max_noeuds=300, max_liens=600)
         return {
             "statistiques": graphe["statistiques"],
             "diagnostics": graphe["diagnostics"],
             "dot": construire_dot(visible),
             "apercu_liens": visible["liens"],
             "apercu_partiel": visible["partiel"],
+            "apercu_pyvis": visible_pyvis,
             "matrice_disponible": len(graphe["noeuds"]) <= 250,
             "analyse_en_cours": job.busy,
         }
