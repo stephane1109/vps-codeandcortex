@@ -99,7 +99,8 @@ class CreerDecouverteTerritorialePayload(BaseModel):
     ville: str = Field(min_length=2, max_length=80)
     variantes: list[str] = Field(default_factory=list, max_length=10)
     operateur: Literal["OR", "AND"] = "OR"
-    mode_territoire: Literal["texte", "region_code"] = "texte"
+    mode_territoire: Literal["texte", "region_code", "place_reference"] = "texte"
+    reference_lieu: str | None = Field(default=None, max_length=350)
     region_code: str | None = Field(default=None, max_length=2)
     date_debut: str = Field(min_length=10, max_length=10)
     date_fin: str = Field(min_length=10, max_length=10)
@@ -4149,7 +4150,8 @@ def create_app(manager=None):
                 payload.date_debut, payload.date_fin,
                 operateur=payload.operateur,
                 mode_territoire=payload.mode_territoire,
-                region_code=payload.region_code)
+                region_code=payload.region_code,
+                reference_lieu=payload.reference_lieu)
         except ValueError as erreur:
             raise HTTPException(422, str(erreur)) from None
 
