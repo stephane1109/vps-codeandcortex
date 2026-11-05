@@ -1,6 +1,7 @@
 """Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
 import hashlib
 import csv
+import html
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -2429,17 +2430,36 @@ with onglet_collecte:
                            + (" · région du compte FR" if actuel.get("region_fr_research") else ""))
                 if "bilan_hashtags" in actuel and actuel.get("processed", 0):
                     with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
-                        st.caption("Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
-                                   + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
-                                      if actuel.get("rechercher_dans_texte") else
-                                      "Seuls les hashtags officiels ou précédés de # sont pris en compte.")
-                                   + (" Comparaison des hashtags avec et sans accents."
-                                      if actuel.get("variantes_accents") else ""))
-                        for hashtag, nombre in actuel["bilan_hashtags"].items():
-                            st.write(f"#{hashtag} : {nombre} légende(s)")
-                        st.write(f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
-                        st.write(f"Filtre français : {actuel['non_french']} dans une autre langue écartés · {actuel['language_unknown']} de langue indéterminée conservés avec signalement")
-                        st.write(f"{actuel['legendes_vides']} publication(s) sans légende lisible · {actuel['errors']} erreur(s) de lecture")
+                        # Un seul bloc évite l'espacement vertical que Streamlit
+                        # ajoute entre plusieurs appels à st.write ou st.caption.
+                        introduction_bilan = (
+                            "Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
+                            + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
+                               if actuel.get("rechercher_dans_texte") else
+                               "Seuls les hashtags officiels ou précédés de # sont pris en compte.")
+                            + (" Comparaison des hashtags avec et sans accents."
+                               if actuel.get("variantes_accents") else "")
+                        )
+                        lignes_bilan = [introduction_bilan]
+                        lignes_bilan.extend(
+                            f"#{hashtag} : {nombre} légende(s)"
+                            for hashtag, nombre in actuel["bilan_hashtags"].items()
+                        )
+                        lignes_bilan.append(
+                            f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
+                        lignes_bilan.append(
+                            f"Filtre français : {actuel['non_french']} dans une autre langue écartés · "
+                            f"{actuel['language_unknown']} de langue indéterminée conservés avec signalement")
+                        lignes_bilan.append(
+                            f"{actuel['legendes_vides']} publication(s) sans légende lisible · "
+                            f"{actuel['errors']} erreur(s) de lecture")
+                        # Échapper le contenu : un hashtag contenant des caractères
+                        # Markdown ou HTML doit rester affiché littéralement.
+                        st.html(
+                            '<div style="line-height:1.35;">'
+                            + "<br>".join(html.escape(ligne) for ligne in lignes_bilan)
+                            + "</div>"
+                        )
             if actuel["date_debut"] or actuel["date_fin"]:
                 st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
             if actuel["busy"]:
