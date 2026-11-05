@@ -13,6 +13,7 @@ from analyse.engagement import calculer_ratios
 from analyse.comparaison_medias import comparer_medias
 from collecte.variables_numeriques import indicateurs_numeriques
 from collecte.presse import colonnes_categories_presse
+from collecte.selection_variables_csv import colonnes_csv_selectionnees
 
 CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
 
@@ -56,6 +57,10 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
                       profils_medias_variables=None, profils_medias_classes=None):
     """Reprendre le TXT téléchargeable comme corpus principal dès qu’il existe."""
     dossier = Path(dossier)
+    # None garde tous les champs des anciennes collectes ; une liste
+    # explicite applique séparément les choix de colonnes des CSV.
+    parametres_export = journal.get("parametres") or {}
+    choix_csv = parametres_export.get("variables_csv")
     source = Path(texte_source) if texte_source is not None else dossier / "textes.txt"
     # Une source explicitement attendue doit être lisible : pas de corpus de remplacement.
     # Lire les octets conserve aussi les accents, retours à la ligne et un TXT vide.
@@ -63,19 +68,26 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     publications = [{**p, **correspondance_video(p)} for p in publications]
     correspondances = {str(p["id"]): correspondance_video(p) for p in publications}
     villes_par_video = {
-        str(p["id"]): p["ville_etude"] for p in publications
-        if p.get("ville_etude")
+        str(p["id"]): (
+            p["ville_etude"],
+            p.get("inclure_ville_etude_txt", True),
+        ) for p in publications if p.get("ville_etude")
     }
     commentaires = [
         {**c, **correspondances.get(str(c.get("publication_id")), {}),
-         **({"ville_etude": villes_par_video[str(c.get("publication_id"))]}
-            if str(c.get("publication_id")) in villes_par_video else {})}
+         **({
+             "ville_etude": villes_par_video[str(c.get("publication_id"))][0],
+             "inclure_ville_etude_txt": villes_par_video[
+                 str(c.get("publication_id"))][1],
+         } if str(c.get("publication_id")) in villes_par_video else {})}
         for c in commentaires
     ]
     exporter_json(dossier / "publications.json", publications)
     # La table complète est disponible aussi pour les collectes ponctuelles.
-    exporter_csv(dossier / "publications.csv",
-                 lignes_publications_csv(publications), COLONNES_PUBLICATIONS_CSV)
+    exporter_csv(
+        dossier / "publications.csv",
+        lignes_publications_csv(publications),
+        colonnes_csv_selectionnees(COLONNES_PUBLICATIONS_CSV, choix_csv))
     if (journal.get("parametres") or {}).get("telecharger_mp4") or any("video_statut" in p for p in publications):
         videos = [{**correspondance_video(p), "video_statut": p.get("video_statut", "non_retenue"),
                    "video_message": p.get("video_message"), "video_diagnostic": p.get("video_diagnostic")} for p in publications]
@@ -85,8 +97,10 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
         # Une ligne par relation compte reposteur–vidéo originale. La table
         # reste séparée : l'auteur de la vidéo peut être hors des médias choisis.
         exporter_json(dossier / "republications.json", republications)
-        exporter_csv(dossier / "republications.csv",
-                     lignes_publications_csv(republications), COLONNES_PUBLICATIONS_CSV)
+        exporter_csv(
+            dossier / "republications.csv",
+            lignes_publications_csv(republications),
+            colonnes_csv_selectionnees(COLONNES_PUBLICATIONS_CSV, choix_csv))
     if profils_medias is not None:
         from collecte.profils_medias import colonnes_profils_medias
         exporter_json(dossier / "profils_medias.json", profils_medias)
@@ -96,14 +110,27 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
                 profils_medias_variables or [], profils_medias_classes or []))
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
-    exporter_csv(dossier / "engagement.csv", lignes_engagement(publications), COLONNES_ENGAGEMENT)
+    exporter_csv(
+        dossier / "engagement.csv", lignes_engagement(publications),
+        colonnes_csv_selectionnees(COLONNES_ENGAGEMENT, choix_csv))
     exporter_csv(dossier / "ratios_engagement.csv",[{"publication_id":p["id"],"id_":str(p["id"]),"url":p.get("url"),**correspondance_video(p),**calculer_ratios(p.get("engagement",{}))} for p in publications])
     exporter_csv(dossier / "comparaison_medias.csv",comparer_medias(publications))
     urls = {str(p["id"]): p.get("url") for p in publications}
     # id reste celui du commentaire ; id_ désigne toujours la publication TikTok.
     commentaires_csv = [{**c, "id_": str(c.get("publication_id") or ""),
                          "url": urls.get(str(c.get("publication_id")))} for c in commentaires]
-    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","nom_affiche","ville_etude","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
+    colonnes_commentaires = [
+        "id", "publication_id", "id_", "url", "parent_id", "est_reponse",
+        "auteur", "nom_affiche", "ville_etude", "texte", "date_brute",
+        "likes", "source", "observe_le", *CHAMPS_VIDEO,
+    ]
+    # L'option ville CSV est valable aussi pour le corpus des commentaires.
+    # Les autres champs décrivent les commentaires, pas les vidéos : ne pas
+    # confondre le compteur de likes du commentaire avec celui de la vidéo.
+    if choix_csv is not None and "ville_etude" not in choix_csv:
+        colonnes_commentaires.remove("ville_etude")
+    exporter_csv(dossier / "commentaires.csv",
+                 commentaires_csv, colonnes_commentaires)
     if contenu_txt is not None:
         if variables:
             # Enrichir uniquement les en-têtes avec un ID, sans réécrire les textes collectés.
