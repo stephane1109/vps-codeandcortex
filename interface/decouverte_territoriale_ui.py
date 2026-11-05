@@ -78,7 +78,7 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
             "Début des publications", value=date.today()-timedelta(days=29),
             key="territoire_recherche_debut", disabled=occupe)
     if st.button(
-        "Créer un inventaire territorial",
+        "Collecte de compte",
         key="territoire_creer", disabled=occupe, type="primary"):
         try:
             resultat = api("/api/decouverte-territoriale", {
@@ -105,12 +105,12 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
         st.warning("Inventaires indisponibles : " + str(erreur))
         return
     if not inventaires:
-        st.info("Créez un inventaire territorial pour commencer la recherche.")
+        st.info("Cliquez sur "Collecte de compte", puis démarrez la recherche pour identifier les comptes.")
         return
     index = {ligne["id"]: ligne for ligne in inventaires}
     identifiant_precedent = st.session_state.get("territoire_inventaire_id")
     selection_id = st.selectbox(
-        "Inventaires territoriaux enregistrés", options=list(index),
+        "Collectes de comptes enregistrées", options=list(index),
         index=list(index).index(identifiant_precedent)
               if identifiant_precedent in index else 0,
         format_func=lambda identifiant: (
