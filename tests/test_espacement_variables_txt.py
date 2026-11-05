@@ -19,17 +19,17 @@ class TestEspacementVariablesTXT(unittest.TestCase):
             code)
         self.assertIn('padding-block: 0 !important;', code)
         self.assertIn('row-gap: 0 !important;', code)
+        self.assertIn('def ligne_variable(libelle, cle_txt, cle_csv', code)
+        self.assertIn('st.checkbox(', code)
+        self.assertIn('"TXT", key=cle_txt', code)
+        self.assertIn('"CSV", key=cle_csv', code)
         for cle in (
-            "collecter_follower_count",
-            "follower_count_illustratif",
-            "abonnes_classe_illustratif",
-            "txt_region_code",
-            "txt_is_verified",
-            "collecter_commentaires",
+            "txt_collecter_follower_count", "follower_count_illustratif",
+            "abonnes_classe_illustratif", "txt_region_code",
+            "txt_is_verified", "csv_vues", "csv_vues_classe",
+            "txt_categorie_compte", "csv_categorie_compte",
         ):
-            self.assertIn('key="' + cle + '"', code)
-        self.assertIn('key="txt_" + nom', code)
-        self.assertIn('key="txt_classe_" + nom', code)
+            self.assertIn('"' + cle + '"', code)
 
     def test_commentaires_inclus_dans_le_meme_bloc(self):
         """La dernière case doit participer au même regroupement compact."""
@@ -39,11 +39,10 @@ class TestEspacementVariablesTXT(unittest.TestCase):
         entre_fin_et_options = section.split(
             'with st.expander("Options des commentaires"', 1)[0]
         self.assertIn(
-            'st.checkbox("Collecter les textes des commentaires"',
+            '"Collecter les textes des commentaires"',
             entre_fin_et_options)
         self.assertIn(
-            '            st.checkbox("Collecter les textes des commentaires"',
-            entre_fin_et_options)
+            'key="collecter_commentaires"', entre_fin_et_options)
 
 
 if __name__ == "__main__":
