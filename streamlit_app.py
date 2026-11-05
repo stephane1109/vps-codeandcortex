@@ -1381,7 +1381,7 @@ with onglet_collecte:
                     "reste possible depuis la liste des collectes programmées."
                 )
         st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
-            help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. La variable ID reste dans le TXT pour retrouver chaque fichier.")
+            help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. L'identifiant technique reste dans les CSV/JSON même si la case ID du TXT est décochée.")
         st.subheader("Période")
         with st.expander("Dates (facultatif)", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
             d1,d2 = st.columns(2)
@@ -1437,7 +1437,9 @@ with onglet_collecte:
                 colonne_libelle, colonne_txt, colonne_csv = st.columns(
                     [8, 1, 1], gap="small", vertical_alignment="center")
                 with colonne_libelle:
-                    st.caption(libelle)
+                    # Les métadonnées IRaMuTeQ commencent par * et contiennent
+                    # des underscores : ne pas les interpréter comme Markdown.
+                    st.caption(libelle.replace("*", r"\*").replace("_", r"\_"))
                 with colonne_txt:
                     st.checkbox(
                         "TXT", key=cle_txt, disabled=desactive,
