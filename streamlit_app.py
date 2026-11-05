@@ -4215,17 +4215,24 @@ with onglet_sociometrie:
                     ("graphml", "GraphML", "application/xml"),
                     ("gexf", "GEXF", "application/xml"),
                 ):
+                    # Streamlit 1.65 accepte un générateur différé :
+                    # ne préparer GraphML/GEXF/CSV qu'au clic de téléchargement.
                     st.download_button(
-                        libelle, exporter(reseau_mesures, nom),
+                        libelle,
+                        data=lambda format_sortie=nom, reseau=reseau_mesures: (
+                            exporter(reseau, format_sortie)),
                         file_name="similarite_engagement_" + nom,
                         mime=mime,
+                        on_click="ignore",
                         key="sociometrie_engagement_export_" + nom)
                 if len(reseau_mesures["noeuds"]) <= 250:
                     st.download_button(
                         "Matrice de similarité CSV",
-                        exporter(reseau_mesures, "matrice.csv"),
+                        data=lambda reseau=reseau_mesures: (
+                            exporter(reseau, "matrice.csv")),
                         file_name="similarite_engagement_matrice.csv",
                         mime="text/csv",
+                        on_click="ignore",
                         key="sociometrie_engagement_matrice")
                 else:
                     st.caption(
