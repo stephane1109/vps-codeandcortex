@@ -1564,6 +1564,27 @@ with onglet_collecte:
             "par vidéo. Chaque destination est indépendante. Une requête "
             "par profil peut consommer le quota Research.")
         with st.container(key="bloc_metriques_profils"):
+            st.html("""
+            <style>
+            .st-key-bloc_metriques_profils [data-testid="stVerticalBlock"],
+            .st-key-bloc_metriques_profils [data-testid="stHorizontalBlock"] {
+                gap: 0 !important;
+                row-gap: 0 !important;
+            }
+            .st-key-bloc_metriques_profils [data-testid="stElementContainer"],
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"],
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"] label {
+                margin-block: 0 !important;
+                padding-block: 0 !important;
+                min-height: 0 !important;
+            }
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"] p,
+            .st-key-bloc_metriques_profils [data-testid="stCaptionContainer"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
+            }
+            </style>
+            """)
             for variable in VARIABLES_PROFILS_MEDIAS:
                 libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
                 cle = "profil_media_" + variable + "_"
