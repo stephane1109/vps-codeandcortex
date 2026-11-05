@@ -195,7 +195,9 @@ def presenter(inventaire):
         "hashtags": inventaire["hashtags"], "date_debut": inventaire["date_debut"],
         "date_fin": inventaire["date_fin"], "pages": inventaire["pages"],
         "candidats": inventaire["candidats"],
-        "terminee": inventaire["terminee"], "erreur": inventaire.get("erreur", ""),
+        "terminee": (inventaire["terminee"] and inventaire.get("version_requete", 1) >= VERSION_REQUETE),
+        "erreur": inventaire.get("erreur", ""),
+        "ancienne_recherche": inventaire.get("version_requete", 1) < VERSION_REQUETE,
         "comptes": comptes, "nombre_comptes": len(comptes),
         "videos_ecartees": inventaire.get("videos_ecartees", 0),
         "etat": ("en_cours" if recherche_active(inventaire["id"])
@@ -214,7 +216,8 @@ def lister_inventaires(racine, proprietaire):
             resultats.append({
                 "id": objet["id"], "ville": objet["ville"],
                 "nombre_comptes": len(objet["comptes"]),
-                "terminee": objet.get("terminee", False),
+                "terminee": (objet.get("terminee", False)
+                             and objet.get("version_requete", 1) >= VERSION_REQUETE),
             })
         except (KeyError, ValueError, OSError):
             continue
@@ -228,17 +231,20 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
         raise ValueError("Nombre de pages invalide.")
     chemin = chemin_inventaire(racine, proprietaire, identifiant)
     inventaire = charger(racine, proprietaire, identifiant)
-    if inventaire["terminee"]:
-        return presenter(inventaire)
     # Les anciens inventaires utilisaient une requête limitée aux hashtags.
     # Leur curseur n'est pas réutilisable avec la requête keyword élargie.
+    # Même les inventaires anciens marqués « terminés » doivent pouvoir repartir.
     if inventaire.get("version_requete", 1) < VERSION_REQUETE:
         inventaire["indice_periode"] = 0
         inventaire["cursor"] = None
         inventaire["search_id"] = None
+        inventaire["terminee"] = False
+        inventaire["erreur"] = ""
         inventaire["version_requete"] = VERSION_REQUETE
         inventaire["etat"] = "en_attente"
         sauvegarder(chemin, inventaire)
+    if inventaire["terminee"]:
+        return presenter(inventaire)
     inventaire["etat"] = "en_cours"
     sauvegarder(chemin, inventaire)
     # Le jeton provient des variables Coolify ; il n'est jamais persisté.
