@@ -4153,9 +4153,14 @@ def create_app(manager=None):
     @app.get("/api/decouverte-territoriale")
     def lister_decouvertes_territoriales(request: Request):
         owner(request)
-        from collecte.decouverte_territoriale import lister_inventaires
-        return {"inventaires": lister_inventaires(
-            manager.data_dir, owner_historique(request))}
+        from collecte.decouverte_territoriale import (
+            lister_inventaires, recherche_en_cours)
+        return {
+            "inventaires": lister_inventaires(
+                manager.data_dir, owner_historique(request)),
+            # Statut global sans identifiant d'une autre session.
+            "serveur_occupe": recherche_en_cours(),
+        }
 
     @app.post("/api/decouverte-territoriale")
     def creer_decouverte_territoriale(
