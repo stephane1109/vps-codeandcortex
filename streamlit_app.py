@@ -158,6 +158,7 @@ if "initialise" not in st.session_state:
         "variantes_accents": ancienne.get("variantes_accents", False),
         "region_fr_research": ancienne.get("region_fr_research", False),
         "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
+        "ville_etude": ancienne.get("ville_etude", ""),
         "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
         "include_sources":ancienne.get("include_sources",True),
         # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
@@ -303,6 +304,7 @@ st.session_state.setdefault("operator", "OR")
 # Les collectes par hashtags et par comptes sont en OU par défaut,
 # conformément à la découverte territoriale. ET reste un choix explicite.
 st.session_state.setdefault("operator_comptes", "OR")
+st.session_state.setdefault("ville_etude", "")
 st.session_state.setdefault("rechercher_dans_texte", False)
 st.session_state.setdefault("variantes_accents", False)
 st.session_state.setdefault("region_fr_research", False)
@@ -941,11 +943,17 @@ with onglet_collecte:
         transfert_territorial = st.session_state.pop(
             "comptes_territoire_en_attente", None)
         transfert_csv = st.session_state.pop("comptes_csv_en_attente", None)
+        ville_territoriale = st.session_state.pop("ville_etude_en_attente", None)
+        ville_csv = st.session_state.pop("ville_csv_en_attente", None)
         if transfert_territorial is not None:
             st.session_state["comptes"] = transfert_territorial
+            if ville_territoriale is not None:
+                st.session_state["ville_etude"] = ville_territoriale
         if transfert_csv is not None:
-            # Le champ Streamlit doit être initialisé avant son affichage.
+            # Les champs sont initialisés avant leur affichage Streamlit.
             st.session_state["comptes"] = transfert_csv
+            # Un autre CSV ne doit pas hériter d'une ancienne ville.
+            st.session_state["ville_etude"] = ville_csv or ""
         # Les profils et l’import CSV restent dans Autres comptes TikTok.
         # La découverte territoriale dispose maintenant de son propre onglet.
         st.text_input(
@@ -966,6 +974,23 @@ with onglet_collecte:
             st.success(
                 "Comptes de l'inventaire territorial placés dans le champ "
                 "Profils. Vous pouvez lancer la collecte ci-dessous.")
+        st.text_input(
+            "Ville associée au corpus (variable IRaMuTeQ)",
+            key="ville_etude", placeholder="Toulouse",
+            max_chars=80, disabled=occupe,
+            help="Exemple : Toulouse produit *ville_toulouse dans l'en-tête "
+                 "de chaque légende et de chaque résumé IA de cette collecte. "
+                 "Champ facultatif ; renseigne la constitution du corpus, "
+                 "pas la résidence des auteurs ni la localisation des vidéos.")
+        if st.session_state.get("ville_etude", "").strip():
+            from collecte.ville_etude import balise_ville_etude
+            try:
+                st.caption(
+                    "Modalité du corpus : "
+                    + balise_ville_etude(st.session_state["ville_etude"])
+                    + " (rattachement à la sélection, non géolocalisation vérifiée).")
+            except ValueError as erreur:
+                st.warning(str(erreur))
 
         fichiers_profils_csv = st.file_uploader(
             "Importer un ou plusieurs CSV de comptes (collecte précédente)",
@@ -989,6 +1014,18 @@ with onglet_collecte:
                     f"{len(comptes_csv)} compte(s) distinct(s) identifiés "
                     f"dans {bilan_csv_profils['fichiers']} fichier(s) CSV ; "
                     f"{bilan_csv_profils['doublons']} doublon(s) ignoré(s).")
+                territoires_csv = bilan_csv_profils.get("territoires", [])
+                ville_commune_csv = bilan_csv_profils.get("territoire_commun", "")
+                if len(territoires_csv) > 1:
+                    st.warning(
+                        "Le CSV contient plusieurs territoires : aucune ville "
+                        "commune ne sera attribuée automatiquement aux comptes. "
+                        "Séparez les corpus par ville si vous souhaitez une "
+                        "variable IRaMuTeQ valide.")
+                elif ville_commune_csv:
+                    st.caption(
+                        "Territoire du CSV : " + ville_commune_csv
+                        + ". Cette valeur sera préremplie si elle désigne une ville.")
                 if bilan_csv_profils["invalides"]:
                     lignes_invalides = bilan_csv_profils["invalides"]
                     st.warning(
@@ -1007,6 +1044,10 @@ with onglet_collecte:
                     # Reporter la modification au prochain rendu Streamlit.
                     st.session_state["comptes_csv_en_attente"] = (
                         ", ".join(comptes_csv))
+                    # FR et les autres codes ISO désignent un pays, pas une ville.
+                    st.session_state["ville_csv_en_attente"] = (
+                        ville_commune_csv if len(ville_commune_csv) > 2
+                        else "")
                     st.rerun()
         if transfert_csv is not None:
             st.success(
@@ -1738,6 +1779,9 @@ with onglet_collecte:
                 ]
                 valeurs["inclure_hashtags_csv"] = bool(
                     st.session_state.get("csv_hashtags", False))
+                valeurs["ville_etude"] = (
+                    st.session_state.get("ville_etude", "").strip()
+                    if source == "comptes" else "")
                 valeurs.update(
                     hashtag=liste_hashtags[0] if liste_hashtags else "",
                     second_hashtag=liste_hashtags[1] if len(liste_hashtags) > 1 else "",
