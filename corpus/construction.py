@@ -16,13 +16,13 @@ from collecte.presse import colonnes_categories_presse
 
 CHAMPS_VISUELS = ["groupe_visuel", "reemploi_visuel"]
 
-COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "media", "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre", "hashtags", "htag_collecte", "hashtags_correspondants", "operateur_hashtags", "type_publication", "compte_reposteur", "auteur_original", "id_video_originale", "republication_confirmee", "date_republication", "date_collecte", "statut_resume_ia", "resume_ia_tiktok", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
+COLONNES_ENGAGEMENT = CHAMPS_VISUELS + ["publication_id", "url", "auteur", "ville_etude", "media", "presse_nationale", "presse_regio_dpt", "presse_indep", "presse_autre", "hashtags", "htag_collecte", "hashtags_correspondants", "operateur_hashtags", "type_publication", "compte_reposteur", "auteur_original", "id_video_originale", "republication_confirmee", "date_republication", "date_collecte", "statut_resume_ia", "resume_ia_tiktok", "legende", "retenue", "langue_detection", "follower_count", "follower_count_statut", "classe_abonnes", "region_code", "is_verified", "is_verified_statut", "video_duration", "taux_engagement", "classe_taux_engagement", "vues_classe", "likes_classe", "commentaires_classe", "partages_classe", "favoris_classe", "duree_classe"] + list(CHAMPS_VIDEO) + [nom+suffixe for nom in ("likes", "vues", "partages", "commentaires", "favoris") for suffixe in ("", "_brut")]
 
 def lignes_engagement(publications):
     """Conserve les compteurs bruts, les inconnues et le statut de sélection."""
     lignes = []
     for p in publications:
-        ligne = {"publication_id": p["id"], "auteur": p["author"], "media": p.get("media_id"), "date_collecte": p.get("collected_at"),
+        ligne = {"publication_id": p["id"], "auteur": p["author"], "ville_etude": p.get("ville_etude"), "media": p.get("media_id"), "date_collecte": p.get("collected_at"),
                  "url": p.get("url"), "statut_resume_ia": p.get("statut_resume_ia"), "resume_ia_tiktok": p.get("resume_ia_tiktok"), "legende": p.get("description"), "retenue": p.get("retenue"), "langue_detection": p.get("langue_detection"),
                  "follower_count": p.get("follower_count"),
                  "follower_count_statut": p.get("follower_count_statut"),
@@ -62,7 +62,16 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     contenu_txt = source.read_bytes() if texte_source is not None or source.is_file() else None
     publications = [{**p, **correspondance_video(p)} for p in publications]
     correspondances = {str(p["id"]): correspondance_video(p) for p in publications}
-    commentaires = [{**c, **correspondances.get(str(c.get("publication_id")), {})} for c in commentaires]
+    villes_par_video = {
+        str(p["id"]): p["ville_etude"] for p in publications
+        if p.get("ville_etude")
+    }
+    commentaires = [
+        {**c, **correspondances.get(str(c.get("publication_id")), {}),
+         **({"ville_etude": villes_par_video[str(c.get("publication_id"))]}
+            if str(c.get("publication_id")) in villes_par_video else {})}
+        for c in commentaires
+    ]
     exporter_json(dossier / "publications.json", publications)
     # La table complète est disponible aussi pour les collectes ponctuelles.
     exporter_csv(dossier / "publications.csv",
@@ -94,7 +103,7 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     # id reste celui du commentaire ; id_ désigne toujours la publication TikTok.
     commentaires_csv = [{**c, "id_": str(c.get("publication_id") or ""),
                          "url": urls.get(str(c.get("publication_id")))} for c in commentaires]
-    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","nom_affiche","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
+    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","nom_affiche","ville_etude","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
     if contenu_txt is not None:
         if variables:
             # Enrichir uniquement les en-têtes avec un ID, sans réécrire les textes collectés.
