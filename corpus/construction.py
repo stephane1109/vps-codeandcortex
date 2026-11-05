@@ -94,7 +94,7 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
     # id reste celui du commentaire ; id_ désigne toujours la publication TikTok.
     commentaires_csv = [{**c, "id_": str(c.get("publication_id") or ""),
                          "url": urls.get(str(c.get("publication_id")))} for c in commentaires]
-    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
+    exporter_csv(dossier / "commentaires.csv", commentaires_csv, ["id","publication_id","id_","url","parent_id","est_reponse","auteur","nom_affiche","texte","date_brute","likes","source","observe_le",*CHAMPS_VIDEO])
     if contenu_txt is not None:
         if variables:
             # Enrichir uniquement les en-têtes avec un ID, sans réécrire les textes collectés.
