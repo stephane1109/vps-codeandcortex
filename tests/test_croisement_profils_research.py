@@ -71,7 +71,7 @@ class TestCroisementProfilsResearch(unittest.TestCase):
         self.assertEqual(len(sources), 2)
 
     def test_operateur_propre_aux_profils_et_a_la_navigation(self):
-        """L'interface Profils possède OU par défaut, sans toucher aux Hashtags."""
+        """Les modes Profils et Hashtags disposent chacun de OU par défaut."""
         racine = Path(__file__).resolve().parents[1]
         interface = (racine / "streamlit_app.py").read_text(encoding="utf-8")
         ast.parse(interface)
@@ -81,7 +81,7 @@ class TestCroisementProfilsResearch(unittest.TestCase):
             'key=("operator_comptes" if source == "comptes"',
             interface)
         self.assertIn(
-            'else st.session_state.get("operator", "AND")',
+            'else st.session_state.get("operator", "OR")',
             interface)
         self.assertIn(
             'else st.session_state.get("operator_comptes", "OR")',
