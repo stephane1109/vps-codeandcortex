@@ -13,7 +13,12 @@ def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historiqu
     try:
         # Une restauration ZIP vérifiée peut prendre plus de temps
         # qu'une requête de collecte courante : ne pas couper l'import.
-        delai = 120 if chemin.endswith("/restaurer-zip") else 15
+        delai = (
+            120 if chemin.endswith("/restaurer-zip")
+            else 100 if (chemin.startswith("/api/decouverte-territoriale/")
+                         and chemin.endswith("/poursuivre"))
+            else 15
+        )
         with httpx.Client(timeout=delai, trust_env=False) as client:
             resultat = client.request("GET" if donnees is None else "POST", adresse + chemin, headers=entetes, json=donnees)
     except httpx.HTTPError as erreur:
