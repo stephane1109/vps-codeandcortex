@@ -15,6 +15,7 @@ import unicodedata
 import uuid
 import threading
 import time
+from urllib.parse import unquote, urlparse
 
 from collecte.researchapi import (
     _dates, _jeton, _requete, _url_videos,
@@ -23,7 +24,7 @@ from collecte.researchapi import (
 from collecte.verification_comptes import normaliser_compte
 
 MAX_COMPTES = 30000
-VERSION_REQUETE = 3
+VERSION_REQUETE = 4
 _VERROU = threading.RLock()
 _TRAVAUX = {}
 
@@ -32,6 +33,34 @@ def _normaliser_texte(texte):
     """Uniformiser accents et casse sans effacer les séparateurs de mots."""
     valeur = unicodedata.normalize("NFKD", str(texte or ""))
     return "".join(c for c in valeur if not unicodedata.combining(c)).casefold()
+
+
+def extraire_reference_lieu(valeur, ville=""):
+    """Accepter une URL TikTok Place ou un ID, sans vérifier l'association vidéo-lieu."""
+    entree = str(valeur or "").strip()
+    nom = str(ville or "").strip()
+    if re.fullmatch(r"\d{12,25}", entree):
+        identifiant = entree
+        if not nom:
+            raise ValueError("Indiquez le nom de la ville en plus du Place ID.")
+    else:
+        adresse = urlparse(entree)
+        if (adresse.scheme not in ("https", "http")
+                or (adresse.hostname or "").lower()
+                not in ("tiktok.com", "www.tiktok.com", "m.tiktok.com")):
+            raise ValueError("Indiquez une URL TikTok /place/ ou un Place ID.")
+        chemin = unquote(adresse.path).strip("/")
+        correspondance = re.fullmatch(
+            r"place/(?P<nom>.+)-(?P<identifiant>\d{12,25})", chemin)
+        if not correspondance:
+            raise ValueError("URL de lieu TikTok sans identifiant Place valide.")
+        identifiant = correspondance.group("identifiant")
+        if not nom:
+            nom = correspondance.group("nom").replace("-", " ")
+    if not 2 <= len(nom) <= 80:
+        raise ValueError("Le nom du lieu doit comporter 2 à 80 caractères.")
+    nettoyer_terme(nom)
+    return {"place_id": identifiant, "nom_lieu": nom}
 
 
 def correspond_territoire(video, termes):
@@ -89,7 +118,7 @@ def requete_territoriale(termes, debut, fin, curseur=None, search_id=None,
             raise ValueError("Code pays ISO invalide.")
         conditions.append({"field_name": "region_code", "operation": "EQ",
                            "field_values": [region_code]})
-    elif mode_territoire == "texte":
+    elif mode_territoire in ("texte", "place_reference"):
         conditions.append({"field_name": "keyword", "operation": "IN",
                            "field_values": list(termes)})
     else:
@@ -104,7 +133,7 @@ def requete_territoriale(termes, debut, fin, curseur=None, search_id=None,
                 "field_name": "hashtag_name", "operation": "IN",
                 "field_values": list(hashtags_croises)})
         query = {"and": conditions}
-    elif mode_territoire == "texte":
+    elif mode_territoire in ("texte", "place_reference"):
         # Compatibilité des inventaires anciens sans hashtags thématiques.
         query = {"or": [
             {"field_name": "hashtag_name", "operation": "IN",
@@ -255,7 +284,7 @@ def sauvegarder(chemin, contenu):
     os.replace(temporaire, chemin)
 
 
-def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, operateur="OR", mode_territoire="texte", region_code=None):
+def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, operateur="OR", mode_territoire="texte", region_code=None, reference_lieu=None):
     """Initialiser les périodes et les mots-clés de découverte."""
     ville = str(ville or "").strip()
     if mode_territoire == "region_code":
@@ -264,6 +293,11 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, oper
             raise ValueError("Indiquez un code de pays ISO à deux lettres, par exemple FR.")
         ville = region_code
         termes = []
+    elif mode_territoire == "place_reference":
+        reference = extraire_reference_lieu(reference_lieu, ville)
+        ville = reference["nom_lieu"]
+        termes = [nettoyer_terme(ville)]
+        region_code = None
     elif mode_territoire == "texte":
         if not 2 <= len(ville) <= 80:
             raise ValueError("Précisez une ville entre 2 et 80 caractères.")
@@ -292,6 +326,10 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, oper
         "id": identifiant, "ville": ville, "hashtags": termes,
         "hashtags_croises": hashtags_croises, "operateur": operateur,
         "mode_territoire": mode_territoire, "region_code": region_code,
+        "place_id": (reference["place_id"] if mode_territoire == "place_reference" else None),
+        "statut_localisation": ("non_verifiee_recherche_textuelle"
+                                if mode_territoire == "place_reference"
+                                else "non_verifiee"),
         "date_debut": debut, "date_fin": fin,
         "periodes": periodes, "indice_periode": 0,
         "cursor": None, "search_id": None,
@@ -323,6 +361,8 @@ def presenter(inventaire):
         "operateur": inventaire.get("operateur", "OR"),
         "mode_territoire": inventaire.get("mode_territoire", "texte"),
         "region_code": inventaire.get("region_code"),
+        "place_id": inventaire.get("place_id"),
+        "statut_localisation": inventaire.get("statut_localisation", "non_verifiee"),
         "date_debut": inventaire["date_debut"],
         "date_fin": inventaire["date_fin"], "pages": inventaire["pages"],
         "candidats": inventaire["candidats"],
@@ -500,10 +540,18 @@ def exporter_csv(inventaire):
     """Exporter uniquement les @comptes et leur fréquence de découverte."""
     sortie = io.StringIO()
     writer = csv.writer(sortie, delimiter=";", lineterminator="\n")
-    writer.writerow(["territoire", "username", "videos_trouvees"])
+    avec_reference = inventaire.get("mode_territoire") == "place_reference"
+    entetes = ["territoire", "username", "videos_trouvees"]
+    if avec_reference:
+        entetes += ["place_id_reference", "statut_localisation"]
+    writer.writerow(entetes)
     for compte in presenter(inventaire)["comptes"]:
-        writer.writerow([
-            inventaire["ville"], compte["username"], compte["videos_trouvees"]])
+        valeurs = [
+            inventaire["ville"], compte["username"], compte["videos_trouvees"]]
+        if avec_reference:
+            valeurs += [inventaire.get("place_id", ""),
+                        "non_verifiee_recherche_textuelle"]
+        writer.writerow(valeurs)
     return sortie.getvalue().encode("utf-8-sig")
 
 
