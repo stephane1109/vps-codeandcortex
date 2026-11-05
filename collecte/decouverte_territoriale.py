@@ -80,37 +80,41 @@ def correspond_hashtags(video, hashtags, operateur="OR"):
 
 
 def requete_territoriale(termes, debut, fin, curseur=None, search_id=None,
-                        hashtags_croises=None, operateur="OR"):
-    """Croiser le mot-clé territorial avec les hashtags thématiques dans l'API."""
+                        hashtags_croises=None, operateur="OR",
+                        mode_territoire="texte", region_code=None):
+    """Croiser le pays d'enregistrement ou une ville textuelle avec les hashtags."""
+    conditions = []
+    if mode_territoire == "region_code":
+        if not region_code or not re.fullmatch(r"[A-Z]{2}", region_code):
+            raise ValueError("Code pays ISO invalide.")
+        conditions.append({"field_name": "region_code", "operation": "EQ",
+                           "field_values": [region_code]})
+    elif mode_territoire == "texte":
+        conditions.append({"field_name": "keyword", "operation": "IN",
+                           "field_values": list(termes)})
+    else:
+        raise ValueError("Mode territorial inconnu.")
     if hashtags_croises:
-        conditions = [{
-            "field_name": "keyword", "operation": "IN",
-            "field_values": list(termes),
-        }]
         if operateur == "AND":
             conditions.extend({
                 "field_name": "hashtag_name", "operation": "EQ",
-                "field_values": [nom],
-            } for nom in hashtags_croises)
+                "field_values": [nom]} for nom in hashtags_croises)
         else:
             conditions.append({
                 "field_name": "hashtag_name", "operation": "IN",
-                "field_values": list(hashtags_croises),
-            })
+                "field_values": list(hashtags_croises)})
         query = {"and": conditions}
-    else:
-        # Compatibilité des inventaires créés avant le croisement.
+    elif mode_territoire == "texte":
+        # Compatibilité des inventaires anciens sans hashtags thématiques.
         query = {"or": [
             {"field_name": "hashtag_name", "operation": "IN",
              "field_values": list(termes)},
             {"field_name": "keyword", "operation": "IN",
-             "field_values": list(termes)},
-        ]}
-    corps = {
-        "query": query,
-        "start_date": debut, "end_date": fin,
-        "max_count": 100, "is_random": False,
-    }
+             "field_values": list(termes)}]}
+    else:
+        raise ValueError("Renseignez au moins un hashtag à croiser avec le pays.")
+    corps = {"query": query, "start_date": debut, "end_date": fin,
+             "max_count": 100, "is_random": False}
     if curseur is not None:
         corps["cursor"] = curseur
         corps["search_id"] = search_id
@@ -251,13 +255,22 @@ def sauvegarder(chemin, contenu):
     os.replace(temporaire, chemin)
 
 
-def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, operateur="OR"):
+def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, operateur="OR", mode_territoire="texte", region_code=None):
     """Initialiser les périodes et les mots-clés de découverte."""
     ville = str(ville or "").strip()
-    if not 2 <= len(ville) <= 80:
-        raise ValueError("Précisez une ville entre 2 et 80 caractères.")
-    # La ville est un critère distinct des hashtags thématiques.
-    termes = [nettoyer_terme(ville)]
+    if mode_territoire == "region_code":
+        region_code = str(region_code or "").strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", region_code):
+            raise ValueError("Indiquez un code de pays ISO à deux lettres, par exemple FR.")
+        ville = region_code
+        termes = []
+    elif mode_territoire == "texte":
+        if not 2 <= len(ville) <= 80:
+            raise ValueError("Précisez une ville entre 2 et 80 caractères.")
+        termes = [nettoyer_terme(ville)]
+        region_code = None
+    else:
+        raise ValueError("Mode de recherche territorial inconnu.")
     hashtags_croises = []
     for valeur in variantes or []:
         hashtag = nettoyer_terme(valeur)
@@ -278,6 +291,7 @@ def creer_inventaire(racine, proprietaire, ville, variantes, debut, fin, *, oper
     inventaire = {
         "id": identifiant, "ville": ville, "hashtags": termes,
         "hashtags_croises": hashtags_croises, "operateur": operateur,
+        "mode_territoire": mode_territoire, "region_code": region_code,
         "date_debut": debut, "date_fin": fin,
         "periodes": periodes, "indice_periode": 0,
         "cursor": None, "search_id": None,
@@ -307,6 +321,8 @@ def presenter(inventaire):
         "hashtags": inventaire["hashtags"],
         "hashtags_croises": inventaire.get("hashtags_croises", []),
         "operateur": inventaire.get("operateur", "OR"),
+        "mode_territoire": inventaire.get("mode_territoire", "texte"),
+        "region_code": inventaire.get("region_code"),
         "date_debut": inventaire["date_debut"],
         "date_fin": inventaire["date_fin"], "pages": inventaire["pages"],
         "candidats": inventaire["candidats"],
@@ -384,7 +400,10 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
         debut, fin = inventaire["periodes"][indice]
         corps = requete_territoriale(
             inventaire["hashtags"], debut, fin,
-            inventaire["cursor"], inventaire["search_id"])
+            inventaire["cursor"], inventaire["search_id"],
+            inventaire.get("hashtags_croises"), inventaire.get("operateur", "OR"),
+            inventaire.get("mode_territoire", "texte"),
+            inventaire.get("region_code"))
         try:
             resultat, token = interroger_page_avec_reprises(
                 requete, corps, token, credentiels=credentiels,
@@ -401,7 +420,13 @@ def poursuivre_inventaire(racine, proprietaire, identifiant, *, requete=_requete
                 if not isinstance(video, dict):
                     continue
                 # Une vidéo doit satisfaire les DEUX dimensions.
-                if (not correspond_territoire(video, inventaire["hashtags"])
+                mode = inventaire.get("mode_territoire", "texte")
+                localisation_valide = (
+                    str(video.get("region_code") or "").upper()
+                    == inventaire.get("region_code")
+                    if mode == "region_code"
+                    else correspond_territoire(video, inventaire["hashtags"]))
+                if (not localisation_valide
                         or not correspond_hashtags(
                             video, inventaire.get("hashtags_croises", []),
                             inventaire.get("operateur", "OR"))):
