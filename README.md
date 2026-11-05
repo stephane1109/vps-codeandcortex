@@ -453,6 +453,16 @@ Sélectionner les médias, ou saisir des identifiants séparés par des virgules
 En mode Collecte de compte, l'option All transmet tous les profils sélectionnés
 vers Collecte de profils sans découpage manuel en lots. Les comptes sont ensuite
 parcourus par le moteur choisi, sous réserve de ses contraintes d'accès et de quotas.
+Dans Autres comptes > Collecte de profils, on peut aussi importer un ou plusieurs
+CSV de comptes provenant d'une collecte antérieure, sans relancer la découverte.
+Les colonnes `username` (export `comptes.csv` de ScrapTikTok), `compte`,
+`profil`, `author` et `url_compte` sont acceptées, ainsi que les fichiers à une
+colonne d'identifiants sans en-tête. Les séparateurs `;`, `,` et les tabulations
+sont reconnus. Les comptes sont normalisés et dédoublonnés ; les identifiants
+invalides sont signalés. Le bouton de chargement remplace seulement la liste
+des comptes à examiner dans le formulaire, sans modifier les filtres, exports
+ou collectes déjà sauvegardés. Ce chargement lance une nouvelle collecte de
+profils : un CSV de comptes ne contient pas le curseur d'une collecte interrompue.
 La limite s’applique par compte, tous hashtags confondus. Au moins un hashtag est
 obligatoire ; le deuxième reste facultatif (ET/OU). Les modes Profils et
 Presse/médias ouvrent une recherche vidéo pour chaque couple compte + hashtag :
