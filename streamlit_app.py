@@ -4042,6 +4042,11 @@ with onglet_sociometrie:
                 st.error("Import des métriques impossible : " + str(erreur))
             else:
                 st.session_state["sociometrie_engagement_donnees"] = donnees_mesures
+                # Un nouveau CSV invalide les résultats et exports précédents.
+                st.session_state["sociometrie_engagement_version"] = (
+                    st.session_state.get("sociometrie_engagement_version", 0) + 1)
+                st.session_state.pop("sociometrie_engagement_resultat", None)
+                st.session_state["sociometrie_engagement_afficher_graphe"] = False
                 st.success(
                     f"{len(donnees_mesures['videos'])} vidéo(s) distincte(s) importée(s).")
         donnees_mesures = st.session_state.get(
@@ -4091,13 +4096,46 @@ with onglet_sociometrie:
                 construire_reseau_engagement)
             from analyse_sociometrique.reseaux import (
                 apercu, construire_dot, exporter)
-            try:
-                reseau_mesures = construire_reseau_engagement(
-                    donnees_mesures, selection_mesures, seuil=seuil_mesures,
-                    voisins=voisins_mesures, limite=limite_mesures)
-            except ValueError as erreur:
-                st.warning("Réseau non calculable : " + str(erreur))
+            # Aucun calcul n'est déclenché par les mouvements de curseur :
+            # seule l'action explicite prépare un nouveau réseau et ses exports.
+            signature_mesures = (
+                st.session_state.get("sociometrie_engagement_version", 0),
+                tuple(selection_mesures), float(seuil_mesures),
+                int(voisins_mesures), int(limite_mesures))
+            if st.button(
+                    "Calculer le réseau de similarité", type="primary",
+                    key="sociometrie_engagement_calculer"):
+                with st.spinner(
+                        "Calcul des proximités statistiques entre vidéos..."):
+                    try:
+                        nouveau_reseau = construire_reseau_engagement(
+                            donnees_mesures, selection_mesures,
+                            seuil=seuil_mesures, voisins=voisins_mesures,
+                            limite=limite_mesures)
+                    except ValueError as erreur:
+                        st.session_state.pop(
+                            "sociometrie_engagement_resultat", None)
+                        st.warning("Réseau non calculable : " + str(erreur))
+                    else:
+                        st.session_state["sociometrie_engagement_resultat"] = {
+                            "signature": signature_mesures,
+                            "reseau": nouveau_reseau,
+                        }
+                        # Ne pas lancer automatiquement une simulation PyVis
+                        # au premier calcul (risque de blocage du navigateur).
+                        st.session_state[
+                            "sociometrie_engagement_afficher_graphe"] = False
+            resultat_reseau = st.session_state.get(
+                "sociometrie_engagement_resultat")
+            if (not resultat_reseau
+                    or resultat_reseau.get("signature") != signature_mesures):
+                st.info(
+                    "Paramètres prêts : cliquez sur « Calculer le réseau de "
+                    "similarité ». Toute modification du seuil, des variables, "
+                    "des voisins ou du nombre de vidéos nécessite un nouveau "
+                    "calcul. Aucun résultat précédent n'est présenté comme actuel.")
             else:
+                reseau_mesures = resultat_reseau["reseau"]
                 metriques_reseau = reseau_mesures["statistiques"]
                 indicateurs = st.columns(4)
                 indicateurs[0].metric(
@@ -4112,39 +4150,60 @@ with onglet_sociometrie:
                 for message in reseau_mesures["diagnostics"]:
                     st.caption(message)
                 if reseau_mesures["liens"]:
-                    choix_affichage_mesures = st.radio(
-                        "Visualisation du réseau d'engagement",
-                        ["PyVis (interactif)", "Graphviz (statique)"],
-                        horizontal=True,
-                        key="sociometrie_engagement_visualisation")
-                    graphe_affiche = apercu(
-                        reseau_mesures, max_noeuds=300, max_liens=600)
-                    if choix_affichage_mesures == "PyVis (interactif)":
-                        try:
-                            from analyse_sociometrique.visualisation_pyvis import (
-                                html_reseau_pyvis)
-                            components.html(
-                                html_reseau_pyvis(graphe_affiche),
-                                height=640, scrolling=False)
-                        except (ImportError, ValueError, RuntimeError) as erreur:
-                            st.warning(
-                                "PyVis indisponible : Graphviz utilisé. "
-                                + str(erreur))
+                    st.caption(
+                        f"{metriques_reseau['comparaisons']} paires de vidéos "
+                        f"comparées ; {metriques_reseau['paires_au_seuil']} "
+                        "paires atteignent le seuil. Les arêtes exportées "
+                        "ne conservent que les voisinages les plus proches.")
+                    st.checkbox(
+                        "Afficher l'aperçu du réseau",
+                        key="sociometrie_engagement_afficher_graphe",
+                        help="Le graphique peut solliciter le navigateur. "
+                             "Désactivez l'aperçu pour conserver les résultats "
+                             "et télécharger le réseau sans le dessiner.")
+                    if st.session_state.get(
+                            "sociometrie_engagement_afficher_graphe", False):
+                        choix_affichage_mesures = st.radio(
+                            "Visualisation du réseau d'engagement",
+                            ["Graphviz (statique)", "PyVis (interactif)"],
+                            horizontal=True,
+                            key="sociometrie_engagement_visualisation")
+                        taille_apercu_mesures = st.slider(
+                            "Nombre maximal de nœuds dans l'aperçu",
+                            min_value=20, max_value=200, value=80, step=20,
+                            key="sociometrie_engagement_apercu_noeuds",
+                            help="La limite ne s'applique qu'à l'affichage. "
+                                 "Les exports contiennent le réseau complet.")
+                        graphe_affiche = apercu(
+                            reseau_mesures,
+                            max_noeuds=taille_apercu_mesures,
+                            max_liens=min(300, taille_apercu_mesures * 2))
+                        if choix_affichage_mesures == "PyVis (interactif)":
+                            try:
+                                from analyse_sociometrique.visualisation_pyvis import (
+                                    html_reseau_pyvis)
+                                components.html(
+                                    html_reseau_pyvis(graphe_affiche),
+                                    height=640, scrolling=False)
+                            except (ImportError, ValueError, RuntimeError) as erreur:
+                                st.warning(
+                                    "PyVis indisponible : Graphviz utilisé. "
+                                    + str(erreur))
+                                st.graphviz_chart(
+                                    construire_dot(graphe_affiche),
+                                    use_container_width=True)
+                        else:
                             st.graphviz_chart(
                                 construire_dot(graphe_affiche),
                                 use_container_width=True)
-                    else:
-                        st.graphviz_chart(
-                            construire_dot(graphe_affiche),
-                            use_container_width=True)
-                    if graphe_affiche["partiel"]:
-                        st.caption(
-                            "Aperçu limité à 300 nœuds et 600 liens ; "
-                            "les exports conservent le réseau calculé complet.")
-                    with st.expander("Liens de similarité affichés"):
-                        st.dataframe(
-                            graphe_affiche["liens"], hide_index=True,
-                            use_container_width=True)
+                        if graphe_affiche["partiel"]:
+                            st.caption(
+                                "Aperçu partiel : les exports conservent tous "
+                                "les nœuds et liens du réseau calculé.")
+                        with st.expander("Liens de similarité affichés"):
+                            st.dataframe(
+                                graphe_affiche["liens"], hide_index=True,
+                                use_container_width=True)
                 else:
                     st.info(
                         "Aucune paire de vidéos n'atteint le seuil choisi. "
