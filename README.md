@@ -1044,6 +1044,29 @@ zéros sont conservés. La collecte des textes des commentaires reste dans
 une publication. Les exports téléchargés après mise à jour utilisent le
 nouveau schéma ; les ZIP anciens déjà téléchargés ne changent pas.
 
+### Commentaires Research et analyse sociométrique
+
+L'endpoint Research API `/v2/research/video/comment/list/` ne donne pas
+de `username` stable du commentateur. La colonne `auteur` des commentaires
+Research reste donc vide par conception, même si tous les textes et les ID
+ont été collectés correctement. TikTok documente un `display_name` parfois
+présent dans les réponses, sans le proposer dans la liste des champs
+demandables ; une nouvelle colonne facultative `nom_affiche` le conserve
+lorsqu'il est réellement fourni, sans l'assimiler à un identifiant unique.
+Ce champ ne peut pas servir à calculer un réseau d'auteurs fiables.
+
+Dans **Analyse sociométrique à partir de fichiers CSV**, la présence de
+commentaires Research est désormais signalée, ainsi que les liens de réponse
+potentiels. Sans auteur de page visible, le mode **Commentaires : graphe des
+réponses** est proposé à l'import, car il peut exploiter `id` et
+`parent_id`, à condition d'avoir collecté des réponses. Les graphes
+auteurs–vidéos et vidéos–vidéos ne sont pas inférés à partir des noms
+affichés. Pour de nouvelles collectes avec Research, l'option de collecte
+des réponses doit être activée si un graphe des réponses est attendu ;
+elle ne permet pas de retrouver les identités des commentateurs.
+Les archives historiques ne peuvent pas être enrichies automatiquement
+en `username` par cette API.
+
 ### Dossier local de téléchargement et noms de fichiers
 
 Le serveur ScrapTikTok ne peut pas choisir le dossier de téléchargement
