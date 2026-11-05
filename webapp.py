@@ -96,7 +96,7 @@ class ReprendreDecouverteTerritorialePayload(BaseModel):
 
 class CreerDecouverteTerritorialePayload(BaseModel):
     """Paramètres d'un inventaire territorial, sans secrets."""
-    ville: str = Field(min_length=2, max_length=80)
+    ville: str = Field(min_length=0, max_length=80)
     variantes: list[str] = Field(default_factory=list, max_length=10)
     operateur: Literal["OR", "AND"] = "OR"
     mode_territoire: Literal["texte", "region_code", "place_reference"] = "texte"
