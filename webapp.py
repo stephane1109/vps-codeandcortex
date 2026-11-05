@@ -162,7 +162,7 @@ class StartRequest(BaseModel):
     croiser_hashtag_presse: bool = False
     hashtag_presse: str = Field(default="", max_length=100)
     hashtags_presse: list[str] = Field(default_factory=list, max_length=10)
-    operator_presse: Literal["AND", "OR"] = "AND"
+    operator_presse: Literal["AND", "OR"] = "OR"
     collecter_republications_research: bool = False
     maximum_republications_par_compte: int = Field(default=100, ge=1, le=1000)
     # Secrets fournis à chaque collecte, jamais sérialisés dans SQLite / ZIP
@@ -198,7 +198,7 @@ class StartRequest(BaseModel):
     hashtags_saisis: list[str] = Field(default_factory=list)
     groupes_hashtags: list[list[str]] = Field(default_factory=list)
     hashtags_exclus: list[str] = Field(default_factory=list)
-    operator: Literal["AND", "OR"] = "AND"
+    operator: Literal["AND", "OR"] = "OR"
     rechercher_dans_texte: bool = False
     variantes_accents: bool = False
     region_fr_research: bool = False
