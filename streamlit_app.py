@@ -3711,10 +3711,17 @@ with onglet_sociometrie:
                 format_func=lambda valeur: choix_sociometriques[valeur],
                 key="sociometrie_csv_mode")
             seuil_csv = st.number_input(
-                "Nombre minimal de commentateurs communs",
+                "Réseau vidéos–vidéos : seuil de commentateurs communs",
                 min_value=1, max_value=1000, value=1, step=1,
                 key="sociometrie_csv_seuil",
-                disabled=mode_csv != "videos_communes")
+                disabled=mode_csv != "videos_communes",
+                help="Saisissez 2 pour ne relier que les vidéos ayant au moins "
+                     "2 commentateurs identifiables en commun, 3 pour au moins "
+                     "3, etc. La valeur s'applique au graphique et à tous les exports.")
+            if mode_csv == "videos_communes":
+                st.caption(
+                    f"Seuil retenu : au moins {int(seuil_csv)} "
+                    "commentateur(s) commun(s) entre deux vidéos.")
             from analyse_sociometrique.import_csv import analyser_import
             from analyse_sociometrique.reseaux import (
                 apercu, construire_dot, exporter)
@@ -3807,10 +3814,17 @@ with onglet_sociometrie:
                 "Type de réseau", list(modes_reseau),
                 key="sociometrie_mode", format_func=lambda m: modes_reseau[m])
             seuil_reseau = st.number_input(
-                "Nombre minimal de commentateurs communs",
+                "Réseau vidéos–vidéos : seuil de commentateurs communs",
                 min_value=1, max_value=1000, value=1, step=1,
                 disabled=mode_reseau != "videos_communes",
-                key="sociometrie_seuil")
+                key="sociometrie_seuil",
+                help="Saisissez 2 pour ne relier que les vidéos ayant au moins "
+                     "2 commentateurs identifiables en commun, 3 pour au moins "
+                     "3, etc. La valeur s'applique au graphique et à tous les exports.")
+            if mode_reseau == "videos_communes":
+                st.caption(
+                    f"Seuil retenu : au moins {int(seuil_reseau)} "
+                    "commentateur(s) commun(s) entre deux vidéos.")
             from urllib.parse import urlencode
             arguments_reseau = urlencode({"mode": mode_reseau, "seuil": seuil_reseau})
             try:
