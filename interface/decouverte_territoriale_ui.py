@@ -332,8 +332,8 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
         "Comptes à transmettre à une collecte de profils",
         options=[c["username"] for c in comptes],
         key="territoire_comptes_selectionnes",
-        help="Sélectionnez les comptes souhaités. Ils seront transférés "
-             "par lots de 10, conformément au formulaire de collecte existant.")
+        help="Sélectionnez les comptes à transmettre. Le choix All transmet "
+             "tous les comptes découverts, sans sélection manuelle de lots.")
     # Les liens directs ne transmettent pas les cookies privés de Streamlit.
     # Les fichiers sont obtenus côté serveur via le client API authentifié.
     try:
@@ -362,21 +362,16 @@ def afficher_decouverte_territoriale(api, *, telecharger, occupe=False):
                 use_container_width=True,
                 key="territoire_telecharger_csv")
     if selection:
-        lots = [selection[i:i+10] for i in range(0, len(selection), 10)]
-        lot = st.number_input(
-            "Lot de profils à transférer", min_value=1,
-            max_value=len(lots), value=1, step=1,
-            key="territoire_lot_profils")
-        courant = lots[lot-1]
-        st.caption(
-            f"Lot {lot}/{len(lots)} : " + ", ".join(courant))
+        st.caption(f"{len(selection)} compte(s) sélectionné(s) pour la collecte de profils.")
         if st.button(
-            "Envoyer ce lot vers la collecte Profils",
+            f"Transférer les {len(selection)} comptes vers la collecte de profils",
             key="territoire_envoyer_profils", disabled=occupe):
-            st.session_state["comptes_territoire_en_attente"] = ", ".join(courant)
-            st.session_state["territoire_transfert_confirme"] = True
+            # Transférer toute la sélection, sans découpage manuel en lots.
+            st.session_state["comptes_territoire_en_attente"] = ", ".join(selection)
+            st.session_state["territoire_transfert_nombre"] = len(selection)
             st.rerun()
-    if st.session_state.pop("territoire_transfert_confirme", False):
+    nombre_transfere = st.session_state.pop("territoire_transfert_nombre", None)
+    if nombre_transfere is not None:
         st.success(
-            "Les comptes sélectionnés sont transmis au champ Profils. "
+            f"{nombre_transfere} compte(s) transmis au champ Profils. "
             "Vous pouvez préparer et lancer la collecte avec vos critères habituels.")
