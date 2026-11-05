@@ -83,6 +83,47 @@ class TestDecouverteTerritoriale(unittest.TestCase):
             exporter_txt(fichier).decode("utf-8"),
             "@toulouse.media\n@media31\n")
 
+    def test_http_500_relance_la_meme_page(self):
+        """Un incident 500 ponctuel ne détruit pas la pagination."""
+        from collecte.researchapi import ResearchErreurServeur
+        essais = []
+        def requete_instable(url, *, data, headers):
+            essais.append(data)
+            if len(essais) == 1:
+                raise ResearchErreurServeur(500)
+            return {"data": {"videos": [
+                {"id": "1234567891", "username": "media.toulouse",
+                 "video_description": "Toulouse"}], "has_more": False}}
+        with patch("collecte.decouverte_territoriale._jeton", return_value="jeton"), (
+            patch("collecte.decouverte_territoriale.time.sleep", return_value=None)
+        ):
+            bilan = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=requete_instable, nombre_pages=1)
+        self.assertEqual(len(essais), 2)
+        self.assertEqual(essais[0], essais[1])
+        self.assertEqual(bilan["nombre_comptes"], 1)
+        self.assertEqual(bilan["relances_serveur"], 1)
+        self.assertEqual(bilan["pages"], 1)
+
+    def test_http_500_repetes_conservent_le_curseur(self):
+        """Après quatre échecs, on peut relancer sans effacer l'inventaire."""
+        from collecte.researchapi import ResearchErreurServeur
+        appels = []
+        def erreur(url, *, data, headers):
+            appels.append(data)
+            raise ResearchErreurServeur(500)
+        with patch("collecte.decouverte_territoriale._jeton", return_value="jeton"), (
+            patch("collecte.decouverte_territoriale.time.sleep", return_value=None)
+        ):
+            bilan = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, self.inventaire["id"],
+                requete=erreur, nombre_pages=1)
+        self.assertEqual(len(appels), 4)
+        self.assertEqual(bilan["pages"], 0)
+        self.assertEqual(bilan["relances_serveur"], 3)
+        self.assertIn("position de reprise", bilan["erreur"])
+
     def test_pas_de_residence_inventee(self):
         """L'inventaire ne contient aucune attribution de résidence."""
         self.assertNotIn("residence", self.inventaire)
