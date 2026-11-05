@@ -103,15 +103,29 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
             except RuntimeError as erreur:
                 st.error("Arrêt impossible : " + str(erreur))
     elif not inventaire["terminee"]:
+        st.caption(
+            "La découverte utilise les identifiants Research du formulaire "
+            "principal s'ils sont renseignés. À défaut, elle utilise ceux "
+            "configurés dans Coolify. Les clés ne sont pas enregistrées "
+            "avec l'inventaire.")
+        cle = str(st.session_state.get("research_client_key") or "").strip()
+        secret = str(st.session_state.get("research_client_secret") or "").strip()
         if st.button(
             "Démarrer / reprendre la recherche complète",
             key="territoire_poursuivre", disabled=occupe):
-            try:
-                api(
-                    f"/api/decouverte-territoriale/{selection_id}/poursuivre", {})
-                st.rerun()
-            except RuntimeError as erreur:
-                st.error("Découverte interrompue : " + str(erreur))
+            if bool(cle) != bool(secret):
+                st.error(
+                    "Renseignez les deux identifiants Research : "
+                    "Client key et Client secret.")
+            else:
+                try:
+                    api(
+                        f"/api/decouverte-territoriale/{selection_id}/poursuivre",
+                        {"research_client_key": cle or None,
+                         "research_client_secret": secret or None})
+                    st.rerun()
+                except RuntimeError as erreur:
+                    st.error("Découverte interrompue : " + str(erreur))
     else:
         st.success("Période parcourue : recherche terminée.")
     comptes = inventaire["comptes"]
