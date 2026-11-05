@@ -114,6 +114,14 @@ def preparer_import(fichiers_commentaires, fichiers_videos=()):
         parent = commentaire["parent_id"]
         if parent and parent != "0" and (vid, parent) not in commentaires:
             parents_absents += 1
+    commentaires_research = sum(
+        c["source"] == "research_api_officielle"
+        for c in commentaires.values()
+    )
+    reponses_observees = sum(
+        bool(c.get("parent_id")) and c["parent_id"] not in ("0", c["publication_id"])
+        for c in commentaires.values()
+    )
     sources_fiables = sum(
         1 for c in commentaires.values()
         if c["source"] == "page_visible" and re.fullmatch(
@@ -129,9 +137,23 @@ def preparer_import(fichiers_commentaires, fichiers_videos=()):
     if parents_absents:
         diagnostics.append(
             f"{parents_absents} réponse(s) pointent vers un commentaire parent non présent.")
+    if commentaires_research:
+        diagnostics.append(
+            f"{commentaires_research} commentaire(s) issu(s) de la Research API : "
+            "TikTok ne fournit pas de username de commentateur dans cet endpoint. "
+            "La colonne auteur est donc vide pour ces lignes ; "
+            "ce n'est pas un défaut de lecture du CSV. "
+            "Un nom affiché éventuel ne constitue pas un identifiant unique.")
     if not sources_fiables:
         diagnostics.append(
-            "Aucun identifiant d'auteur issu d'une page visible : seuls les réseaux de réponses sont interprétables.")
+            "Aucun identifiant d'auteur exploitable : les réseaux auteurs–vidéos "
+            "et vidéos–vidéos ne peuvent pas être calculés sur ce corpus.")
+        if not reponses_observees:
+            diagnostics.append(
+                "Aucune réponse entre commentaires observée : le réseau des "
+                "réponses sera également vide. Pour une nouvelle collecte, "
+                "activer « Collecter les réponses aux commentaires » ; "
+                "les réponses manquantes ne peuvent pas être recréées depuis ce CSV.")
     if not commentaires:
         details = "; ".join(
             f"{nom} : {nombre} ligne(s)" for nom, nombre in lignes_par_fichier)
@@ -157,6 +179,8 @@ def preparer_import(fichiers_commentaires, fichiers_videos=()):
         "publications": list(videos.values()),
         "diagnostics": diagnostics,
         "auteurs_candidats": sources_fiables,
+        "commentaires_research": commentaires_research,
+        "reponses_observees": reponses_observees,
         "doublons": doublons,
         "sans_id": sans_id,
         "parents_absents": parents_absents,
