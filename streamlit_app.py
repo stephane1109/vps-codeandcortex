@@ -407,8 +407,8 @@ def cocher_uniquement_medias(identifiants):
     ]
 
 
-onglet_collecte, onglet_base_donnees, onglet_multimodale, onglet_annotation_csv, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
-    ["Collecte", "Base de données", "Analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
+onglet_collecte, onglet_collecte_de_compte, onglet_base_donnees, onglet_multimodale, onglet_annotation_csv, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Collecte de compte", "Base de données", "Analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
 )
 
 with onglet_collecte:
@@ -421,6 +421,10 @@ with onglet_collecte:
              "sur 10 publications. Le nom accompagne les données sauvegardées "
              "et devient le nom du ZIP de résultats. Il n'efface pas les anciennes collectes."
     )
+    # Un transfert depuis l'onglet autonome Collecte de compte active
+    # Autres comptes avant la création du widget Streamlit de source.
+    if st.session_state.pop("source_selection_en_attente", None) == "comptes":
+        st.session_state["source"] = "comptes"
     source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
         format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
     libelles_moteurs = {
@@ -935,73 +939,67 @@ with onglet_collecte:
         if transfert_csv is not None:
             # Le champ Streamlit doit être initialisé avant son affichage.
             st.session_state["comptes"] = transfert_csv
-        onglet_profils_collecte, onglet_profils_territoire = st.tabs(
-            ["Collecte de profils", "Collecte de compte"])
-        with onglet_profils_collecte:
-            st.text_input(
-                "Comptes TikTok", key="comptes",
-                placeholder="@lemondefr, @franceinfo",
-                help="Saisissez un ou plusieurs comptes séparés par des virgules ou espaces.",
-                disabled=occupe)
-            st.caption(
-                "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
-                 "Les comptes peuvent être transférés en totalité depuis la collecte de compte. "
-                "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
-            if transfert_territorial is not None:
-                st.success(
-                    "Comptes de l'inventaire territorial placés dans le champ "
-                    "Profils. Vous pouvez lancer la collecte ci-dessous.")
+        # Les profils et l’import CSV restent dans Autres comptes TikTok.
+        # La découverte territoriale dispose maintenant de son propre onglet.
+        st.text_input(
+            "Comptes TikTok", key="comptes",
+            placeholder="@lemondefr, @franceinfo",
+            help="Saisissez un ou plusieurs comptes séparés par des virgules ou espaces.",
+            disabled=occupe)
+        st.caption(
+            "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
+             "Les comptes peuvent être transférés en totalité depuis la collecte de compte. "
+            "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+        if transfert_territorial is not None:
+            st.success(
+                "Comptes de l'inventaire territorial placés dans le champ "
+                "Profils. Vous pouvez lancer la collecte ci-dessous.")
 
-            fichiers_profils_csv = st.file_uploader(
-                "Importer un ou plusieurs CSV de comptes (collecte précédente)",
-                type=["csv"], accept_multiple_files=True,
-                key="comptes_csv_import_fichiers", disabled=occupe,
-                help="Compatible avec comptes.csv exporté par ScrapTikTok "
-                     "(colonne username, séparateur point-virgule) et avec "
-                     "les colonnes compte, profil, author ou url_compte. "
-                     "20 fichiers de 10 Mo au maximum.")
-            if fichiers_profils_csv:
-                from collecte.import_comptes_csv import lire_plusieurs_csv
-                try:
-                    bilan_csv_profils = lire_plusieurs_csv([
-                        (fichier.name, fichier.getvalue())
-                        for fichier in fichiers_profils_csv])
-                except ValueError as erreur:
-                    st.error("Import des comptes impossible : " + str(erreur))
-                else:
-                    comptes_csv = bilan_csv_profils["comptes"]
-                    st.caption(
-                        f"{len(comptes_csv)} compte(s) distinct(s) identifiés "
-                        f"dans {bilan_csv_profils['fichiers']} fichier(s) CSV ; "
-                        f"{bilan_csv_profils['doublons']} doublon(s) ignoré(s).")
-                    if bilan_csv_profils["invalides"]:
-                        lignes_invalides = bilan_csv_profils["invalides"]
-                        st.warning(
-                            f"{len(lignes_invalides)} identifiant(s) invalide(s) "
-                            "ignoré(s). Exemples : " +
-                            ", ".join(
-                                f"{ligne['fichier']} ({ligne['valeur']})"
-                                for ligne in lignes_invalides[:5]))
-                    st.caption(
-                        "Le chargement remplace uniquement la liste du champ "
-                        "Comptes TikTok. Les hashtags, dates, options de collecte "
-                        "et résultats enregistrés restent inchangés.")
-                    if st.button(
-                        f"Charger les {len(comptes_csv)} comptes dans Collecte de profils",
-                        key="comptes_csv_import_charger", disabled=occupe):
-                        # Reporter la modification au prochain rendu Streamlit.
-                        st.session_state["comptes_csv_en_attente"] = (
-                            ", ".join(comptes_csv))
-                        st.rerun()
-            if transfert_csv is not None:
-                st.success(
-                    "Comptes du CSV chargés dans le champ Comptes TikTok. "
-                    "Vous pouvez ajuster vos critères et lancer la collecte.")
-        with onglet_profils_territoire:
-            from interface.decouverte_territoriale_ui import (
-                afficher_decouverte_territoriale)
-            afficher_decouverte_territoriale(
-                api, telecharger=telecharger_api, occupe=occupe)
+        fichiers_profils_csv = st.file_uploader(
+            "Importer un ou plusieurs CSV de comptes (collecte précédente)",
+            type=["csv"], accept_multiple_files=True,
+            key="comptes_csv_import_fichiers", disabled=occupe,
+            help="Compatible avec comptes.csv exporté par ScrapTikTok "
+                 "(colonne username, séparateur point-virgule) et avec "
+                 "les colonnes compte, profil, author ou url_compte. "
+                 "20 fichiers de 10 Mo au maximum.")
+        if fichiers_profils_csv:
+            from collecte.import_comptes_csv import lire_plusieurs_csv
+            try:
+                bilan_csv_profils = lire_plusieurs_csv([
+                    (fichier.name, fichier.getvalue())
+                    for fichier in fichiers_profils_csv])
+            except ValueError as erreur:
+                st.error("Import des comptes impossible : " + str(erreur))
+            else:
+                comptes_csv = bilan_csv_profils["comptes"]
+                st.caption(
+                    f"{len(comptes_csv)} compte(s) distinct(s) identifiés "
+                    f"dans {bilan_csv_profils['fichiers']} fichier(s) CSV ; "
+                    f"{bilan_csv_profils['doublons']} doublon(s) ignoré(s).")
+                if bilan_csv_profils["invalides"]:
+                    lignes_invalides = bilan_csv_profils["invalides"]
+                    st.warning(
+                        f"{len(lignes_invalides)} identifiant(s) invalide(s) "
+                        "ignoré(s). Exemples : " +
+                        ", ".join(
+                            f"{ligne['fichier']} ({ligne['valeur']})"
+                            for ligne in lignes_invalides[:5]))
+                st.caption(
+                    "Le chargement remplace uniquement la liste du champ "
+                    "Comptes TikTok. Les hashtags, dates, options de collecte "
+                    "et résultats enregistrés restent inchangés.")
+                if st.button(
+                    f"Charger les {len(comptes_csv)} comptes dans Collecte de profils",
+                    key="comptes_csv_import_charger", disabled=occupe):
+                    # Reporter la modification au prochain rendu Streamlit.
+                    st.session_state["comptes_csv_en_attente"] = (
+                        ", ".join(comptes_csv))
+                    st.rerun()
+        if transfert_csv is not None:
+            st.success(
+                "Comptes du CSV chargés dans le champ Comptes TikTok. "
+                "Vous pouvez ajuster vos critères et lancer la collecte.")
     # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
     moteur_formulaire = st.session_state.get(
         {"presse": "presse_moteur", "comptes": "profil_moteur",
@@ -2855,6 +2853,14 @@ with onglet_collecte:
                 f"/api/sauvegardes/{point['id']}/telecharger")
         if not st.session_state["sauvegardes_collectes"]:
             st.info("Aucune sauvegarde disponible pour cette session.")
+
+
+with onglet_collecte_de_compte:
+    # La découverte des comptes est indépendante de la collecte de profils.
+    # Tout son formulaire et son suivi résident dans collcompte.py.
+    from collcompte import afficher_collecte_de_compte
+    afficher_collecte_de_compte(
+        api, telecharger=telecharger_api, occupe=occupe)
 
 
 with onglet_base_donnees:
