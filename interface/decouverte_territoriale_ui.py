@@ -11,17 +11,19 @@ import streamlit as st
 def afficher_decouverte_territoriale(api, *, occupe=False):
     """Créer, poursuivre et consulter un inventaire de comptes par territoire."""
     st.caption(
-        "Croisez un pays d'enregistrement TikTok (region_code, par exemple FR) "
-        "avec vos hashtags pour identifier les @comptes des vidéos correspondantes. "
-        "Le mode Ville cherche plutôt une mention textuelle. "
-        "region_code ne permet pas de filtrer Toulouse ou un département.")
+        "Recherche exclusivement avec la TikTok Research API. Le mode Place TikTok "
+        "accepte l'URL ou l'identifiant du lieu pour documenter la référence, "
+        "mais interroge les descriptions et hashtags par nom de ville : "
+        "Research ne permet pas de filtrer directement par Place ID.")
     mode_territoire = st.radio(
         "Mode de recherche territoriale",
-        ["region_code", "texte"],
-        format_func=lambda mode: (
-            "Pays d'enregistrement (Region Code)"
-            if mode == "region_code" else "Ville mentionnée dans les vidéos"),
-        horizontal=True, key="territoire_mode_recherche", disabled=occupe)
+        ["place_reference", "region_code", "texte"],
+        format_func=lambda mode: {
+            "place_reference": "URL ou Place ID TikTok (recherche indirecte)",
+            "region_code": "Pays d'enregistrement (Region Code)",
+            "texte": "Ville mentionnée dans les vidéos",
+        }[mode],
+        key="territoire_mode_recherche", disabled=occupe)
     c1, c2 = st.columns(2)
     with c1:
         if mode_territoire == "region_code":
@@ -33,6 +35,23 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                      "Ce code ne renseigne pas la ville.",
                 disabled=occupe)
             ville = ""
+        elif mode_territoire == "place_reference":
+            reference_lieu = st.text_input(
+                "URL TikTok du lieu ou Place ID",
+                value="https://www.tiktok.com/place/Toulouse-22535796483363264",
+                key="territoire_recherche_url_place",
+                help="URL : le nom Toulouse et l'identifiant sont extraits automatiquement. "
+                     "ID seul : renseignez également le nom de la ville.",
+                disabled=occupe)
+            ville = st.text_input(
+                "Nom de la ville (facultatif si l'URL est complète)",
+                value="", key="territoire_recherche_nom_place",
+                disabled=occupe)
+            code_region = None
+            st.warning(
+                "Recherche indirecte uniquement : le Place ID sera conservé "
+                "comme référence, mais aucune vidéo ne pourra être confirmée "
+                "comme associée à ce lieu à partir de la Research API.")
         else:
             ville = st.text_input(
                 "Ville mentionnée", value="Toulouse",
@@ -69,6 +88,9 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
                 "operateur": operateur,
                 "mode_territoire": mode_territoire,
                 "region_code": code_region.strip().upper() if code_region else None,
+                "reference_lieu": (
+                    reference_lieu.strip()
+                    if mode_territoire == "place_reference" else None),
                 "date_debut": date_debut.isoformat(),
                 "date_fin": date_fin.isoformat(),
             })
@@ -105,14 +127,23 @@ def afficher_decouverte_territoriale(api, *, occupe=False):
     tags = inventaire.get("hashtags_croises", [])
     if tags:
         liaison = " ET " if inventaire.get("operateur") == "AND" else " OU "
-        territoire = (
-            f"region_code = {inventaire.get('region_code')}"
-            if inventaire.get("mode_territoire") == "region_code"
-            else f"mention textuelle : {inventaire['ville']}")
+        mode = inventaire.get("mode_territoire", "texte")
+        if mode == "region_code":
+            territoire = f"region_code = {inventaire.get('region_code')}"
+        elif mode == "place_reference":
+            territoire = f"mention textuelle : {inventaire['ville']}"
+        else:
+            territoire = f"mention textuelle : {inventaire['ville']}"
         st.caption(
             f"Recherche : {territoire} ET "
             f"({liaison.join('#' + h for h in tags)}). "
             f"Période : {inventaire['date_debut']} au {inventaire['date_fin']}.")
+        if mode == "place_reference":
+            st.warning(
+                f"Place ID fourni : {inventaire.get('place_id')}. "
+                "Cet identifiant n'est pas transmis comme critère à Research : "
+                "la correspondance exacte au lieu TikTok n'est pas vérifiée. "
+                "L'inventaire contient seulement des comptes candidats.")
     else:
         st.caption(
             "Ancien inventaire sans croisement thématique. "
