@@ -9,7 +9,7 @@ from unittest.mock import patch
 from collecte.decouverte_territoriale import (
     creer_inventaire, charger, exporter_csv, exporter_txt, lister_inventaires,
     poursuivre_inventaire, correspond_territoire, correspond_hashtags,
-    requete_territoriale,
+    requete_territoriale, extraire_reference_lieu,
 )
 
 PROPRIETAIRE = "a" * 64
@@ -88,6 +88,71 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         self.assertEqual(
             exporter_txt(fichier).decode("utf-8"),
             "@toulouse.media\n@media31\n")
+
+    def test_url_tiktok_place_sans_filtrage_place_id(self):
+        """Le Place ID est documenté, jamais inventé comme filtre Research."""
+        url = "https://www.tiktok.com/place/Toulouse-22535796483363264"
+        reference = extraire_reference_lieu(url)
+        self.assertEqual(reference["place_id"], "22535796483363264")
+        self.assertEqual(reference["nom_lieu"], "Toulouse")
+        bilan_initial = creer_inventaire(
+            self.racine, PROPRIETAIRE, "",
+            ["manifestation", "lyceen"], "2026-10-01", "2026-10-15",
+            mode_territoire="place_reference", reference_lieu=url)
+        self.assertEqual(bilan_initial["mode_territoire"], "place_reference")
+        self.assertEqual(bilan_initial["place_id"], "22535796483363264")
+        appels = []
+
+        def renvoyer_page(adresse, *, data, headers):
+            import json
+            corps = json.loads(data)
+            appels.append(corps)
+            return {"data": {"videos": [
+                {"id": "1234567891", "username": "toulouse.media",
+                 "video_description": "Manifestation à Toulouse",
+                 "hashtag_names": ["manifestation"]},
+                {"id": "1234567892", "username": "hors.territoire",
+                 "video_description": "Manifestation à Nantes",
+                 "hashtag_names": ["manifestation"]},
+            ], "has_more": False}}
+
+        with patch("collecte.decouverte_territoriale._jeton",
+                   return_value="jeton"):
+            bilan = poursuivre_inventaire(
+                self.racine, PROPRIETAIRE, bilan_initial["id"],
+                requete=renvoyer_page, nombre_pages=1)
+        self.assertEqual(bilan["nombre_comptes"], 1)
+        self.assertEqual(bilan["comptes"][0]["username"], "@toulouse.media")
+        self.assertEqual(bilan["statut_localisation"],
+                         "non_verifiee_recherche_textuelle")
+        requete = appels[0]
+        self.assertNotIn("place_id", str(requete))
+        self.assertEqual(
+            [c["field_name"] for c in requete["query"]["and"]],
+            ["keyword", "hashtag_name"])
+        sauvegarde = charger(self.racine, PROPRIETAIRE, bilan_initial["id"])
+        export = list(csv.DictReader(
+            io.StringIO(exporter_csv(sauvegarde).decode("utf-8-sig")),
+            delimiter=";"))
+        self.assertEqual(export[0]["place_id_reference"],
+                         "22535796483363264")
+        self.assertEqual(export[0]["statut_localisation"],
+                         "non_verifiee_recherche_textuelle")
+        self.assertEqual(exporter_txt(sauvegarde).decode("utf-8"),
+                         "@toulouse.media\\n")
+
+    def test_place_id_seul_et_validation_domaine(self):
+        """L'identifiant seul exige une ville et les domaines externes sont exclus."""
+        reference = extraire_reference_lieu("22535796483363264", "Toulouse")
+        self.assertEqual(reference["nom_lieu"], "Toulouse")
+        with self.assertRaisesRegex(ValueError, "ville"):
+            extraire_reference_lieu("22535796483363264")
+        with self.assertRaises(ValueError):
+            extraire_reference_lieu(
+                "https://example.net/place/Toulouse-22535796483363264")
+        with self.assertRaises(ValueError):
+            extraire_reference_lieu(
+                "https://www.tiktok.com/place/Toulouse-invalide")
 
     def test_pays_region_code_fr_avec_hashtag(self):
         """Ne conserver que les comptes dont region_code vaut FR."""
