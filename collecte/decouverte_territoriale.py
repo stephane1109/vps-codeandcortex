@@ -356,6 +356,6 @@ def exporter_csv(inventaire):
 
 def exporter_txt(inventaire):
     """Produire un @compte par ligne pour le champ Profils."""
-    return ("\\n".join(
+    return ("\n".join(
         ligne["username"] for ligne in presenter(inventaire)["comptes"]
-    ) + "\\n").encode("utf-8") if inventaire["comptes"] else b""
+    ) + "\n").encode("utf-8") if inventaire["comptes"] else b""
