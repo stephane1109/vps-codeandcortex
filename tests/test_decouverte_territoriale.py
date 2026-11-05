@@ -81,7 +81,7 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         self.assertEqual(lignes[0]["username"], "@toulouse.media")
         self.assertEqual(
             exporter_txt(fichier).decode("utf-8"),
-            "@toulouse.media\\n@media31\\n")
+            "@toulouse.media\n@media31\n")
 
     def test_pas_de_residence_inventee(self):
         """L'inventaire ne contient aucune attribution de résidence."""
@@ -137,7 +137,8 @@ class TestDecouverteTerritoriale(unittest.TestCase):
         """Un curseur manquant interrompt sans recommencer à la première page."""
         def reponse_invalide(url, *, data, headers):
             return {"data": {
-                "videos": [{"id": "1234567890", "username": "toulouse.media"}],
+                "videos": [{"id": "1234567890", "username": "toulouse.media",
+                            "video_description": "Toulouse"}],
                 "has_more": True}}
         with patch("collecte.decouverte_territoriale._jeton", return_value="token"):
             resultat = poursuivre_inventaire(
