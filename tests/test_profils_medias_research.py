@@ -186,47 +186,40 @@ class TestsProfilsMediasResearch(unittest.TestCase):
                     self.assertIn("profils_medias.csv", sauvegarde.namelist())
                     self.assertIn("profils_medias.json", sauvegarde.namelist())
 
-    def test_options_abonnes_auteurs_immediatement_sous_profil(self):
-        """Les trois options de l'auteur précèdent les profils médias et l'ID."""
+    def test_variables_profils_toujours_dans_le_formulaire(self):
+        """Les abonnés et les indicateurs de compte restent sélectionnables."""
         import ast
-        fichier = Path(__file__).resolve().parents[1] / "streamlit_app.py"
-        page = fichier.read_text(encoding="utf-8")
-        ast.parse(page)
-        debut = page.index('            for nom in ("date", "profil", "id"):')
-        fin = page.index('            st.caption("Catégorie du compte :', debut)
-        fragment = page[debut:fin]
-        positions = [
-            fragment.index('if nom == "profil":'),
-            fragment.index('"Récupérer le nombre d\'abonnés des auteurs (follower_count)"'),
-            fragment.index('"Abonnés : valeur numérique réelle dans le TXT"'),
-            fragment.index('"Abonnés : recoder la variable continue en variable catégorielle "'),
-            fragment.index('if nom == "profil" and source == "presse":'),
-        ]
-        self.assertEqual(positions, sorted(positions))
-        for cle in (
-            "collecter_follower_count", "follower_count_illustratif",
-            "abonnes_classe_illustratif",
-        ):
-            self.assertEqual(
-                page.count('key="' + cle + '"'), 1,
-                "Chaque case doit être présente une seule fois.")
-        self.assertIn('or not st.session_state.get("collecter_follower_count", False)', fragment)
-        self.assertIn("≥1 000 000", fragment)
-        # La collecte Research et les paramètres transmis restent identiques.
-        self.assertIn('valeurs["collecter_follower_count"] = bool(', page)
-        self.assertIn('valeurs["abonnes_classe_illustratif"] = bool(', page)
-
-    def test_cases_deux_colonnes_sous_profil_et_export(self):
-        """Vérifier la position et la propagation des huit cases Streamlit."""
         page = (Path(__file__).resolve().parents[1] /
                 "streamlit_app.py").read_text(encoding="utf-8")
-        self.assertIn('if nom == "profil" and source == "presse":', page)
-        self.assertIn('colonne_nombre.checkbox(', page)
-        self.assertIn('colonne_classe.checkbox(', page)
-        self.assertIn('key=cle_brute', page)
-        self.assertIn('key=cle_classe', page)
+        ast.parse(page)
+        self.assertIn(
+            '"Récupérer le nombre d\'abonnés des auteurs (follower_count)"',
+            page)
+        self.assertIn('valeurs["collecter_follower_count"] = bool(', page)
+        self.assertIn('valeurs["abonnes_classe_illustratif"] = bool(', page)
+        self.assertIn('with st.container(key="bloc_metriques_profils"):', page)
+        self.assertIn('for variable in VARIABLES_PROFILS_MEDIAS:', page)
+        self.assertIn('LIBELLES_PROFILS_MEDIAS[variable]', page)
+        self.assertIn('aide="Codage proposé : " + intervalles', page)
+
+    def test_deux_destinations_independantes_et_compactes(self):
+        """Les huit mesures de profil ont une ligne et deux cases TXT/CSV."""
+        import ast
+        page = (Path(__file__).resolve().parents[1] /
+                "streamlit_app.py").read_text(encoding="utf-8")
+        ast.parse(page)
+        self.assertIn(
+            'ligne_variable(\n                    libelle + " : valeur numérique réelle",',
+            page)
+        self.assertIn(
+            'ligne_variable(\n                    libelle + " : recoder en variable catégorielle",',
+            page)
+        self.assertIn('cle + "txt_brut", cle + "csv_brut"', page)
+        self.assertIn('cle + "txt_classe", cle + "csv_classe"', page)
+        self.assertIn('profil_media_" + variable + "_" + destination', page)
         self.assertIn('valeurs["profils_medias_variables"] = [', page)
         self.assertIn('valeurs["profils_medias_classes"] = [', page)
+        self.assertIn('.st-key-bloc_metriques_profils [data-testid="stVerticalBlock"]', page)
 
 
 if __name__ == "__main__":
