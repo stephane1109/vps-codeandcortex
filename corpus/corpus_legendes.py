@@ -18,6 +18,8 @@ def construire_legendes(publications, variables=None):
                 "type": "legende",
                 "media": publication.get("media_id"),
                 "categorie": publication.get("categorie_media"),
+                **({"ville": publication["ville_etude"]}
+                   if publication.get("ville_etude") else {}),
                 **variables.get(publication["id"], {}),
                 **illustratives,
             },
