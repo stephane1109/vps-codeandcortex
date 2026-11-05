@@ -146,8 +146,10 @@ class TestSimilariteEngagement(unittest.TestCase):
         self.assertIn('st.checkbox(', zone)
         self.assertIn('"Afficher l\'aperçu du réseau"', zone)
         self.assertIn('on_click="ignore"', zone)
-        self.assertIn('data=lambda format_sortie=nom, reseau=reseau_mesures:', zone)
-        self.assertIn('data=lambda reseau=reseau_mesures:', zone)
+        self.assertIn('def preparer_telechargement_reseau(graphe, format_sortie):', zone)
+        self.assertIn('def produire_fichier():', zone)
+        self.assertIn('data=preparer_telechargement_reseau(', zone)
+        self.assertIn('reseau_mesures, "matrice.csv"),', zone)
         self.assertIn('max_noeuds=taille_apercu_mesures', zone)
         self.assertIn('st.session_state.pop("sociometrie_engagement_resultat", None)', zone)
 
