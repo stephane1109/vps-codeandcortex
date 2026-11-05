@@ -86,13 +86,6 @@ def afficher_reprise_hashtags(api, lancer, occupe):
     bilan = collecte.get("bilan_hashtags_sources") or []
     disponibles = (hashtags_a_reprendre(bilan)
                    if collecte.get("source_collecte") == "hashtags" else [])
-    st.caption(
-        "Importez les bilans CSV pour retrouver le corpus PostgreSQL de "
-        "la collecte d'origine et ses hashtags inachevés. Aucun ZIP n'est "
-        "nécessaire si la collecte existe dans PostgreSQL. Sans curseur "
-        "historique, les premières pages API seront réinterrogées et "
-        "les publications existantes seront dédupliquées par identifiant."
-    )
     fichiers = st.file_uploader(
         "Importer plusieurs bilans de hashtags (CSV, facultatif)",
         type=["csv"], accept_multiple_files=True,
