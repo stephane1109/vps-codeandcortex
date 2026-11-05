@@ -20,6 +20,7 @@ ETATS_FINAUX = {"termine", "arrete", "date_limite"}
 from corpus.publications_csv import (
     COLONNES_PUBLICATIONS_CSV, lignes_publications_csv, cellule_csv,
 )
+from collecte.selection_variables_csv import colonnes_csv_selectionnees
 
 # Préserver les colonnes historiques et ajouter toutes les variables de l'interface.
 CHAMPS_CSV = COLONNES_PUBLICATIONS_CSV
@@ -437,14 +438,26 @@ def donnees_plan(dossier, identifiant, proprietaire):
     return publications, commentaires
 
 
-def texte_csv(publications, commentaires, categorie):
+def texte_csv(publications, commentaires, categorie, variables_csv=None):
+    """Exporter le schéma historique ou les colonnes CSV sélectionnées."""
     lignes = publications if categorie == "publications" else commentaires
     if categorie == "publications":
-        colonnes = CHAMPS_CSV
+        colonnes = colonnes_csv_selectionnees(CHAMPS_CSV, variables_csv)
         resultat = lignes_publications_csv(lignes)
     else:
-        colonnes = ("id", "publication_id", "auteur", "texte", "parent_id", "est_reponse")
-        resultat = [{nom: ligne.get(nom) for nom in colonnes} for ligne in lignes]
+        colonnes = ["id", "publication_id", "auteur", "texte",
+                    "parent_id", "est_reponse"]
+        if variables_csv is not None and "ville_etude" in variables_csv:
+            colonnes.append("ville_etude")
+        villes = {
+            str(p.get("id")): p.get("ville_etude")
+            for p in publications if p.get("ville_etude")
+        }
+        resultat = [
+            {**ligne, "ville_etude": ligne.get("ville_etude")
+             or villes.get(str(ligne.get("publication_id")))}
+            for ligne in lignes
+        ]
     flux = io.StringIO()
     ecrivain = csv.DictWriter(flux, fieldnames=colonnes)
     ecrivain.writeheader()
@@ -455,34 +468,56 @@ def texte_csv(publications, commentaires, categorie):
     return flux.getvalue()
 
 
+def parametres_export_plan(dossier, identifiant, proprietaire):
+    """Lire les préférences archivées sans inventer de nouveaux réglages."""
+    with connexion(dossier) as base:
+        ligne = base.execute(
+            "SELECT parametres FROM plans WHERE id=? AND proprietaire=?",
+            (identifiant, empreinte_proprietaire(proprietaire))).fetchone()
+    return json.loads(ligne["parametres"]) if ligne else {}
+
+
 def exporter(dossier, identifiant, proprietaire, format_):
     donnees = donnees_plan(dossier, identifiant, proprietaire)
     if donnees is None:
         return None
     publications, commentaires = donnees
     retenues = [p for p in publications if p["_retenue"]]
+    options = (parametres_export_plan(dossier, identifiant, proprietaire)
+               if format_ in {"csv", "commentaires.csv", "txt", "zip"} else {})
+    choix_csv = options.get("variables_csv")
     if format_ == "json":
         return json.dumps({"publications": publications, "commentaires": commentaires},
                           ensure_ascii=False, indent=2).encode("utf-8")
     if format_ == "csv":
-        return texte_csv(retenues, commentaires, "publications").encode("utf-8-sig")
+        return texte_csv(
+            retenues, commentaires, "publications", choix_csv).encode("utf-8-sig")
     if format_ == "commentaires.csv":
-        return texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig")
+        return texte_csv(
+            retenues, commentaires, "commentaires", choix_csv).encode("utf-8-sig")
     if format_ == "txt":
         # Reprendre les options de construction du TXT existant.
         from webapp import text_export
-        with connexion(dossier) as base:
-            ligne = base.execute(
-                "SELECT parametres FROM plans WHERE id=? AND proprietaire=?",
-                (identifiant, empreinte_proprietaire(proprietaire))).fetchone()
-        options = json.loads(ligne["parametres"])
+        # Les anciennes lignes de SQLite n'ont pas forcément ces drapeaux.
+        # Les préférences stockées dans le plan restent donc déterminantes.
+        textes_retenus = [
+            {**p,
+             "inclure_categorie_compte_txt": options.get(
+                 "categorie_compte_txt", True),
+             "inclure_ville_etude_txt": options.get("ville_etude_txt", True),
+             **({"ville_etude": options["ville_etude"]}
+                if (options.get("source_collecte") == "comptes"
+                    and options.get("ville_etude")) else {})}
+            for p in retenues
+        ]
         contenu = text_export(
-            retenues, options.get("include_sources", True),
+            textes_retenus, options.get("include_sources", True),
             options.get("inclure_metadonnees_txt", False),
             options.get("variables_txt"),
             commentaires if options.get("collecter_commentaires", False) else None,
             supprimer_arobase_profil=options.get("supprimer_arobase_profil", False),
             inclure_texte_genere_ia=options.get("inclure_texte_genere_ia", False),
+            inclure_theme_hashtag_txt=options.get("inclure_theme_hashtag_txt", True),
             follower_count_illustratif=options.get("follower_count_illustratif", False),
             abonnes_classe_illustratif=options.get("abonnes_classe_illustratif", False),
             variables_classes_txt=options.get("variables_classes_txt", []),
@@ -495,8 +530,12 @@ def exporter(dossier, identifiant, proprietaire, format_):
         flux = io.BytesIO()
         with ZipFile(flux, "w", ZIP_DEFLATED) as archive:
             for nom, contenu in {
-                "publications.csv": texte_csv(retenues, commentaires, "publications").encode("utf-8-sig"),
-                "commentaires.csv": texte_csv(retenues, commentaires, "commentaires").encode("utf-8-sig"),
+                "publications.csv": texte_csv(
+                    retenues, commentaires, "publications", choix_csv
+                ).encode("utf-8-sig"),
+                "commentaires.csv": texte_csv(
+                    retenues, commentaires, "commentaires", choix_csv
+                ).encode("utf-8-sig"),
                 "collecte.json": json.dumps({"publications": publications, "commentaires": commentaires},
                                              ensure_ascii=False).encode("utf-8"),
                 "textes.txt": exporter(dossier, identifiant, proprietaire, "txt"),
