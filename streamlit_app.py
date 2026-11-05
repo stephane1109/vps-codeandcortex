@@ -925,7 +925,7 @@ with onglet_collecte:
         if transfert_territorial is not None:
             st.session_state["comptes"] = transfert_territorial
         onglet_profils_collecte, onglet_profils_territoire = st.tabs(
-            ["Collecte de profils", "Découverte territoriale"])
+            ["Collecte de profils", "Collecte de compte"])
         with onglet_profils_collecte:
             st.text_input(
                 "Comptes TikTok", key="comptes",
