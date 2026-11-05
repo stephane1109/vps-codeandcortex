@@ -54,7 +54,8 @@ def lignes_engagement(publications):
 def construire_exports(dossier, publications, commentaires, journal, variables=None, *,
                       texte_source=None, republications=None,
                       inclure_commentaires_txt=True, profils_medias=None,
-                      profils_medias_variables=None, profils_medias_classes=None):
+                      profils_medias_variables=None, profils_medias_classes=None,
+                      profils_medias_csv_bruts=None, profils_medias_csv_classes=None):
     """Reprendre le TXT téléchargeable comme corpus principal dès qu’il existe."""
     dossier = Path(dossier)
     # None garde tous les champs des anciennes collectes ; une liste
@@ -107,7 +108,9 @@ def construire_exports(dossier, publications, commentaires, journal, variables=N
         exporter_csv(
             dossier / "profils_medias.csv", profils_medias,
             colonnes_profils_medias(
-                profils_medias_variables or [], profils_medias_classes or []))
+                profils_medias_variables or [], profils_medias_classes or [],
+                csv_bruts=profils_medias_csv_bruts,
+                csv_classes=profils_medias_csv_classes))
     exporter_json(dossier / "commentaires.json", commentaires)
     exporter_json(dossier / "journal.json", journal)
     exporter_csv(
