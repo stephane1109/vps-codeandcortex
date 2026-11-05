@@ -448,12 +448,21 @@ et restent dans les exports enrichis CSV/JSON/IRaMuTeQ.
 
 ## Comptes de presse, engagement et commentaires
 
-Dans **Source**, choisir **Comptes de presse** ou **Autres comptes TikTok**.
-Sélectionner les médias, ou saisir des identifiants séparés par des virgules.
-En mode Collecte de compte, l'option All transmet tous les profils sélectionnés
-vers Collecte de profils sans découpage manuel en lots. Les comptes sont ensuite
-parcourus par le moteur choisi, sous réserve de ses contraintes d'accès et de quotas.
-Dans Autres comptes > Collecte de profils, on peut aussi importer un ou plusieurs
+L'onglet principal **Collecte de compte** est indépendant de **Collecte**.
+Son interface complète réside dans `collcompte.py` : recherche territoriale,
+croisement des hashtags, inventaires, résultats justificatifs, pagination,
+arrêt, poursuite et exports. L'ancien module
+`interface/decouverte_territoriale_ui.py` reste un point d'entrée compatible.
+
+Dans l'onglet **Collecte**, choisir **Presse et médias** ou
+**Autres comptes TikTok**. Ce dernier mode est réservé à la collecte de profils
+et conserve ses paramètres et analyses habituels.
+Dans **Collecte de compte**, l'option All transmet tous les profils sélectionnés
+vers **Collecte → Autres comptes TikTok** sans découpage manuel en lots.
+Les comptes sont ensuite parcourus par le moteur choisi, sous réserve de ses
+contraintes d'accès et de quotas. Le transfert active le mode Autres comptes
+dans le formulaire, sans lancer automatiquement de collecte.
+Dans **Collecte → Autres comptes TikTok**, on peut aussi importer un ou plusieurs
 CSV de comptes provenant d'une collecte antérieure, sans relancer la découverte.
 Les colonnes `username` (export `comptes.csv` de ScrapTikTok), `compte`,
 `profil`, `author` et `url_compte` sont acceptées, ainsi que les fichiers à une
