@@ -293,7 +293,7 @@ def collecter_videos_presse_research(compte, limite, rapport, *, debut=None, fin
                                     check=None, progress=None, requete=_requete,
                                     jeton=None, pause=time.sleep, aujourd_hui=None,
                                     credentiels=None, hashtag=None, exclusions=(),
-                                    hashtags=None, operateur="AND",
+                                    hashtags=None, operateur="OR",
                                     filtre_region=None, maximum_candidats=None,
                                     maximum_requetes=None, position_reprise=None,
                                     enchainement_automatique=False):
