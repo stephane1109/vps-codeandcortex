@@ -1479,15 +1479,19 @@ class Job:
             self.dernier_point_sauvegarde=point
             return point
 
-    def ecrire_parametres_collecte(self, statut=None):
-        """Écrire les critères sans secrets, indépendamment du moteur choisi."""
+    def texte_parametres_collecte(self, statut=None):
+        """Restituer les paramètres sans modifier les archives historiques."""
         from collecte.parametres_collecte import generer_parametres_collecte
         with self.lock:
-            contenu = generer_parametres_collecte(
+            return generer_parametres_collecte(
                 self.settings, identifiant=self.id,
                 statut=statut or self.status,
                 date_lancement=self.date_lancement_utc,
                 journal=self.journal)
+
+    def ecrire_parametres_collecte(self, statut=None):
+        """Enregistrer les paramètres au même endroit que les autres exports."""
+        contenu = self.texte_parametres_collecte(statut=statut)
         chemin = self.directory / "parametres_collecte.txt"
         chemin.write_text(contenu, encoding="utf-8")
         return contenu
@@ -4836,7 +4840,7 @@ def create_app(manager=None):
         contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         # Inclure les fichiers auparavant disponibles via des boutons séparés.
         ajouts = {
-            "parametres_collecte.txt": job.ecrire_parametres_collecte()
+            "parametres_collecte.txt": job.texte_parametres_collecte()
                 .encode("utf-8")
         }
         if job.settings.source_collecte == "hashtags" and job.journal:
