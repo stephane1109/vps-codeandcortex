@@ -249,6 +249,17 @@ def construire_archive_postgres(
                             temporaire.write(source_sqlite)
                             temporaire.flush()
                             _ajouter_zip_origine(cible, temporaire.name, noms)
+                if (type_sauvegarde == "collecte"
+                        and "parametres_collecte.txt" not in noms):
+                    # Une sauvegarde PostgreSQL reste documentée même lorsque
+                    # le ZIP d'origine a expiré ou a été supprimé.
+                    from collecte.parametres_collecte import generer_parametres_collecte
+                    cible.writestr(
+                        "parametres_collecte.txt",
+                        generer_parametres_collecte(
+                            parametres, identifiant=identifiant,
+                            statut="reconstitué depuis PostgreSQL").encode("utf-8"))
+                    noms.add("parametres_collecte.txt")
                 for fichier in sorted(Path(dossier).rglob("*")):
                     if (not fichier.is_file()
                             or fichier.is_symlink()
