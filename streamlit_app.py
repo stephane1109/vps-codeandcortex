@@ -278,6 +278,42 @@ if "initialise" not in st.session_state:
     for cle,valeur in valeurs.items(): st.session_state.setdefault(cle,valeur)
     st.session_state["initialise"] = True
 
+# Réinitialiser uniquement l'espace de travail après confirmation du serveur.
+# Les archives, les données persistantes et les clés Research sont conservées.
+identifiant_a_reinitialiser = st.session_state.pop(
+    "_reinitialisation_collecte_demandee", None)
+if identifiant_a_reinitialiser:
+    try:
+        api(f"/api/session/reinitialiser/{identifiant_a_reinitialiser}", {})
+    except RuntimeError as erreur:
+        st.session_state["_erreur_reinitialisation_collecte"] = str(erreur)
+    else:
+        valeurs_nouvelle_collecte = {
+            "collecte": None, "source": "hashtags", "nom_sauvegarde": "",
+            "hashtag": "", "second_hashtag": "", "hashtags_saisis": "",
+            "hashtags_exclus_saisis": "", "hashtag_comptes": "",
+            "second_hashtag_comptes": "", "hashtags_saisis_comptes": "",
+            "comptes": "", "ville_etude": "", "date_debut": None,
+            "date_fin": None, "hashtag_presse": "",
+            "hashtags_presse_saisis": "", "utiliser_groupes_hashtags": False,
+            "croiser_hashtag_presse": False, "operator": "OR",
+            "operator_comptes": "OR", "operator_presse": "OR",
+            "test_research_10_publications": False,
+        }
+        for cle, valeur in valeurs_nouvelle_collecte.items():
+            st.session_state[cle] = valeur
+        for cle in (
+            "comptes_csv_import_fichiers", "comptes_csv_en_attente",
+            "ville_csv_en_attente", "ville_etude_en_attente",
+            "source_selection_en_attente", "bilan_reprise_hashtags_csv",
+            "erreur_reprise_hashtags", "empreinte_dernier_bilan_medias",
+        ):
+            st.session_state.pop(cle, None)
+        for cle in list(st.session_state):
+            if cle.startswith("bilans_reprise_historique_"):
+                st.session_state.pop(cle, None)
+        st.session_state["_message_reinitialisation_collecte"] = True
+
 st.session_state.setdefault("telecharger_mp4", False)
 # Ignorer également l'ancienne valeur éventuellement conservée en session.
 st.session_state["sauvegarde_progressive"] = False
@@ -467,6 +503,10 @@ onglet_collecte, onglet_collecte_de_compte, onglet_base_donnees, onglet_multimod
 
 with onglet_collecte:
     api_tiktok_suspendue = False
+    if st.session_state.pop("_message_reinitialisation_collecte", False):
+        st.success(
+            "Nouvelle collecte prête. Les anciennes collectes restent "
+            "accessibles dans l'historique et les bases de données.")
     st.text_input(
         "Nom de la collecte *", key="nom_sauvegarde",
         placeholder="Ex. : Manifestations_lyceennes_2026",
@@ -3029,7 +3069,21 @@ with onglet_collecte:
             elif actuel["can_download"]:
                 st.caption(
                     "Le ZIP complet sera disponible à la fin de la collecte.")
+            if not (actuel.get("busy") or actuel.get("video_busy")):
+                if st.button(
+                        "Nouvelle collecte / Réinitialiser",
+                        key="reinitialiser_collecte_" + actuel["id"],
+                        use_container_width=True,
+                        help="Réinitialise le formulaire et l'affichage uniquement. "
+                             "Les ZIP, l'historique, les annotations et les bases "
+                             "de données ne sont pas supprimés."):
+                    st.session_state["_reinitialisation_collecte_demandee"] = actuel["id"]
+                    st.rerun(scope="app")
         afficher_resultats()
+        erreur_reinitialisation = st.session_state.pop(
+            "_erreur_reinitialisation_collecte", None)
+        if erreur_reinitialisation:
+            st.error("Réinitialisation impossible : " + erreur_reinitialisation)
         if st.session_state["collecte"].get("status") == "attention":
             st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
             # Le WebSocket Streamlit et l'iframe peuvent arriver sur des
