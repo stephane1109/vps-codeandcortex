@@ -3032,12 +3032,6 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         except OSError:
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
-        # Archiver les critères exacts dans chaque ZIP, quelle que soit la méthode.
-        try:
-            job.ecrire_parametres_collecte(statut=final_status)
-        except OSError:
-            LOG.exception("Écriture des paramètres de collecte impossible pour %s", job.id)
-            final_message += " Le fichier de paramètres n'a pas pu être écrit."
         if (job.settings.telecharger_mp4 and job.records
                 and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             try:
@@ -3050,6 +3044,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
                 final_message += " Téléchargement MP4 interrompu ; les textes sont conservés."
             finally:
                 contexte_mp4.clear()
+        # Archiver les critères exacts dans chaque ZIP, quelle que soit la méthode.
+        try:
+            job.ecrire_parametres_collecte(statut=final_status)
+        except OSError:
+            LOG.exception("Écriture des paramètres de collecte impossible pour %s", job.id)
+            final_message += " Le fichier de paramètres n'a pas pu être écrit."
         if job.base and (job.settings.source_collecte != "presse"
                          or job.publications or job.settings.collecter_republications_research
                          or job.settings.profils_medias_variables):
