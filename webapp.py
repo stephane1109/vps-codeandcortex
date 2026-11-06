@@ -3189,6 +3189,8 @@ class Manager:
         self.max_duration = max(60, int(os.getenv("JOB_TIMEOUT_SECONDS", "1800")))
         self.runner = runner
         self.jobs = {}
+        # Une réinitialisation ne masque que les anciennes collectes de la session.
+        self.reinitialisations_sessions = {}
         # Un identifiant éphémère permet de détecter une autre instance
         # Coolify derrière le proxy, ou le redémarrage du moteur.
         self.instance_id = secrets.token_hex(12)
@@ -3749,6 +3751,22 @@ class Manager:
             self.jobs[identifiant]=job
             return job
 
+    def reinitialiser_session(self, owner, identifiant_attendu):
+        """Ouvrir une nouvelle collecte sans supprimer les corpus enregistrés."""
+        with self.lock:
+            taches = [job for job in self.jobs.values() if job.owner == owner]
+            if any(job.busy or job.video_busy for job in taches):
+                raise HTTPException(
+                    409, "Terminez d'abord la collecte ou le traitement MP4 en cours.")
+            seuil = self.reinitialisations_sessions.get(owner, float("-inf"))
+            visibles = [job for job in taches if job.created > seuil]
+            derniere = max(visibles, key=lambda job: job.created, default=None)
+            if derniere is None or derniere.id != identifiant_attendu:
+                raise HTTPException(
+                    409, "La collecte affichée n'est plus la dernière de cette session. Actualisez la page.")
+            # Conserver les tâches et leurs fichiers : seule la vue courante est vidée.
+            self.reinitialisations_sessions[owner] = time.monotonic()
+
     def get(self, owner, job_id):
         with self.lock:
             job = self.jobs.get(job_id)
@@ -3759,7 +3777,9 @@ class Manager:
 
     def latest(self, owner):
         with self.lock:
-            jobs = [j for j in self.jobs.values() if j.owner == owner]
+            seuil = self.reinitialisations_sessions.get(owner, float("-inf"))
+            jobs = [j for j in self.jobs.values()
+                    if j.owner == owner and j.created > seuil]
             if not jobs:
                 return None
             job = max(jobs, key=lambda j: j.created)
@@ -3803,6 +3823,11 @@ class Manager:
                     if not job.historique:
                         shutil.rmtree(job.directory, ignore_errors=True)
                     if job.base: job.base.supprimer_session(job.id)
+            # Éviter de conserver les marqueurs des sessions entièrement expirées.
+            proprietaires_restants = {job.owner for job in self.jobs.values()}
+            for proprietaire in list(self.reinitialisations_sessions):
+                if proprietaire not in proprietaires_restants:
+                    self.reinitialisations_sessions.pop(proprietaire, None)
             if (self.data_dir / "scraptiktok.sqlite").exists():
                 from stockage.nettoyage import nettoyer_sessions
                 from stockage.base_donnees import BaseDonnees
@@ -5072,6 +5097,12 @@ def create_app(manager=None):
         from ticket_gate import verifier_session_active
         if not verifier_session_active(owner(request)):
             raise HTTPException(403, "Accès non actif. Reprenez un ticket dans la barre latérale.")
+
+    @app.post("/api/session/reinitialiser/{job_id}")
+    def reinitialiser_session_courante(job_id: str, request: Request):
+        exiger_ticket(request)
+        manager.reinitialiser_session(owner(request), job_id)
+        return {"ok": True}
 
     @app.post("/api/jobs", status_code=202)
     def start(payload: StartRequest, request: Request):
