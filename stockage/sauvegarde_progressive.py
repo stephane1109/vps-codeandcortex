@@ -57,6 +57,12 @@ def enregistrer_point(dossier_donnees, identifiant, proprietaire, etat, textes,
         "etat.json": json.dumps({k:v for k,v in manifeste.items() if k!="proprietaire_empreinte"},
                               ensure_ascii=False),
         "parametres.json": json.dumps(parametres or {}, ensure_ascii=False, allow_nan=False),
+        "parametres_collecte.txt": __import__(
+            "collecte.parametres_collecte",
+            fromlist=["generer_parametres_collecte"],
+        ).generer_parametres_collecte(
+            parametres or {}, identifiant=identifiant,
+            statut=str(etat.get("statut") or "en_cours")),
     }
     # La création se déroule dans le même dossier, évitant tout ZIP tronqué visible.
     with tempfile.NamedTemporaryFile(dir=cible.parent, prefix=".sauvegarde_",
