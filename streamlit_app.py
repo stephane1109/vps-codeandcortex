@@ -41,7 +41,7 @@ st.html("""<style>
 components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
                 height=0, scrolling=False)
 st.title("ScrapTikTok")
-st.caption("Appli en cours de dév - modifiée 27-10-2026")
+st.caption("version - 6-11-2026")
 
 session = st.context.cookies.get("scraptiktok_session", "")
 cookie_historique = st.context.cookies.get("scraptiktok_historique", "")
