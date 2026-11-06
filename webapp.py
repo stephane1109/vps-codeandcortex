@@ -1008,6 +1008,7 @@ class Job:
         self.limites_debug = {}
         self.commands = queue.Queue(maxsize=8)
         self.created = self.last_seen = time.monotonic()
+        self.date_lancement_utc = scraper.utc_now() if not self.historique else None
         self.finished = None
         self.busy = True
         self.status = "starting"
@@ -1477,6 +1478,19 @@ class Job:
             self.erreur_sauvegarde=None
             self.dernier_point_sauvegarde=point
             return point
+
+    def ecrire_parametres_collecte(self, statut=None):
+        """Écrire les critères sans secrets, indépendamment du moteur choisi."""
+        from collecte.parametres_collecte import generer_parametres_collecte
+        with self.lock:
+            contenu = generer_parametres_collecte(
+                self.settings, identifiant=self.id,
+                statut=statut or self.status,
+                date_lancement=self.date_lancement_utc,
+                journal=self.journal)
+        chemin = self.directory / "parametres_collecte.txt"
+        chemin.write_text(contenu, encoding="utf-8")
+        return contenu
 
     def save(self):
         # Les profils et captures ne sont jamais écrits dans les exports.
@@ -3014,6 +3028,12 @@ def execute_job(job: Job, driver_factory=scraper.create_driver):
         except OSError:
             LOG.exception("Écriture de l’export impossible")
             final_status, final_message = "failed", "Le serveur n’a pas pu enregistrer le fichier texte."
+        # Archiver les critères exacts dans chaque ZIP, quelle que soit la méthode.
+        try:
+            job.ecrire_parametres_collecte(statut=final_status)
+        except OSError:
+            LOG.exception("Écriture des paramètres de collecte impossible pour %s", job.id)
+            final_message += " Le fichier de paramètres n'a pas pu être écrit."
         if (job.settings.telecharger_mp4 and job.records
                 and not limitation_tiktok and not limitation_budget and not job.stop.is_set()):
             try:
@@ -4815,7 +4835,10 @@ def create_app(manager=None):
         from corpus.export_zip import archive_avec_texte
         contenu = job.texte_a_exporter(supprimer_arobase_profil).encode("utf-8")
         # Inclure les fichiers auparavant disponibles via des boutons séparés.
-        ajouts = {}
+        ajouts = {
+            "parametres_collecte.txt": job.ecrire_parametres_collecte()
+                .encode("utf-8")
+        }
         if job.settings.source_collecte == "hashtags" and job.journal:
             # Une ancienne archive peut ne pas contenir le bilan CSV.
             # Le reconstruire depuis le journal sans modifier les données
