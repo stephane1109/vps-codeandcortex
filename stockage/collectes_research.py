@@ -554,6 +554,14 @@ def exporter(dossier, identifiant, proprietaire, format_):
                 "journal_research.json": json.dumps(
                     journal_plan(dossier, identifiant, proprietaire),
                     ensure_ascii=False, indent=2).encode("utf-8"),
+                "parametres_collecte.txt": (
+                    __import__(
+                        "collecte.parametres_collecte",
+                        fromlist=["generer_parametres_collecte"]
+                    ).generer_parametres_collecte(
+                        options, identifiant=identifiant,
+                        statut="export d'un programme Research"
+                    ).encode("utf-8")),
             }.items():
                 archive.writestr(nom, contenu)
         return flux.getvalue()
