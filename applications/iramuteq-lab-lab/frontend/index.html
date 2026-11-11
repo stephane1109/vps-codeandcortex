@@ -483,6 +483,15 @@
                   <button class="secondary-button" id="specVarsTelecharger" type="button" hidden>Télécharger le CSV complet</button>
                 </div>
                 <p id="specVarsStatut" class="muted" role="status"></p>
+                <div class="form-grid" id="specVarsFiltres" hidden>
+                  <label>Modalité à examiner
+                    <select id="specVarsModalite"><option value="">Toutes les modalités</option></select>
+                  </label>
+                  <label class="check-option" for="specVarsSignificatif">
+                    <input id="specVarsSignificatif" type="checkbox" />
+                    <span>Afficher seulement les formes avec p ajustée ≤ 0,05</span>
+                  </label>
+                </div>
                 <div id="specVarsResultats" class="result-pane"></div>
               </article>
             </div>
