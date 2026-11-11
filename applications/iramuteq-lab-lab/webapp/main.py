@@ -465,6 +465,38 @@ async def create_specificities_analysis(analysis_id: str, request: Request) -> J
     return analysis_json_response({**result, "analysis": updated, "analysisId": updated["id"]}, owner_token)
 
 
+@app.post("/api/analyses/{analysis_id}/specificities/variables")
+async def calculer_specificites_etoilees(analysis_id: str, request: Request) -> JSONResponse:
+    """Calcul indépendant, sans modifier la route historique des spécificités."""
+    owner_hash, owner_token = analysis_history.owner_for_request(request)
+    record, snapshot = sync_owned_analysis(owner_hash, analysis_id, include_files=False)
+    if str(record.get("analysisKind") or "") != "chd":
+        raise HTTPException(status_code=409, detail="Sélectionnez une analyse CHD.")
+    if not snapshot.get("completed") or not snapshot.get("success"):
+        raise HTTPException(status_code=409, detail="La CHD doit être terminée.")
+
+    try:
+        options = await request.json()
+    except (json.JSONDecodeError, ValueError) as erreur:
+        raise HTTPException(status_code=400, detail="Paramètres de comparaison invalides.") from erreur
+    if not isinstance(options, dict):
+        raise HTTPException(status_code=400, detail="Paramètres de comparaison invalides.")
+
+    from .specificites_variables import calculer_specificites_variables
+    try:
+        source_rds = runtime._specificities_source_path(owned_output_dir(record, snapshot))
+        resultat = calculer_specificites_variables(
+            str(source_rds),
+            str(options.get("variable") or "").strip(),
+            str(options.get("index") or "hypergeo").strip(),
+        )
+    except FileNotFoundError as erreur:
+        raise HTTPException(status_code=404, detail=str(erreur)) from erreur
+    except (ValueError, RuntimeError) as erreur:
+        raise HTTPException(status_code=400, detail=str(erreur)) from erreur
+    return analysis_json_response(resultat, owner_token)
+
+
 @app.get("/api/analyses/{analysis_id}/chronology/options")
 def chronology_options(analysis_id: str, request: Request) -> JSONResponse:
     owner_hash, owner_token = analysis_history.owner_for_request(request)
