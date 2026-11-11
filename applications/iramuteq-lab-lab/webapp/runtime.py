@@ -1255,16 +1255,13 @@ def run_specificities_analysis(
     term: str,
     variable: str,
     index: str = "hypergeo",
-    all_terms: bool = False,
 ) -> dict[str, Any]:
     source_path = _specificities_source_path(parent_output_dir)
     safe_term = str(term or "").strip()
     safe_variable = str(variable or "").strip()
     safe_index = str(index or "hypergeo").strip().lower()
-    if not safe_term and not all_terms:
+    if not safe_term:
         raise ValueError("Le terme sélectionné est vide.")
-    if all_terms and not safe_variable.startswith("*"):
-        raise ValueError("Sélectionnez une variable étoilée pour comparer toutes les formes.")
     if not safe_variable:
         raise ValueError("Sélectionnez une variable ou les classes CHD.")
     if safe_index not in {"hypergeo", "chi2"}:
@@ -1284,10 +1281,7 @@ def run_specificities_analysis(
             "state": "running",
             "progress": 20,
             "message": "Calcul des spécificités par modalité.",
-            "logs": [(
-                f"Comparaison de toutes les formes selon {safe_variable}."
-                if all_terms else f"Analyse des spécificités de « {safe_term} »."
-            )],
+            "logs": [f"Analyse des spécificités de « {safe_term} »."],
             "created_at": started_at,
             "updated_at": started_at,
         },
@@ -1295,7 +1289,7 @@ def run_specificities_analysis(
 
     process = _run_specificities_r(
         [
-            "--mode", "variables" if all_terms else "calculate",
+            "--mode", "calculate",
             "--source", str(source_path),
             "--output-dir", str(export_dir),
             "--term", safe_term,
@@ -1327,8 +1321,7 @@ def run_specificities_analysis(
 
     summary = payload.get("summary") or {}
     logs = [
-        (f"Spécificités de toutes les formes selon {safe_variable}."
-         if all_terms else f"Spécificités calculées pour « {safe_term} »."),
+        f"Spécificités calculées pour « {safe_term} ».",
         f"Variable : {summary.get('variable_label') or safe_variable}.",
         f"Indice : {summary.get('index_label') or safe_index}.",
     ]
