@@ -16,6 +16,14 @@ lib_target <- Sys.getenv("IRAMUTEQ_R_LIBS_USER", unset = "")
 ))))
 
 
+# La matrice enregistrée dans le RDS est une dgCMatrix (classe S4).
+# Charger explicitement Matrix avant readRDS() pour enregistrer les méthodes S4
+# de sous-indexation dans ce processus R indépendant.
+if (!requireNamespace("Matrix", quietly = TRUE)) {
+  stop("Le package R Matrix est nécessaire au calcul des spécificités par variables.")
+}
+suppressPackageStartupMessages(library(Matrix))
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 4L) stop("Arguments requis : source.rds, variable, indice, sortie.")
 source_path <- normalizePath(args[[1L]], mustWork = TRUE)
