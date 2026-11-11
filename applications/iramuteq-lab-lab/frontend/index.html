@@ -455,7 +455,16 @@
                 <div id="specificitiesSummary" class="result-pane"></div>
               </article>
               <article class="card">
-                <h3>Terme sélectionné par modalité</h3>
+                <h3>Terme sélectionné ou formes lexicales par modalité</h3>
+                <div class="form-grid" id="specificitiesVariablesFilters" hidden>
+                  <label>Modalité
+                    <select id="specificitiesVariablesModalite"><option value="">Toutes les modalités</option></select>
+                  </label>
+                  <label>
+                    <input id="specificitiesVariablesSignificatif" type="checkbox" />
+                    Afficher uniquement les formes avec p ajustée ≤ 0,05
+                  </label>
+                </div>
                 <div id="specificitiesTermTable" class="result-pane"></div>
               </article>
               <article class="card">
