@@ -70,6 +70,12 @@ const specificitiesDialogMeta = document.getElementById("specificitiesDialogMeta
 const specificitiesVariable = document.getElementById("specificitiesVariable");
 const specificitiesIndex = document.getElementById("specificitiesIndex");
 const specificitiesDialogStatus = document.getElementById("specificitiesDialogStatus");
+const specificitiesDialogResults = document.getElementById("specificitiesDialogResults");
+const specificitiesDialogResultTitle = document.getElementById("specificitiesDialogResultTitle");
+const specificitiesDialogResultSummary = document.getElementById("specificitiesDialogResultSummary");
+const specificitiesDialogResultTable = document.getElementById("specificitiesDialogResultTable");
+const specificitiesDialogResultGraph = document.getElementById("specificitiesDialogResultGraph");
+const specificitiesDialogArchive = document.getElementById("specificitiesDialogArchive");
 const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
 const openChronologyDialogBtn = document.getElementById("openChronologyDialogBtn");
@@ -10761,8 +10767,91 @@ function closeTermSegmentsDialog() {
   }
 }
 
+function viderResultatsMotDialogue() {
+  if (specificitiesDialogResults) specificitiesDialogResults.hidden = true;
+  specificitiesDialogResultSummary?.replaceChildren();
+  specificitiesDialogResultTable?.replaceChildren();
+  specificitiesDialogResultGraph?.replaceChildren();
+  if (specificitiesDialogArchive) {
+    specificitiesDialogArchive.hidden = true;
+    specificitiesDialogArchive.removeAttribute("href");
+  }
+}
+
+function afficherResultatsMotDialogue(payload, terme, variable, index) {
+  // Les données proviennent exclusivement de la route historique d'un mot.
+  const fichiers = Array.isArray(payload?.files) ? payload.files : [];
+  const trouver = (nom) => fichiers.find((fichier) =>
+    String(fichier?.relativePath || "").split("/").pop() === nom
+  );
+  const fichierTableau = trouver("specificites_terme_modalites.csv");
+  const fichierGraphique = trouver("graphique_specificites.png");
+  const resume = payload?.summary || {};
+
+  if (String(resume.term || "") !== terme ||
+      String(resume.variable || "") !== variable ||
+      String(resume.index || "") !== index) {
+    throw new Error("Le serveur a renvoyé des spécificités qui ne correspondent pas au mot sélectionné.");
+  }
+  if (fichierTableau?.encoding !== "utf8" ||
+      fichierGraphique?.encoding !== "base64" ||
+      !fichierGraphique?.data) {
+    throw new Error("Les résultats du mot sont incomplets : tableau CSV ou graphique manquant.");
+  }
+
+  viderResultatsMotDialogue();
+  if (specificitiesDialogResultTitle) {
+    specificitiesDialogResultTitle.textContent = `Spécificités de « ${terme} » par ${resume.variable_label || variable}`;
+  }
+  if (specificitiesDialogResultSummary) {
+    const informations = [
+      ["Mot", terme],
+      ["Modalités comparées", resume.variable_label || variable],
+      ["Indice", resume.index_label || index],
+      ["Nombre de modalités", resume.n_modalities],
+      ["Modalité la plus spécifique", resume.best_modality],
+      ["Score maximal", resume.best_score]
+    ];
+    informations.forEach(([intitule, valeur]) => {
+      const carte = document.createElement("article");
+      carte.className = "summary-card";
+      const titre = document.createElement("p");
+      titre.className = "summary-label";
+      titre.textContent = intitule;
+      const detail = document.createElement("strong");
+      detail.className = "summary-value";
+      detail.textContent = formatSummaryValue(valeur);
+      carte.append(titre, detail);
+      specificitiesDialogResultSummary.appendChild(carte);
+    });
+  }
+  const tableau = parseCsv(String(fichierTableau.data || ""));
+  if (!tableau.headers.length || !tableau.rows.length) {
+    throw new Error("Aucun résultat lexical disponible pour ce mot.");
+  }
+  renderTable(specificitiesDialogResultTable, tableau, {
+    title: "specificites_terme_modalites.csv",
+    maxRows: 500,
+    emptyMessage: "Aucune spécificité calculée pour ce mot."
+  });
+
+  const image = document.createElement("img");
+  image.src = `data:image/png;base64,${fichierGraphique.data}`;
+  image.alt = `Graphique des spécificités de « ${terme} » selon les modalités sélectionnées`;
+  image.className = "specificities-dialog-chart";
+  specificitiesDialogResultGraph?.appendChild(image);
+
+  const identifiant = String(payload?.analysisId || payload?.analysis?.id || "").trim();
+  if (identifiant && specificitiesDialogArchive) {
+    specificitiesDialogArchive.href = `/api/analyses/${encodeURIComponent(identifiant)}/archive`;
+    specificitiesDialogArchive.hidden = false;
+  }
+  if (specificitiesDialogResults) specificitiesDialogResults.hidden = false;
+}
+
 function closeSpecificitiesDialog() {
   appState.specificitiesRequest = null;
+  viderResultatsMotDialogue();
   if (specificitiesDialog?.open) specificitiesDialog.close();
 }
 
@@ -10783,6 +10872,7 @@ async function openSpecificitiesDialog(classLabel, term) {
   const normalizedTerm = String(term || "").trim();
   const normalizedClass = normalizeClassValue(classLabel);
   appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass };
+  viderResultatsMotDialogue();
   if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = `Calcul de spécificités de « ${normalizedTerm} »`;
   if (specificitiesDialogMeta) {
     specificitiesDialogMeta.textContent = `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
@@ -10847,15 +10937,17 @@ async function runSpecificitiesFromDialog() {
     entry.artifacts = Array.isArray(payload?.files) ? payload.files : [];
     entry.summary = payload?.summary || entry.summary;
     entry.logs = Array.isArray(payload?.logs) ? payload.logs : entry.logs;
+    // Inscrire le calcul dans l'historique sans remplacer la CHD active ni naviguer.
+    const chdActive = appState.activeAnalysisHistoryId;
     rememberAnalysisHistoryEntry(entry);
-    appState.outputDir = entry.outputDir;
-    const virtualFiles = entry.artifacts.map((artifact) =>
-      createVirtualFileFromArtifact(artifact, entry.folderName || entry.jobId || entry.id)
-    );
-    await handleExportsFolderSelection(virtualFiles, "specificites");
-    renderAnalysisSteps(entry.logs);
-    renderAnalysisSummary(entry.summary || null);
-    closeSpecificitiesDialog();
+    appState.activeAnalysisHistoryId = chdActive;
+    renderAnalysisHistory();
+
+    // Le calcul du mot reste visible dans SA boîte, indépendamment des variables étoilées.
+    if (appState.specificitiesRequest === request && specificitiesDialog?.open) {
+      afficherResultatsMotDialogue(payload, request.term, variable, index);
+      setSpecificitiesDialogStatus(`Spécificités de « ${request.term} » calculées. Tableau et graphique affichés ci-dessous.`);
+    }
     setSidebarRuntimeStatus("Analyse des spécificités terminée.", "success");
     log(`[info] Spécificités de « ${request.term} » ajoutées à l'arborescence.`);
   } catch (error) {
