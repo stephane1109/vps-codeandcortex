@@ -1380,6 +1380,15 @@
         </aside>
 
         <p id="specificitiesDialogStatus" class="muted"></p>
+        <section id="specificitiesDialogResults" class="specificities-dialog-results" aria-live="polite" hidden>
+          <h3 id="specificitiesDialogResultTitle">Résultats des spécificités du mot</h3>
+          <div id="specificitiesDialogResultSummary" class="summary-grid"></div>
+          <div id="specificitiesDialogResultTable" class="result-pane"></div>
+          <div id="specificitiesDialogResultGraph" class="result-pane"></div>
+          <div class="dialog-footer-actions">
+            <a id="specificitiesDialogArchive" class="secondary-button" href="#" hidden>Télécharger les résultats du mot (ZIP)</a>
+          </div>
+        </section>
         <footer class="dialog-footer">
           <div class="dialog-footer-actions">
             <button id="runSpecificitiesBtn" class="primary-button" type="button">Calculer les spécificités</button>
@@ -1487,7 +1496,7 @@
     </dialog>
 
     <script src="./web-runtime.js"></script>
-    <script type="module" src="./app.js?v=20261111-historique-reset"></script>
+    <script type="module" src="./app.js?v=20261111-mot-dans-dialogue"></script>
     <script type="module" src="./specifilexicalevariables.js?v=20261111-historique-reset"></script>
   </body>
 </html>
