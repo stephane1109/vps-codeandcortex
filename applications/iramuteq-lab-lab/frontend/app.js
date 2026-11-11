@@ -72,7 +72,6 @@ const specificitiesIndex = document.getElementById("specificitiesIndex");
 const specificitiesDialogStatus = document.getElementById("specificitiesDialogStatus");
 const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
-const openSpecificitiesVariablesBtn = document.getElementById("openSpecificitiesVariablesBtn");
 const openChronologyDialogBtn = document.getElementById("openChronologyDialogBtn");
 const chronologyDialog = document.getElementById("chronologyDialog");
 const chronologyMode = document.getElementById("chronologyMode");
@@ -10764,14 +10763,9 @@ function setSpecificitiesDialogStatus(message, { isError = false } = {}) {
   specificitiesDialogStatus.classList.toggle("is-error", Boolean(isError));
 }
 
-async function openSpecificitiesDialog(classLabel, term, { allTerms = false } = {}) {
-  const activeId = String(appState.activeAnalysisHistoryId || "").trim();
-  const active = appState.analysisHistory.find((item) => String(item.id) === activeId);
-  const entry = allTerms && active?.analysisKind !== "chd"
-    ? [...appState.analysisHistory].reverse().find((item) =>
-        item?.persisted && item.analysisKind === "chd")
-    : active;
-  const analysisId = String(entry?.id || "").trim();
+async function openSpecificitiesDialog(classLabel, term) {
+  const analysisId = String(appState.activeAnalysisHistoryId || "").trim();
+  const entry = appState.analysisHistory.find((item) => String(item.id) === analysisId);
   if (!analysisId || !entry?.persisted || entry.analysisKind !== "chd") {
     log("[error] Le calcul des spécificités nécessite une CHD conservée dans l'arborescence.");
     return;
@@ -10779,14 +10773,10 @@ async function openSpecificitiesDialog(classLabel, term, { allTerms = false } = 
 
   const normalizedTerm = String(term || "").trim();
   const normalizedClass = normalizeClassValue(classLabel);
-  appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass, allTerms };
-  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = allTerms
-    ? "Spécificités de toutes les formes par variable étoilée"
-    : `Calcul de spécificités de « ${normalizedTerm} »`;
+  appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass };
+  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = `Calcul de spécificités de « ${normalizedTerm} »`;
   if (specificitiesDialogMeta) {
-    specificitiesDialogMeta.textContent = allTerms
-      ? "Choisissez la variable étoilée : toutes les formes du corpus seront comparées entre ses modalités."
-      : `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
+    specificitiesDialogMeta.textContent = `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
   }
   if (specificitiesVariable) specificitiesVariable.innerHTML = "";
   if (runSpecificitiesBtn) runSpecificitiesBtn.disabled = true;
@@ -10801,10 +10791,7 @@ async function openSpecificitiesDialog(classLabel, term, { allTerms = false } = 
     const payload = await callAnalysisHistoryApi(
       `/api/analyses/${encodeURIComponent(analysisId)}/specificities/options`
     );
-    const variablesDisponibles = Array.isArray(payload?.variables) ? payload.variables : [];
-    const variables = allTerms
-      ? variablesDisponibles.filter((variable) => String(variable?.id || "").startsWith("*"))
-      : variablesDisponibles;
+    const variables = Array.isArray(payload?.variables) ? payload.variables : [];
     variables.forEach((variable) => {
       const option = document.createElement("option");
       option.value = String(variable?.id || "");
@@ -10823,7 +10810,7 @@ async function openSpecificitiesDialog(classLabel, term, { allTerms = false } = 
 
 async function runSpecificitiesFromDialog() {
   const request = appState.specificitiesRequest;
-  if (!request?.analysisId || (!request?.term && !request?.allTerms)) return;
+  if (!request?.analysisId || !request?.term) return;
   const variable = String(specificitiesVariable?.value || "").trim();
   const index = String(specificitiesIndex?.value || "hypergeo").trim();
   if (!variable) {
@@ -10842,7 +10829,7 @@ async function runSpecificitiesFromDialog() {
       `/api/analyses/${encodeURIComponent(request.analysisId)}/specificities`,
       {
         method: "POST",
-        body: { term: request.term, variable, index, all_terms: Boolean(request.allTerms) }
+        body: { term: request.term, variable, index }
       }
     );
     const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
@@ -10861,9 +10848,7 @@ async function runSpecificitiesFromDialog() {
     renderAnalysisSummary(entry.summary || null);
     closeSpecificitiesDialog();
     setSidebarRuntimeStatus("Analyse des spécificités terminée.", "success");
-    log(request.allTerms
-      ? `[info] Spécificités de toutes les formes selon ${variable} ajoutées à l'arborescence.`
-      : `[info] Spécificités de « ${request.term} » ajoutées à l'arborescence.`);
+    log(`[info] Spécificités de « ${request.term} » ajoutées à l'arborescence.`);
   } catch (error) {
     setSpecificitiesDialogStatus(error?.message || String(error), { isError: true });
     log(`[error] Calcul des spécificités impossible : ${error?.message || String(error)}`);
@@ -15108,41 +15093,25 @@ async function renderSpecificitiesExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("resume_specificites.json")]);
   const tableFile = findFile(index, [(path) => path.endsWith("specificites_terme_modalites.csv")]);
   const plotFile = findFile(index, [(path) => path.endsWith("graphique_specificites.png")]);
-  const variablesSummaryFile = findFile(index, [
-    (path) => path.endsWith("resume_specificites_variables.json")
-  ]);
-  const variablesTableFile = findFile(index, [
-    (path) => path.endsWith("specificites_formes_variables.csv")
-  ]);
 
-  if (!summaryFile && !tableFile && !plotFile && !variablesSummaryFile && !variablesTableFile) {
+  if (!summaryFile && !tableFile && !plotFile) {
     setContainerEmptyState(resultContainers.specificitiesSummary, "Ouvrez une analyse de spécificités depuis l'arborescence.");
     setContainerEmptyState(resultContainers.specificitiesTermTable, "Aucun tableau de spécificités chargé.");
     setContainerEmptyState(resultContainers.specificitiesPlot, "Aucun graphique de spécificités chargé.");
     return false;
   }
 
-  if (summaryFile || variablesSummaryFile) {
-    const summary = JSON.parse(await (variablesSummaryFile || summaryFile).text());
-    const allTerms = Boolean(variablesSummaryFile);
+  if (summaryFile) {
+    const summary = JSON.parse(await summaryFile.text());
     clearContainer(resultContainers.specificitiesSummary);
-    const metrics = allTerms
-      ? [
-          ["Variable étoilée", summary.variable_label],
-          ["Indice", summary.index_label],
-          ["Nombre de modalités", summary.n_modalities],
-          ["Formes lexicales", summary.n_forms],
-          ["Comparaisons", summary.n_comparisons],
-          ["Occurrences analysées", summary.corpus_tokens]
-        ]
-      : [
-          ["Terme", summary.term],
-          ["Modalités comparées", summary.variable_label],
-          ["Indice", summary.index_label],
-          ["Nombre de modalités", summary.n_modalities],
-          ["Modalité la plus spécifique", summary.best_modality],
-          ["Score maximal", summary.best_score]
-        ];
+    const metrics = [
+      ["Terme", summary.term],
+      ["Modalités comparées", summary.variable_label],
+      ["Indice", summary.index_label],
+      ["Nombre de modalités", summary.n_modalities],
+      ["Modalité la plus spécifique", summary.best_modality],
+      ["Score maximal", summary.best_score]
+    ];
     const grid = document.createElement("div");
     grid.className = "summary-grid";
     metrics.forEach(([label, value]) => {
@@ -15160,70 +15129,20 @@ async function renderSpecificitiesExports(index) {
     resultContainers.specificitiesSummary.appendChild(grid);
   }
 
-  const filtresVariables = document.getElementById("specificitiesVariablesFilters");
-  if (filtresVariables) filtresVariables.hidden = !variablesTableFile;
-  if (tableFile || variablesTableFile) {
-    const selectedFile = variablesTableFile || tableFile;
-    const displayedTable = omitParsedColumns(parseCsv(await selectedFile.text()), [
+  if (tableFile) {
+    const displayedTable = omitParsedColumns(parseCsv(await tableFile.text()), [
       "tokens_modalite",
       "tokens_corpus",
       "frequence_relative_pour_mille"
     ]);
-    if (variablesTableFile) {
-      const selectModalite = document.getElementById("specificitiesVariablesModalite");
-      const caseSignificatif = document.getElementById("specificitiesVariablesSignificatif");
-      const indiceModalite = displayedTable.headers.indexOf("modalite");
-      const indiceP = displayedTable.headers.indexOf("p_ajustee_bh");
-      const modalites = [...new Set(displayedTable.rows.map((ligne) =>
-        String(ligne[indiceModalite] || "")))].filter(Boolean);
-      if (selectModalite) {
-        selectModalite.replaceChildren();
-        const toutes = document.createElement("option");
-        toutes.value = "";
-        toutes.textContent = "Toutes les modalités";
-        selectModalite.appendChild(toutes);
-        modalites.forEach((nom) => {
-          const option = document.createElement("option");
-          option.value = nom;
-          option.textContent = nom;
-          selectModalite.appendChild(option);
-        });
-        if (modalites.length) selectModalite.value = modalites[0];
-      }
-      if (caseSignificatif) caseSignificatif.checked = false;
-      const afficher = () => {
-        const modalite = String(selectModalite?.value || "");
-        const significatif = Boolean(caseSignificatif?.checked);
-        const lignesFiltrees = displayedTable.rows.filter((ligne) =>
-          (!modalite || ligne[indiceModalite] === modalite) &&
-          (!significatif || (indiceP >= 0 && Number(ligne[indiceP]) <= 0.05))
-        );
-        renderTable(resultContainers.specificitiesTermTable, {
-          headers: displayedTable.headers, rows: lignesFiltrees
-        }, {
-          title: "specificites_formes_variables.csv",
-          maxRows: 500,
-          emptyMessage: "Aucune forme ne satisfait aux filtres retenus."
-        });
-      };
-      if (selectModalite) selectModalite.onchange = afficher;
-      if (caseSignificatif) caseSignificatif.onchange = afficher;
-      afficher();
-    } else {
-      renderTable(resultContainers.specificitiesTermTable, displayedTable, {
-        title: "specificites_terme_modalites.csv",
-        maxRows: 500,
-        emptyMessage: "Aucun résultat de spécificité disponible."
-      });
-    }
+    renderTable(resultContainers.specificitiesTermTable, displayedTable, {
+      title: "specificites_terme_modalites.csv",
+      maxRows: 500,
+      emptyMessage: "Aucun résultat de spécificité disponible."
+    });
   }
-  if (plotFile) {
-    renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
-    makeResultImagePreviewable(resultContainers.specificitiesPlot, "Calcul de spécificités", "Lexicométrie");
-  } else {
-    setContainerEmptyState(resultContainers.specificitiesPlot,
-      "Comparaison de toutes les formes : consultez le tableau et exportez le CSV complet.");
-  }
+  renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
+  makeResultImagePreviewable(resultContainers.specificitiesPlot, "Calcul de spécificités", "Lexicométrie");
   return true;
 }
 
@@ -16361,10 +16280,6 @@ closeSpecificitiesBtn?.addEventListener("click", () => {
 
 runSpecificitiesBtn?.addEventListener("click", () => {
   void runSpecificitiesFromDialog();
-});
-
-openSpecificitiesVariablesBtn?.addEventListener("click", () => {
-  void openSpecificitiesDialog("", "", { allTerms: true });
 });
 
 openChronologyDialogBtn?.addEventListener("click", () => {
