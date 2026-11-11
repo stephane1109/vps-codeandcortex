@@ -1232,6 +1232,31 @@ textarea {
   line-height: 1.55;
 }
 
+.specificities-dialog-results {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 1.75rem 1.4rem;
+  min-width: 0;
+}
+
+.specificities-dialog-results[hidden] {
+  display: none;
+}
+
+.specificities-dialog-results .result-pane {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.specificities-dialog-chart {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
 #specificitiesDialogStatus.is-error,
 #chronologyDialogStatus.is-error,
 #distanceLabbeDialogStatus.is-error {
