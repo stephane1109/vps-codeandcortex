@@ -12,6 +12,7 @@ const zoneStatut = el("specVarsStatut");
 const zoneResultats = el("specVarsResultats");
 let contenuCsv = "";
 let chargement = false;
+const panneauSpecificites = document.querySelector('[data-panel="specificites"]');
 
 function afficherStatut(message, erreur = false) {
   if (!zoneStatut) return;
@@ -47,8 +48,13 @@ async function demanderJson(url, options = {}) {
 async function chargerVariables() {
   choixVariable.replaceChildren();
   ajouterOption(choixVariable, "", "Choisir une variable étoilée");
+  boutonCalculer.disabled = true;
   const identifiant = choixAnalyse.value;
-  if (!identifiant) return;
+  if (!identifiant) {
+    afficherStatut("Sélectionnez d'abord une CHD terminée.");
+    return;
+  }
+  afficherStatut("Lecture des variables étoilées de la CHD sélectionnée...");
   const resultat = await demanderJson(
     `/api/analyses/${encodeURIComponent(identifiant)}/specificities/options`
   );
@@ -62,10 +68,22 @@ async function chargerVariables() {
       `${variable.label || variable.id} (${modalites.join(" / ")})`
     );
   });
-  if (variables.length === 1) choixVariable.value = variables[0].id;
-  afficherStatut(variables.length
-    ? "Choisissez une variable puis lancez le calcul lexical complet."
-    : "Cette CHD ne contient pas de variable étoilée avec au moins deux modalités.");
+  if (variables.length) {
+    const source = variables.find((variable) => String(variable.id) === "*source");
+    choixVariable.value = String(source?.id || variables[0].id);
+    boutonCalculer.disabled = false;
+    afficherStatut(
+      `${variables.length} variable(s) étoilée(s) disponibles. ` +
+      "Vous pouvez changer la sélection puis calculer les spécificités."
+    );
+  } else {
+    afficherStatut(
+      "Cette CHD ne contient pas de variable étoilée avec au moins deux modalités. " +
+      "Vérifiez que les en-têtes contiennent par exemple *source_original " +
+      "et *source_ia, puis relancez une CHD sur ce corpus.",
+      true
+    );
+  }
 }
 
 async function chargerAnalyses() {
@@ -88,7 +106,8 @@ async function chargerAnalyses() {
     });
     if (analyses.some((analyse) => String(analyse.id) === anciennes)) {
       choixAnalyse.value = anciennes;
-    } else if (analyses.length === 1) {
+    } else if (analyses.length) {
+      // L'historique est trié par date décroissante : choisir la dernière CHD.
       choixAnalyse.value = String(analyses[0].id);
     }
     if (!analyses.length) {
@@ -231,3 +250,16 @@ boutonTelecharger?.addEventListener("click", () => {
 document.querySelector('[data-tab-target="specificites"]')?.addEventListener(
   "click", () => { void chargerAnalyses(); }
 );
+
+// L'onglet peut aussi être ouvert directement par le gestionnaire d'historique.
+// Observer son ouverture évite de laisser le menu de variables vide.
+if (panneauSpecificites) {
+  const observateur = new MutationObserver(() => {
+    if (!panneauSpecificites.hidden) void chargerAnalyses();
+  });
+  observateur.observe(panneauSpecificites, {
+    attributes: true,
+    attributeFilter: ["hidden"],
+  });
+  if (!panneauSpecificites.hidden) void chargerAnalyses();
+}
