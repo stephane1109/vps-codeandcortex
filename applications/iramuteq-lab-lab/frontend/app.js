@@ -72,6 +72,7 @@ const specificitiesIndex = document.getElementById("specificitiesIndex");
 const specificitiesDialogStatus = document.getElementById("specificitiesDialogStatus");
 const runSpecificitiesBtn = document.getElementById("runSpecificitiesBtn");
 const closeSpecificitiesBtn = document.getElementById("closeSpecificitiesBtn");
+const openSpecificitiesVariablesBtn = document.getElementById("openSpecificitiesVariablesBtn");
 const openChronologyDialogBtn = document.getElementById("openChronologyDialogBtn");
 const chronologyDialog = document.getElementById("chronologyDialog");
 const chronologyMode = document.getElementById("chronologyMode");
@@ -10763,9 +10764,14 @@ function setSpecificitiesDialogStatus(message, { isError = false } = {}) {
   specificitiesDialogStatus.classList.toggle("is-error", Boolean(isError));
 }
 
-async function openSpecificitiesDialog(classLabel, term) {
-  const analysisId = String(appState.activeAnalysisHistoryId || "").trim();
-  const entry = appState.analysisHistory.find((item) => String(item.id) === analysisId);
+async function openSpecificitiesDialog(classLabel, term, { allTerms = false } = {}) {
+  const activeId = String(appState.activeAnalysisHistoryId || "").trim();
+  const active = appState.analysisHistory.find((item) => String(item.id) === activeId);
+  const entry = allTerms && active?.analysisKind !== "chd"
+    ? [...appState.analysisHistory].reverse().find((item) =>
+        item?.persisted && item.analysisKind === "chd")
+    : active;
+  const analysisId = String(entry?.id || "").trim();
   if (!analysisId || !entry?.persisted || entry.analysisKind !== "chd") {
     log("[error] Le calcul des spécificités nécessite une CHD conservée dans l'arborescence.");
     return;
@@ -10773,10 +10779,14 @@ async function openSpecificitiesDialog(classLabel, term) {
 
   const normalizedTerm = String(term || "").trim();
   const normalizedClass = normalizeClassValue(classLabel);
-  appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass };
-  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = `Calcul de spécificités de « ${normalizedTerm} »`;
+  appState.specificitiesRequest = { analysisId, term: normalizedTerm, classLabel: normalizedClass, allTerms };
+  if (specificitiesDialogTitle) specificitiesDialogTitle.textContent = allTerms
+    ? "Spécificités de toutes les formes par variable étoilée"
+    : `Calcul de spécificités de « ${normalizedTerm} »`;
   if (specificitiesDialogMeta) {
-    specificitiesDialogMeta.textContent = `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
+    specificitiesDialogMeta.textContent = allTerms
+      ? "Choisissez la variable étoilée : toutes les formes du corpus seront comparées entre ses modalités."
+      : `Terme significatif de la classe ${normalizedClass}. Choisissez les modalités à comparer.`;
   }
   if (specificitiesVariable) specificitiesVariable.innerHTML = "";
   if (runSpecificitiesBtn) runSpecificitiesBtn.disabled = true;
@@ -10791,7 +10801,10 @@ async function openSpecificitiesDialog(classLabel, term) {
     const payload = await callAnalysisHistoryApi(
       `/api/analyses/${encodeURIComponent(analysisId)}/specificities/options`
     );
-    const variables = Array.isArray(payload?.variables) ? payload.variables : [];
+    const variablesDisponibles = Array.isArray(payload?.variables) ? payload.variables : [];
+    const variables = allTerms
+      ? variablesDisponibles.filter((variable) => String(variable?.id || "").startsWith("*"))
+      : variablesDisponibles;
     variables.forEach((variable) => {
       const option = document.createElement("option");
       option.value = String(variable?.id || "");
@@ -10810,7 +10823,7 @@ async function openSpecificitiesDialog(classLabel, term) {
 
 async function runSpecificitiesFromDialog() {
   const request = appState.specificitiesRequest;
-  if (!request?.analysisId || !request?.term) return;
+  if (!request?.analysisId || (!request?.term && !request?.allTerms)) return;
   const variable = String(specificitiesVariable?.value || "").trim();
   const index = String(specificitiesIndex?.value || "hypergeo").trim();
   if (!variable) {
@@ -10829,7 +10842,7 @@ async function runSpecificitiesFromDialog() {
       `/api/analyses/${encodeURIComponent(request.analysisId)}/specificities`,
       {
         method: "POST",
-        body: { term: request.term, variable, index }
+        body: { term: request.term, variable, index, all_terms: Boolean(request.allTerms) }
       }
     );
     const entry = normalizePersistentAnalysisHistoryEntry(payload?.analysis);
@@ -10848,7 +10861,9 @@ async function runSpecificitiesFromDialog() {
     renderAnalysisSummary(entry.summary || null);
     closeSpecificitiesDialog();
     setSidebarRuntimeStatus("Analyse des spécificités terminée.", "success");
-    log(`[info] Spécificités de « ${request.term} » ajoutées à l'arborescence.`);
+    log(request.allTerms
+      ? `[info] Spécificités de toutes les formes selon ${variable} ajoutées à l'arborescence.`
+      : `[info] Spécificités de « ${request.term} » ajoutées à l'arborescence.`);
   } catch (error) {
     setSpecificitiesDialogStatus(error?.message || String(error), { isError: true });
     log(`[error] Calcul des spécificités impossible : ${error?.message || String(error)}`);
@@ -16280,6 +16295,10 @@ closeSpecificitiesBtn?.addEventListener("click", () => {
 
 runSpecificitiesBtn?.addEventListener("click", () => {
   void runSpecificitiesFromDialog();
+});
+
+openSpecificitiesVariablesBtn?.addEventListener("click", () => {
+  void openSpecificitiesDialog("", "", { allTerms: true });
 });
 
 openChronologyDialogBtn?.addEventListener("click", () => {
