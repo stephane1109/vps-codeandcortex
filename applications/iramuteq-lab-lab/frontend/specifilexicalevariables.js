@@ -105,14 +105,35 @@ async function chargerAnalyses() {
 
 function afficherTableau(entetes, lignes, resume) {
   zoneResultats.replaceChildren();
+  const blocFiltres = el("specVarsFiltres");
+  const choixModalite = el("specVarsModalite");
+  const caseSignificatif = el("specVarsSignificatif");
+  const indiceModalite = entetes.indexOf("modalite");
+  const indiceP = entetes.indexOf("p_ajustee_bh");
+
+  const modalites = Array.isArray(resume.modalities) && resume.modalities.length
+    ? resume.modalities
+    : [...new Set(lignes.map((ligne) => ligne[indiceModalite]))];
+  choixModalite.replaceChildren();
+  ajouterOption(choixModalite, "", "Toutes les modalités");
+  modalites.forEach((modalite) => {
+    ajouterOption(choixModalite, String(modalite), String(modalite));
+  });
+  caseSignificatif.checked = false;
+  blocFiltres.hidden = false;
+
   const metadonnees = document.createElement("p");
   metadonnees.textContent = (
     `${resume.variable_label || resume.variable || ""} : ` +
     `${resume.n_forms || 0} formes, ${resume.n_modalities || 0} modalités, ` +
     `${resume.n_comparisons || 0} comparaisons. ` +
-    `Aperçu des ${lignes.length} premières lignes ; le CSV contient tout.`
+    "Le tableau présente un aperçu équilibré entre modalités ; " +
+    "le fichier CSV exporté contient toutes les formes."
   );
   zoneResultats.appendChild(metadonnees);
+  const information = document.createElement("p");
+  information.className = "muted";
+  zoneResultats.appendChild(information);
 
   const conteneur = document.createElement("div");
   conteneur.className = "result-table-wrap";
@@ -128,18 +149,33 @@ function afficherTableau(entetes, lignes, resume) {
   entete.appendChild(ligneEntete);
   table.appendChild(entete);
   const corps = document.createElement("tbody");
-  lignes.forEach((ligne) => {
-    const tr = document.createElement("tr");
-    ligne.forEach((valeur) => {
-      const cellule = document.createElement("td");
-      cellule.textContent = String(valeur ?? "");
-      tr.appendChild(cellule);
-    });
-    corps.appendChild(tr);
-  });
   table.appendChild(corps);
   conteneur.appendChild(table);
   zoneResultats.appendChild(conteneur);
+
+  const actualiser = () => {
+    const modalite = choixModalite.value;
+    const seulementSignificatif = caseSignificatif.checked;
+    const retenues = lignes.filter((ligne) =>
+      (!modalite || String(ligne[indiceModalite]) === modalite) &&
+      (!seulementSignificatif ||
+       (indiceP >= 0 && Number(ligne[indiceP]) <= 0.05))
+    );
+    corps.replaceChildren();
+    retenues.forEach((ligne) => {
+      const tr = document.createElement("tr");
+      ligne.forEach((valeur) => {
+        const cellule = document.createElement("td");
+        cellule.textContent = String(valeur ?? "");
+        tr.appendChild(cellule);
+      });
+      corps.appendChild(tr);
+    });
+    information.textContent = `${retenues.length} ligne(s) affichée(s) dans l'aperçu.`;
+  };
+  choixModalite.onchange = actualiser;
+  caseSignificatif.onchange = actualiser;
+  actualiser();
 }
 
 async function lancerCalcul() {
