@@ -20,8 +20,33 @@ const choixNombreMots = el("specVarsNombreMots");
 let lignesGraphique = [];
 let variableGraphique = "";
 let contenuCsv = "";
-let chargement = false;
+let generationEtat = 0;
+let analyseDuDernierCalcul = "";
 const panneauSpecificites = document.querySelector('[data-panel="specificites"]');
+
+// Ne jamais conserver un tableau ou un graphique lié à une CHD supprimée.
+function viderResultatsSpecificites() {
+  contenuCsv = "";
+  lignesGraphique = [];
+  variableGraphique = "";
+  analyseDuDernierCalcul = "";
+  if (zoneResultats) zoneResultats.replaceChildren();
+  if (zoneGraphique) zoneGraphique.replaceChildren();
+  if (boutonTelecharger) boutonTelecharger.hidden = true;
+  if (optionsGraphique) optionsGraphique.hidden = true;
+
+  const filtres = el("specVarsFiltres");
+  const modalite = el("specVarsModalite");
+  const significatif = el("specVarsSignificatif");
+  if (filtres) filtres.hidden = true;
+  if (modalite) {
+    modalite.replaceChildren();
+    ajouterOption(modalite, "", "Toutes les modalités");
+  }
+  if (significatif) significatif.checked = false;
+  if (choixNombreMots) choixNombreMots.value = "25";
+  if (boutonCalculer) boutonCalculer.disabled = !choixAnalyse?.value || !choixVariable?.value;
+}
 
 function afficherStatut(message, erreur = false) {
   if (!zoneStatut) return;
@@ -54,7 +79,7 @@ async function demanderJson(url, options = {}) {
   return donnees;
 }
 
-async function chargerVariables() {
+async function chargerVariables(version = generationEtat) {
   choixVariable.replaceChildren();
   ajouterOption(choixVariable, "", "Choisir une variable étoilée");
   boutonCalculer.disabled = true;
@@ -67,6 +92,7 @@ async function chargerVariables() {
   const resultat = await demanderJson(
     `/api/analyses/${encodeURIComponent(identifiant)}/specificities/options`
   );
+  if (version !== generationEtat || identifiant !== choixAnalyse.value) return;
   const variables = (Array.isArray(resultat.variables) ? resultat.variables : [])
     .filter((variable) => String(variable?.id || "").startsWith("*"));
   variables.forEach((variable) => {
@@ -96,12 +122,14 @@ async function chargerVariables() {
 }
 
 async function chargerAnalyses() {
-  if (!choixAnalyse || chargement) return;
-  chargement = true;
+  if (!choixAnalyse) return;
+  // Chaque chargement plus récent invalide les réponses réseau précédentes.
+  const version = ++generationEtat;
   try {
     afficherStatut("Lecture des CHD enregistrées...");
-    const anciennes = choixAnalyse.value;
+    const ancienneAnalyse = choixAnalyse.value;
     const resultat = await demanderJson("/api/analyses");
+    if (version !== generationEtat) return;
     const analyses = (Array.isArray(resultat.analyses) ? resultat.analyses : [])
       .filter((analyse) =>
         analyse && analyse.analysisKind === "chd" &&
@@ -113,21 +141,25 @@ async function chargerAnalyses() {
       const libelle = String(analyse.corpusName || analyse.folderName || analyse.id);
       ajouterOption(choixAnalyse, String(analyse.id), libelle);
     });
-    if (analyses.some((analyse) => String(analyse.id) === anciennes)) {
-      choixAnalyse.value = anciennes;
+    if (analyses.some((analyse) => String(analyse.id) === ancienneAnalyse)) {
+      choixAnalyse.value = ancienneAnalyse;
     } else if (analyses.length) {
-      // L'historique est trié par date décroissante : choisir la dernière CHD.
+      // Choisir la dernière CHD terminée si la précédente a disparu.
       choixAnalyse.value = String(analyses[0].id);
     }
+    if (choixAnalyse.value !== ancienneAnalyse || !analyses.length) {
+      viderResultatsSpecificites();
+    }
     if (!analyses.length) {
-      afficherStatut("Aucune CHD terminée dans votre historique. Lancez d'abord une CHD.");
+      choixVariable.replaceChildren();
+      ajouterOption(choixVariable, "", "Aucune variable disponible");
+      boutonCalculer.disabled = true;
+      afficherStatut("Aucune CHD terminée dans l'historique. Les résultats des spécificités ont été réinitialisés.");
       return;
     }
-    await chargerVariables();
+    await chargerVariables(version);
   } catch (erreur) {
-    afficherStatut(erreur.message || String(erreur), true);
-  } finally {
-    chargement = false;
+    if (version === generationEtat) afficherStatut(erreur.message || String(erreur), true);
   }
 }
 
@@ -223,13 +255,11 @@ async function lancerCalcul() {
     afficherStatut("Sélectionnez une CHD et une variable étoilée.", true);
     return;
   }
+  const version = generationEtat;
+  const analyseInitiale = choixAnalyse.value;
   boutonCalculer.disabled = true;
-  boutonTelecharger.hidden = true;
-  contenuCsv = "";
-  lignesGraphique = [];
-  variableGraphique = "";
-  if (zoneGraphique) zoneGraphique.replaceChildren();
-  if (optionsGraphique) optionsGraphique.hidden = true;
+  viderResultatsSpecificites();
+  boutonCalculer.disabled = true;
   afficherStatut("Calcul indépendant des spécificités lexicales en cours...");
   try {
     const resultat = await demanderJson(
@@ -243,31 +273,34 @@ async function lancerCalcul() {
         }),
       }
     );
+    // Une suppression effectuée pendant le calcul rend sa réponse obsolète.
+    if (version !== generationEtat || analyseInitiale !== choixAnalyse.value) return;
     contenuCsv = String(resultat.csv || "");
+    analyseDuDernierCalcul = analyseInitiale;
     lignesGraphique = lireCsvSpecificites(contenuCsv);
     variableGraphique = String(resultat.summary?.variable || choixVariable.value);
     afficherTableau(resultat.headers || [], resultat.rows || [], resultat.summary || {});
     boutonTelecharger.hidden = !contenuCsv;
     afficherStatut("Calcul terminé. Le CSV complet est disponible au téléchargement.");
   } catch (erreur) {
-    afficherStatut(erreur.message || String(erreur), true);
+    if (version === generationEtat) afficherStatut(erreur.message || String(erreur), true);
   } finally {
-    boutonCalculer.disabled = false;
+    if (version === generationEtat) {
+      boutonCalculer.disabled = !choixAnalyse?.value || !choixVariable?.value;
+    }
   }
 }
 
 choixAnalyse?.addEventListener("change", () => {
-  chargerVariables().catch((erreur) => afficherStatut(erreur.message, true));
+  const version = ++generationEtat;
+  viderResultatsSpecificites();
+  chargerVariables(version).catch((erreur) => {
+    if (version === generationEtat) afficherStatut(erreur.message, true);
+  });
 });
 choixVariable?.addEventListener("change", () => {
-  if (zoneGraphique) zoneGraphique.replaceChildren();
-  if (zoneResultats) zoneResultats.replaceChildren();
-  if (optionsGraphique) optionsGraphique.hidden = true;
-  const filtres = el("specVarsFiltres");
-  if (filtres) filtres.hidden = true;
-  boutonTelecharger.hidden = true;
-  contenuCsv = "";
-  lignesGraphique = [];
+  ++generationEtat;
+  viderResultatsSpecificites();
 });
 boutonCalculer?.addEventListener("click", () => { void lancerCalcul(); });
 boutonTelecharger?.addEventListener("click", () => {
@@ -283,6 +316,28 @@ boutonTelecharger?.addEventListener("click", () => {
   lien.remove();
   URL.revokeObjectURL(adresse);
 });
+// La suppression d'une CHD annule aussi ses résultats lexicaux dérivés.
+window.addEventListener("iramuteq:historique-supprime", (evenement) => {
+  const supprimes = new Set(
+    (Array.isArray(evenement?.detail?.analysisIds) ? evenement.detail.analysisIds : [])
+      .map((identifiant) => String(identifiant))
+  );
+  if (supprimes.has(choixAnalyse?.value || "") ||
+      supprimes.has(analyseDuDernierCalcul)) {
+    ++generationEtat;
+    viderResultatsSpecificites();
+    if (choixAnalyse) choixAnalyse.value = "";
+    if (choixVariable) {
+      choixVariable.replaceChildren();
+      ajouterOption(choixVariable, "", "Choisir une variable étoilée");
+    }
+    if (boutonCalculer) boutonCalculer.disabled = true;
+    afficherStatut("La CHD de référence a été supprimée : tableau, graphique et export réinitialisés.");
+  }
+  // Réévaluer la liste, même après une suppression individuelle.
+  void chargerAnalyses();
+});
+
 document.querySelector('[data-tab-target="specificites"]')?.addEventListener(
   "click", () => { void chargerAnalyses(); }
 );
