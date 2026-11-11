@@ -15160,6 +15160,8 @@ async function renderSpecificitiesExports(index) {
     resultContainers.specificitiesSummary.appendChild(grid);
   }
 
+  const filtresVariables = document.getElementById("specificitiesVariablesFilters");
+  if (filtresVariables) filtresVariables.hidden = !variablesTableFile;
   if (tableFile || variablesTableFile) {
     const selectedFile = variablesTableFile || tableFile;
     const displayedTable = omitParsedColumns(parseCsv(await selectedFile.text()), [
@@ -15167,13 +15169,53 @@ async function renderSpecificitiesExports(index) {
       "tokens_corpus",
       "frequence_relative_pour_mille"
     ]);
-    renderTable(resultContainers.specificitiesTermTable, displayedTable, {
-      title: variablesTableFile
-        ? "specificites_formes_variables.csv"
-        : "specificites_terme_modalites.csv",
-      maxRows: 500,
-      emptyMessage: "Aucun résultat de spécificité disponible."
-    });
+    if (variablesTableFile) {
+      const selectModalite = document.getElementById("specificitiesVariablesModalite");
+      const caseSignificatif = document.getElementById("specificitiesVariablesSignificatif");
+      const indiceModalite = displayedTable.headers.indexOf("modalite");
+      const indiceP = displayedTable.headers.indexOf("p_ajustee_bh");
+      const modalites = [...new Set(displayedTable.rows.map((ligne) =>
+        String(ligne[indiceModalite] || "")))].filter(Boolean);
+      if (selectModalite) {
+        selectModalite.replaceChildren();
+        const toutes = document.createElement("option");
+        toutes.value = "";
+        toutes.textContent = "Toutes les modalités";
+        selectModalite.appendChild(toutes);
+        modalites.forEach((nom) => {
+          const option = document.createElement("option");
+          option.value = nom;
+          option.textContent = nom;
+          selectModalite.appendChild(option);
+        });
+        if (modalites.length) selectModalite.value = modalites[0];
+      }
+      if (caseSignificatif) caseSignificatif.checked = false;
+      const afficher = () => {
+        const modalite = String(selectModalite?.value || "");
+        const significatif = Boolean(caseSignificatif?.checked);
+        const lignesFiltrees = displayedTable.rows.filter((ligne) =>
+          (!modalite || ligne[indiceModalite] === modalite) &&
+          (!significatif || (indiceP >= 0 && Number(ligne[indiceP]) <= 0.05))
+        );
+        renderTable(resultContainers.specificitiesTermTable, {
+          headers: displayedTable.headers, rows: lignesFiltrees
+        }, {
+          title: "specificites_formes_variables.csv",
+          maxRows: 500,
+          emptyMessage: "Aucune forme ne satisfait aux filtres retenus."
+        });
+      };
+      if (selectModalite) selectModalite.onchange = afficher;
+      if (caseSignificatif) caseSignificatif.onchange = afficher;
+      afficher();
+    } else {
+      renderTable(resultContainers.specificitiesTermTable, displayedTable, {
+        title: "specificites_terme_modalites.csv",
+        maxRows: 500,
+        emptyMessage: "Aucun résultat de spécificité disponible."
+      });
+    }
   }
   if (plotFile) {
     renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
