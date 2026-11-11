@@ -1,6 +1,21 @@
 #!/usr/bin/env Rscript
 # Exécution indépendante du calcul historique de spécificité par terme.
 
+split_lib_paths <- function(value) {
+  if (is.null(value) || !length(value)) return(character(0))
+  parts <- trimws(unlist(strsplit(as.character(value[[1]]), .Platform$path.sep, fixed = TRUE), use.names = FALSE))
+  parts[nzchar(parts)]
+}
+
+lib_target <- Sys.getenv("IRAMUTEQ_R_LIBS_USER", unset = "")
+.libPaths(unique(Filter(dir.exists, c(
+  if (nzchar(lib_target)) lib_target else character(0),
+  split_lib_paths(Sys.getenv("IRAMUTEQ_R_SYSTEM_LIBS", unset = "")),
+  "/usr/lib/R/site-library", "/usr/lib/R/library",
+  "/usr/local/lib/R/site-library", "/usr/local/lib/R/library", .libPaths()
+))))
+
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 4L) stop("Arguments requis : source.rds, variable, indice, sortie.")
 source_path <- normalizePath(args[[1L]], mustWork = TRUE)
