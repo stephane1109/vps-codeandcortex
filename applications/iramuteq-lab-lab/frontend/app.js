@@ -10955,7 +10955,7 @@ async function runSpecificitiesFromDialog() {
     setSpecificitiesDialogStatus(error?.message || String(error), { isError: true });
     log(`[error] Calcul des spécificités impossible : ${error?.message || String(error)}`);
   } finally {
-    if (runSpecificitiesBtn) {
+    if (runSpecificitiesBtn && appState.specificitiesRequest === request) {
       runSpecificitiesBtn.disabled = false;
       runSpecificitiesBtn.textContent = "Calculer les spécificités";
     }
