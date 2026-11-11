@@ -1,0 +1,197 @@
+// Interface indépendante pour les spécificités de toutes les formes.
+// Ne modifie pas le gestionnaire historique des spécificités par terme.
+
+const el = (identifiant) => document.getElementById(identifiant);
+const choixAnalyse = el("specVarsAnalyse");
+const choixVariable = el("specVarsVariable");
+const choixIndice = el("specVarsIndice");
+const boutonCalculer = el("specVarsLancer");
+const boutonActualiser = el("specVarsActualiser");
+const boutonTelecharger = el("specVarsTelecharger");
+const zoneStatut = el("specVarsStatut");
+const zoneResultats = el("specVarsResultats");
+let contenuCsv = "";
+let chargement = false;
+
+function afficherStatut(message, erreur = false) {
+  if (!zoneStatut) return;
+  zoneStatut.textContent = String(message);
+  zoneStatut.classList.toggle("is-error", Boolean(erreur));
+}
+
+function ajouterOption(selecteur, valeur, libelle) {
+  const option = document.createElement("option");
+  option.value = valeur;
+  option.textContent = libelle;
+  selecteur.appendChild(option);
+}
+
+async function demanderJson(url, options = {}) {
+  const reponse = await fetch(url, {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...options,
+  });
+  let donnees;
+  try {
+    donnees = await reponse.json();
+  } catch (_erreur) {
+    throw new Error("Réponse inattendue du serveur.");
+  }
+  if (!reponse.ok) {
+    throw new Error(String(donnees?.detail || donnees?.message || "Erreur du serveur."));
+  }
+  return donnees;
+}
+
+async function chargerVariables() {
+  choixVariable.replaceChildren();
+  ajouterOption(choixVariable, "", "Choisir une variable étoilée");
+  const identifiant = choixAnalyse.value;
+  if (!identifiant) return;
+  const resultat = await demanderJson(
+    `/api/analyses/${encodeURIComponent(identifiant)}/specificities/options`
+  );
+  const variables = (Array.isArray(resultat.variables) ? resultat.variables : [])
+    .filter((variable) => String(variable?.id || "").startsWith("*"));
+  variables.forEach((variable) => {
+    const modalites = Array.isArray(variable.modalities) ? variable.modalities : [];
+    ajouterOption(
+      choixVariable,
+      String(variable.id),
+      `${variable.label || variable.id} (${modalites.join(" / ")})`
+    );
+  });
+  if (variables.length === 1) choixVariable.value = variables[0].id;
+  afficherStatut(variables.length
+    ? "Choisissez une variable puis lancez le calcul lexical complet."
+    : "Cette CHD ne contient pas de variable étoilée avec au moins deux modalités.");
+}
+
+async function chargerAnalyses() {
+  if (!choixAnalyse || chargement) return;
+  chargement = true;
+  try {
+    afficherStatut("Lecture des CHD enregistrées...");
+    const anciennes = choixAnalyse.value;
+    const resultat = await demanderJson("/api/analyses");
+    const analyses = (Array.isArray(resultat.analyses) ? resultat.analyses : [])
+      .filter((analyse) =>
+        analyse && analyse.analysisKind === "chd" &&
+        analyse.completed === true && analyse.success !== false
+      );
+    choixAnalyse.replaceChildren();
+    ajouterOption(choixAnalyse, "", "Sélectionner une CHD terminée");
+    analyses.forEach((analyse) => {
+      const libelle = String(analyse.corpusName || analyse.folderName || analyse.id);
+      ajouterOption(choixAnalyse, String(analyse.id), libelle);
+    });
+    if (analyses.some((analyse) => String(analyse.id) === anciennes)) {
+      choixAnalyse.value = anciennes;
+    } else if (analyses.length === 1) {
+      choixAnalyse.value = String(analyses[0].id);
+    }
+    if (!analyses.length) {
+      afficherStatut("Aucune CHD terminée dans votre historique. Lancez d'abord une CHD.");
+      return;
+    }
+    await chargerVariables();
+  } catch (erreur) {
+    afficherStatut(erreur.message || String(erreur), true);
+  } finally {
+    chargement = false;
+  }
+}
+
+function afficherTableau(entetes, lignes, resume) {
+  zoneResultats.replaceChildren();
+  const metadonnees = document.createElement("p");
+  metadonnees.textContent = (
+    `${resume.variable_label || resume.variable || ""} : ` +
+    `${resume.n_forms || 0} formes, ${resume.n_modalities || 0} modalités, ` +
+    `${resume.n_comparisons || 0} comparaisons. ` +
+    `Aperçu des ${lignes.length} premières lignes ; le CSV contient tout.`
+  );
+  zoneResultats.appendChild(metadonnees);
+
+  const conteneur = document.createElement("div");
+  conteneur.className = "result-table-wrap";
+  const table = document.createElement("table");
+  table.className = "result-table";
+  const entete = document.createElement("thead");
+  const ligneEntete = document.createElement("tr");
+  entetes.forEach((nom) => {
+    const cellule = document.createElement("th");
+    cellule.textContent = String(nom);
+    ligneEntete.appendChild(cellule);
+  });
+  entete.appendChild(ligneEntete);
+  table.appendChild(entete);
+  const corps = document.createElement("tbody");
+  lignes.forEach((ligne) => {
+    const tr = document.createElement("tr");
+    ligne.forEach((valeur) => {
+      const cellule = document.createElement("td");
+      cellule.textContent = String(valeur ?? "");
+      tr.appendChild(cellule);
+    });
+    corps.appendChild(tr);
+  });
+  table.appendChild(corps);
+  conteneur.appendChild(table);
+  zoneResultats.appendChild(conteneur);
+}
+
+async function lancerCalcul() {
+  if (!choixAnalyse.value || !choixVariable.value) {
+    afficherStatut("Sélectionnez une CHD et une variable étoilée.", true);
+    return;
+  }
+  boutonCalculer.disabled = true;
+  boutonTelecharger.hidden = true;
+  contenuCsv = "";
+  afficherStatut("Calcul indépendant des spécificités lexicales en cours...");
+  try {
+    const resultat = await demanderJson(
+      `/api/analyses/${encodeURIComponent(choixAnalyse.value)}/specificities/variables`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variable: choixVariable.value,
+          index: choixIndice.value,
+        }),
+      }
+    );
+    contenuCsv = String(resultat.csv || "");
+    afficherTableau(resultat.headers || [], resultat.rows || [], resultat.summary || {});
+    boutonTelecharger.hidden = !contenuCsv;
+    afficherStatut("Calcul terminé. Le CSV complet est disponible au téléchargement.");
+  } catch (erreur) {
+    afficherStatut(erreur.message || String(erreur), true);
+  } finally {
+    boutonCalculer.disabled = false;
+  }
+}
+
+choixAnalyse?.addEventListener("change", () => {
+  chargerVariables().catch((erreur) => afficherStatut(erreur.message, true));
+});
+boutonActualiser?.addEventListener("click", () => { void chargerAnalyses(); });
+boutonCalculer?.addEventListener("click", () => { void lancerCalcul(); });
+boutonTelecharger?.addEventListener("click", () => {
+  if (!contenuCsv) return;
+  const adresse = URL.createObjectURL(new Blob(
+    ["\ufeff", contenuCsv], { type: "text/csv;charset=utf-8" }
+  ));
+  const lien = document.createElement("a");
+  lien.href = adresse;
+  lien.download = "specificites_formes_variables.csv";
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  URL.revokeObjectURL(adresse);
+});
+document.querySelector('[data-tab-target="specificites"]')?.addEventListener(
+  "click", () => { void chargerAnalyses(); }
+);
