@@ -462,7 +462,6 @@
                   </label>
                 </div>
                 <div class="dialog-footer-actions">
-                  <button class="secondary-button" id="specVarsActualiser" type="button">Actualiser les CHD</button>
                   <button class="primary-button" id="specVarsLancer" type="button">Calculer toutes les formes</button>
                   <button class="secondary-button" id="specVarsTelecharger" type="button" hidden>Télécharger le CSV complet</button>
                 </div>
@@ -476,6 +475,16 @@
                     <span>Afficher seulement les formes avec p ajustée ≤ 0,05</span>
                   </label>
                 </div>
+                <div class="form-grid" id="specVarsGraphiqueOptions" hidden>
+                  <label>Nombre de mots sur le graphique
+                    <select id="specVarsNombreMots">
+                      <option value="15">15</option>
+                      <option value="25" selected>25</option>
+                      <option value="40">40</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="specVarsGraphique" class="result-pane" aria-label="Graphique des spécificités lexicales selon les modalités de la variable étoilée"></div>
                 <div id="specVarsResultats" class="result-pane"></div>
               </article>
               <article class="card section-card">
@@ -1479,6 +1488,6 @@
 
     <script src="./web-runtime.js"></script>
     <script type="module" src="./app.js?v=20261111-original-retabli"></script>
-    <script type="module" src="./specifilexicalevariables.js?v=20261111-auto-selection-2"></script>
+    <script type="module" src="./specifilexicalevariables.js?v=20261111-graphique"></script>
   </body>
 </html>
