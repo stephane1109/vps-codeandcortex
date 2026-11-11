@@ -1,3 +1,8 @@
+import {
+  lireCsvSpecificites,
+  dessinerGraphiqueSpecificites
+} from "./graphique_specificites_variables.js?v=20261111-carte";
+
 // Interface indépendante pour les spécificités de toutes les formes.
 // Ne modifie pas le gestionnaire historique des spécificités par terme.
 
@@ -6,10 +11,14 @@ const choixAnalyse = el("specVarsAnalyse");
 const choixVariable = el("specVarsVariable");
 const choixIndice = el("specVarsIndice");
 const boutonCalculer = el("specVarsLancer");
-const boutonActualiser = el("specVarsActualiser");
 const boutonTelecharger = el("specVarsTelecharger");
 const zoneStatut = el("specVarsStatut");
 const zoneResultats = el("specVarsResultats");
+const zoneGraphique = el("specVarsGraphique");
+const optionsGraphique = el("specVarsGraphiqueOptions");
+const choixNombreMots = el("specVarsNombreMots");
+let lignesGraphique = [];
+let variableGraphique = "";
 let contenuCsv = "";
 let chargement = false;
 const panneauSpecificites = document.querySelector('[data-panel="specificites"]');
@@ -127,6 +136,17 @@ function afficherTableau(entetes, lignes, resume) {
   const blocFiltres = el("specVarsFiltres");
   const choixModalite = el("specVarsModalite");
   const caseSignificatif = el("specVarsSignificatif");
+  const actualiserGraphique = () => {
+    if (!zoneGraphique || !lignesGraphique.length) return;
+    dessinerGraphiqueSpecificites(zoneGraphique, lignesGraphique, {
+      variable: variableGraphique,
+      nombreMots: Number(choixNombreMots?.value || 25),
+      modalite: choixModalite?.value || "",
+      significatifs: Boolean(caseSignificatif?.checked)
+    });
+  };
+  if (choixNombreMots) choixNombreMots.onchange = actualiserGraphique;
+  if (optionsGraphique) optionsGraphique.hidden = !lignesGraphique.length;
   const indiceModalite = entetes.indexOf("modalite");
   const indiceP = entetes.indexOf("p_ajustee_bh");
 
@@ -191,6 +211,7 @@ function afficherTableau(entetes, lignes, resume) {
       corps.appendChild(tr);
     });
     information.textContent = `${retenues.length} ligne(s) affichée(s) dans l'aperçu.`;
+    actualiserGraphique();
   };
   choixModalite.onchange = actualiser;
   caseSignificatif.onchange = actualiser;
@@ -205,6 +226,10 @@ async function lancerCalcul() {
   boutonCalculer.disabled = true;
   boutonTelecharger.hidden = true;
   contenuCsv = "";
+  lignesGraphique = [];
+  variableGraphique = "";
+  if (zoneGraphique) zoneGraphique.replaceChildren();
+  if (optionsGraphique) optionsGraphique.hidden = true;
   afficherStatut("Calcul indépendant des spécificités lexicales en cours...");
   try {
     const resultat = await demanderJson(
@@ -219,6 +244,8 @@ async function lancerCalcul() {
       }
     );
     contenuCsv = String(resultat.csv || "");
+    lignesGraphique = lireCsvSpecificites(contenuCsv);
+    variableGraphique = String(resultat.summary?.variable || choixVariable.value);
     afficherTableau(resultat.headers || [], resultat.rows || [], resultat.summary || {});
     boutonTelecharger.hidden = !contenuCsv;
     afficherStatut("Calcul terminé. Le CSV complet est disponible au téléchargement.");
@@ -232,7 +259,16 @@ async function lancerCalcul() {
 choixAnalyse?.addEventListener("change", () => {
   chargerVariables().catch((erreur) => afficherStatut(erreur.message, true));
 });
-boutonActualiser?.addEventListener("click", () => { void chargerAnalyses(); });
+choixVariable?.addEventListener("change", () => {
+  if (zoneGraphique) zoneGraphique.replaceChildren();
+  if (zoneResultats) zoneResultats.replaceChildren();
+  if (optionsGraphique) optionsGraphique.hidden = true;
+  const filtres = el("specVarsFiltres");
+  if (filtres) filtres.hidden = true;
+  boutonTelecharger.hidden = true;
+  contenuCsv = "";
+  lignesGraphique = [];
+});
 boutonCalculer?.addEventListener("click", () => { void lancerCalcul(); });
 boutonTelecharger?.addEventListener("click", () => {
   if (!contenuCsv) return;
