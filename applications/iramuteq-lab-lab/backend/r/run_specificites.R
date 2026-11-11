@@ -36,7 +36,6 @@ if (!requireNamespace("jsonlite", quietly = TRUE) || !requireNamespace("Matrix",
   stop("Les packages R jsonlite et Matrix sont nécessaires.")
 }
 source(file.path(repo_root, "iramuteqlite", "calcul_specificites.R"), local = TRUE)
-source(file.path(repo_root, "iramuteqlite", "specifilexicalevariables.R"), local = TRUE)
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 mode <- trimws(as.character(args$mode %||% "describe"))
@@ -64,14 +63,6 @@ tryCatch({
       variable = variable,
       index = index,
       output_dir = output_dir
-    )
-    emit(list(success = TRUE, summary = result$summary, result = result$result))
-  } else if (identical(mode, "variables")) {
-    output_dir <- normalizePath(as.character(args[["output-dir"]] %||% ""), winslash = "/", mustWork = FALSE)
-    variable <- trimws(as.character(args$variable %||% ""))
-    index <- trimws(as.character(args$index %||% "hypergeo"))
-    result <- ecrire_specificites_lexicales_variables(
-      source = source_data, variable = variable, index = index, output_dir = output_dir
     )
     emit(list(success = TRUE, summary = result$summary, result = result$result))
   } else {
