@@ -10921,6 +10921,7 @@ async function runSpecificitiesFromDialog() {
     runSpecificitiesBtn.disabled = true;
     runSpecificitiesBtn.textContent = "Calcul en cours...";
   }
+  viderResultatsMotDialogue();
   setSpecificitiesDialogStatus("Construction du tableau lexical et calcul des spécificités...");
 
   try {
@@ -16381,6 +16382,14 @@ closeSpecificitiesBtn?.addEventListener("click", () => {
 
 runSpecificitiesBtn?.addEventListener("click", () => {
   void runSpecificitiesFromDialog();
+});
+
+// Un changement de modalités ou d'indice invalide le résultat du mot précédent.
+specificitiesVariable?.addEventListener("change", () => {
+  viderResultatsMotDialogue();
+});
+specificitiesIndex?.addEventListener("change", () => {
+  viderResultatsMotDialogue();
 });
 
 openChronologyDialogBtn?.addEventListener("click", () => {
