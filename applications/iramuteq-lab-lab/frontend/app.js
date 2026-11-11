@@ -1472,6 +1472,10 @@ async function deletePersistentAnalysisEntry(entry) {
   const confirmed = window.confirm(`Supprimer définitivement l'analyse « ${getAnalysisHistoryLabel(entry)} » et ses exports ?`);
   if (!confirmed) return;
   await callAnalysisHistoryApi(`/api/analyses/${encodeURIComponent(entry.analysisId)}`, { method: "DELETE" });
+  // Informer les modules complémentaires uniquement après une suppression confirmée.
+  window.dispatchEvent(new CustomEvent("iramuteq:historique-supprime", {
+    detail: { analysisIds: [String(entry.id)] }
+  }));
   const wasActive = appState.activeAnalysisHistoryId === entry.id;
   appState.analysisHistory = appState.analysisHistory.filter((current) => current.id !== entry.id);
   if (wasActive) {
@@ -1525,6 +1529,11 @@ async function purgePersistentAnalysisHistory() {
       setSidebarRuntimeStatus("Aucune analyse terminée à purger.", "warning");
       return;
     }
+
+    // Signaler la purge aux modules annexes sans modifier le calcul historique.
+    window.dispatchEvent(new CustomEvent("iramuteq:historique-supprime", {
+      detail: { analysisIds: [...deletedIds] }
+    }));
 
     const activeWasDeleted = deletedIds.has(String(appState.activeAnalysisHistoryId || ""));
     appState.analysisHistory = appState.analysisHistory.filter((entry) => !deletedIds.has(String(entry?.id || "")));
