@@ -22,7 +22,8 @@ function element(nom = "div") {
     appendChild(enfant) { this.children.push(enfant); },
     append(...enfants) { this.children.push(...enfants); },
     replaceChildren() { this.children = []; },
-    removeAttribute(cle) { delete this[cle]; }
+    removeAttribute(cle) { delete this[cle]; },
+    close() { this.open = false; }
   };
 }
 
