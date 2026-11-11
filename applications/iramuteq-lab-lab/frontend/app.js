@@ -15108,25 +15108,41 @@ async function renderSpecificitiesExports(index) {
   const summaryFile = findFile(index, [(path) => path.endsWith("resume_specificites.json")]);
   const tableFile = findFile(index, [(path) => path.endsWith("specificites_terme_modalites.csv")]);
   const plotFile = findFile(index, [(path) => path.endsWith("graphique_specificites.png")]);
+  const variablesSummaryFile = findFile(index, [
+    (path) => path.endsWith("resume_specificites_variables.json")
+  ]);
+  const variablesTableFile = findFile(index, [
+    (path) => path.endsWith("specificites_formes_variables.csv")
+  ]);
 
-  if (!summaryFile && !tableFile && !plotFile) {
+  if (!summaryFile && !tableFile && !plotFile && !variablesSummaryFile && !variablesTableFile) {
     setContainerEmptyState(resultContainers.specificitiesSummary, "Ouvrez une analyse de spécificités depuis l'arborescence.");
     setContainerEmptyState(resultContainers.specificitiesTermTable, "Aucun tableau de spécificités chargé.");
     setContainerEmptyState(resultContainers.specificitiesPlot, "Aucun graphique de spécificités chargé.");
     return false;
   }
 
-  if (summaryFile) {
-    const summary = JSON.parse(await summaryFile.text());
+  if (summaryFile || variablesSummaryFile) {
+    const summary = JSON.parse(await (variablesSummaryFile || summaryFile).text());
+    const allTerms = Boolean(variablesSummaryFile);
     clearContainer(resultContainers.specificitiesSummary);
-    const metrics = [
-      ["Terme", summary.term],
-      ["Modalités comparées", summary.variable_label],
-      ["Indice", summary.index_label],
-      ["Nombre de modalités", summary.n_modalities],
-      ["Modalité la plus spécifique", summary.best_modality],
-      ["Score maximal", summary.best_score]
-    ];
+    const metrics = allTerms
+      ? [
+          ["Variable étoilée", summary.variable_label],
+          ["Indice", summary.index_label],
+          ["Nombre de modalités", summary.n_modalities],
+          ["Formes lexicales", summary.n_forms],
+          ["Comparaisons", summary.n_comparisons],
+          ["Occurrences analysées", summary.corpus_tokens]
+        ]
+      : [
+          ["Terme", summary.term],
+          ["Modalités comparées", summary.variable_label],
+          ["Indice", summary.index_label],
+          ["Nombre de modalités", summary.n_modalities],
+          ["Modalité la plus spécifique", summary.best_modality],
+          ["Score maximal", summary.best_score]
+        ];
     const grid = document.createElement("div");
     grid.className = "summary-grid";
     metrics.forEach(([label, value]) => {
@@ -15144,20 +15160,28 @@ async function renderSpecificitiesExports(index) {
     resultContainers.specificitiesSummary.appendChild(grid);
   }
 
-  if (tableFile) {
-    const displayedTable = omitParsedColumns(parseCsv(await tableFile.text()), [
+  if (tableFile || variablesTableFile) {
+    const selectedFile = variablesTableFile || tableFile;
+    const displayedTable = omitParsedColumns(parseCsv(await selectedFile.text()), [
       "tokens_modalite",
       "tokens_corpus",
       "frequence_relative_pour_mille"
     ]);
     renderTable(resultContainers.specificitiesTermTable, displayedTable, {
-      title: "specificites_terme_modalites.csv",
+      title: variablesTableFile
+        ? "specificites_formes_variables.csv"
+        : "specificites_terme_modalites.csv",
       maxRows: 500,
       emptyMessage: "Aucun résultat de spécificité disponible."
     });
   }
-  renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
-  makeResultImagePreviewable(resultContainers.specificitiesPlot, "Calcul de spécificités", "Lexicométrie");
+  if (plotFile) {
+    renderImage(resultContainers.specificitiesPlot, plotFile, "Graphique des spécificités par modalité");
+    makeResultImagePreviewable(resultContainers.specificitiesPlot, "Calcul de spécificités", "Lexicométrie");
+  } else {
+    setContainerEmptyState(resultContainers.specificitiesPlot,
+      "Comparaison de toutes les formes : consultez le tableau et exportez le CSV complet.");
+  }
   return true;
 }
 
