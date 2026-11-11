@@ -444,33 +444,21 @@
               </div>
             </div>
             <div class="section-stack">
-              <article class="card section-card" id="specificitesHistoriqueBloc">
-                <h3>Calcul historique : spécificité d'un terme par modalité</h3>
-                <p class="section-copy">Calcul d'origine conservé : choisir un terme, les modalités de comparaison et l'indice hypergéométrique de Lafon ou χ². Le lancement depuis un terme significatif de CHD reste disponible.</p>
-                <div class="form-grid">
-                  <label>CHD de référence
-                    <select id="specTermeAnalyse"><option value="">Sélectionner une CHD terminée</option></select>
-                  </label>
-                  <label>Terme lexical
-                    <input id="specTermeMot" type="text" placeholder="Ex. violence" />
-                  </label>
-                  <label>Modalités à comparer
-                    <select id="specTermeVariable"><option value="">Sélectionner une variable</option></select>
-                  </label>
-                  <label>Indice
-                    <select id="specTermeIndice">
-                      <option value="hypergeo">Loi hypergéométrique (Lafon)</option>
-                      <option value="chi2">χ²</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="dialog-footer-actions">
-                  <button class="secondary-button" id="specTermeActualiser" type="button">Actualiser les CHD</button>
-                  <button class="primary-button" id="specTermeLancer" type="button">Calculer les spécificités du terme</button>
-                  <a id="specTermeArchive" class="secondary-button" href="#" hidden>Télécharger les résultats historiques (ZIP)</a>
-                </div>
-                <p id="specTermeStatut" class="muted" role="status"></p>
-                <div id="specTermeResultats" class="result-pane"></div>
+              <article class="card section-card">
+                <h3>Configuration</h3>
+                <div id="specificitiesSummary" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Terme sélectionné par modalité</h3>
+                <div id="specificitiesTermTable" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Graphique des spécificités</h3>
+                <div id="specificitiesPlot" class="result-pane"></div>
+              </article>
+              <article class="card">
+                <h3>Exports</h3>
+                <p class="section-copy">L’archive contient le tableau du terme sélectionné, la configuration du calcul et le graphique.</p>
               </article>
               <article class="card section-card" id="specificitesVariablesBloc">
                 <h3>Spécificités de toutes les formes par variable étoilée</h3>
@@ -496,22 +484,6 @@
                 </div>
                 <p id="specVarsStatut" class="muted" role="status"></p>
                 <div id="specVarsResultats" class="result-pane"></div>
-              </article>
-              <article class="card section-card">
-                <h3>Configuration</h3>
-                <div id="specificitiesSummary" class="result-pane"></div>
-              </article>
-              <article class="card">
-                <h3>Terme sélectionné par modalité</h3>
-                <div id="specificitiesTermTable" class="result-pane"></div>
-              </article>
-              <article class="card">
-                <h3>Graphique des spécificités</h3>
-                <div id="specificitiesPlot" class="result-pane"></div>
-              </article>
-              <article class="card">
-                <h3>Exports</h3>
-                <p class="section-copy">L’archive contient le tableau du terme sélectionné, la configuration du calcul et le graphique.</p>
               </article>
             </div>
           </section>
@@ -1498,6 +1470,5 @@
     <script src="./web-runtime.js"></script>
     <script type="module" src="./app.js?v=20261111-original-retabli"></script>
     <script type="module" src="./specifilexicalevariables.js?v=20261111-restauration"></script>
-    <script type="module" src="./specificites_historique_acces.js?v=20261111-historique"></script>
   </body>
 </html>
