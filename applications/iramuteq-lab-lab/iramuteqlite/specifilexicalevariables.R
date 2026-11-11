@@ -2,6 +2,14 @@
 # Ce module complète le calcul unitaire sans en modifier les fonctions.
 
 ecrire_specificites_lexicales_variables <- function(source, variable, index, output_dir) {
+  # La classe dgCMatrix nécessite les méthodes de sous-indexation du package Matrix.
+  # Ne dépendre ni du contexte de la CHD ni de l'ordre de chargement des modules R.
+  if (!requireNamespace("Matrix", quietly = TRUE)) {
+    stop("Le package Matrix est nécessaire aux spécificités par variables étoilées.")
+  }
+  if (!"package:Matrix" %in% search()) {
+    suppressPackageStartupMessages(library(Matrix))
+  }
   if (!is.character(variable) || length(variable) != 1L ||
       !startsWith(variable, "*")) {
     stop("Sélectionnez une variable étoilée, par exemple *source.")
