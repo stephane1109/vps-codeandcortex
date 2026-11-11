@@ -444,6 +444,31 @@
               </div>
             </div>
             <div class="section-stack">
+              <article class="card section-card" id="specificitesVariablesBloc">
+                <h3>Spécificités de toutes les formes par variable étoilée</h3>
+                <p class="section-copy">Calcul complémentaire indépendant. Le calcul historique d'un terme reste accessible depuis les termes d'une classe CHD.</p>
+                <div class="form-grid">
+                  <label>CHD de référence
+                    <select id="specVarsAnalyse"><option value="">Charger les analyses CHD...</option></select>
+                  </label>
+                  <label>Variable étoilée
+                    <select id="specVarsVariable"><option value="">Choisir une variable</option></select>
+                  </label>
+                  <label>Indice statistique
+                    <select id="specVarsIndice">
+                      <option value="hypergeo">Hypergéométrique (Lafon)</option>
+                      <option value="chi2">Chi²</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="dialog-footer-actions">
+                  <button class="secondary-button" id="specVarsActualiser" type="button">Actualiser les CHD</button>
+                  <button class="primary-button" id="specVarsLancer" type="button">Calculer toutes les formes</button>
+                  <button class="secondary-button" id="specVarsTelecharger" type="button" hidden>Télécharger le CSV complet</button>
+                </div>
+                <p id="specVarsStatut" class="muted" role="status"></p>
+                <div id="specVarsResultats" class="result-pane"></div>
+              </article>
               <article class="card section-card">
                 <h3>Configuration</h3>
                 <div id="specificitiesSummary" class="result-pane"></div>
@@ -1444,5 +1469,6 @@
 
     <script src="./web-runtime.js"></script>
     <script type="module" src="./app.js?v=20261006-labbe-source-script"></script>
+    <script type="module" src="./specifilexicalevariables.js?v=20261111-restauration"></script>
   </body>
 </html>
