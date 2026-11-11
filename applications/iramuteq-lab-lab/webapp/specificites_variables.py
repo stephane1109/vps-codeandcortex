@@ -8,7 +8,6 @@ import csv
 import io
 import json
 import subprocess
-from itertools import islice
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -65,7 +64,19 @@ def calculer_specificites_variables(source_rds: str, variable: str, indice: str)
         texte_csv = csv_path.read_text(encoding="utf-8")
         lecteur = csv.reader(io.StringIO(texte_csv))
         en_tetes = next(lecteur, [])
-        apercu = list(islice(lecteur, 1000))
+        if "modalite" not in en_tetes:
+            raise RuntimeError("La colonne des modalités manque dans le résultat statistique.")
+        indice_modalite = en_tetes.index("modalite")
+        nombre_modalites = max(1, int(resume.get("n_modalities", 1)))
+        limite_par_modalite = max(50, 1000 // nombre_modalites)
+        compteurs = {}
+        apercu = []
+        for ligne in lecteur:
+            modalite = ligne[indice_modalite]
+            nombre = compteurs.get(modalite, 0)
+            if nombre < limite_par_modalite:
+                apercu.append(ligne)
+                compteurs[modalite] = nombre + 1
         return {
             "success": True,
             "summary": resume,
