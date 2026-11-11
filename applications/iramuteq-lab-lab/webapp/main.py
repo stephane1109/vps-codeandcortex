@@ -437,7 +437,6 @@ async def create_specificities_analysis(analysis_id: str, request: Request) -> J
             term=str(payload.get("term") or ""),
             variable=str(payload.get("variable") or ""),
             index=str(payload.get("index") or "hypergeo"),
-            all_terms=payload.get("all_terms") is True,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
