@@ -1568,7 +1568,10 @@ async function activatePersistentAnalysisHistoryEntry(entry) {
 
   const currentEntry = refreshed.entry;
   const snapshot = refreshed.snapshot;
-  appState.activeAnalysisHistoryId = currentEntry.id;
+  // La réouverture d'un mot ne remplace jamais la CHD active.
+  if (currentEntry.analysisKind !== "specificites") {
+    appState.activeAnalysisHistoryId = currentEntry.id;
+  }
   renderAnalysisHistory();
 
   if (!snapshot?.completed) {
@@ -1600,6 +1603,12 @@ async function activatePersistentAnalysisHistoryEntry(entry) {
     restoredEntry.summary = payload?.snapshot?.summary || restoredEntry.summary;
     restoredEntry.logs = Array.isArray(payload?.snapshot?.logs) ? payload.snapshot.logs : restoredEntry.logs;
     replaceAnalysisHistoryEntry(restoredEntry);
+    if (restoredEntry.analysisKind === "specificites") {
+      afficherSpecificitesHistoriques(restoredEntry, artifacts);
+      setSidebarRuntimeStatus("Résultat du mot restauré dans sa boîte de dialogue.", "success");
+      renderAnalysisHistory();
+      return;
+    }
     appState.outputDir = restoredEntry.outputDir;
 
     const virtualFiles = artifacts.map((artifact) =>
@@ -1632,6 +1641,16 @@ async function activateAnalysisHistoryEntry(entryId) {
 
   if (!Array.isArray(entry.artifacts) || !entry.artifacts.length) {
     log("[error] Réouverture de l'analyse impossible : aucun export mémorisé.");
+    return;
+  }
+
+  if (entry.analysisKind === "specificites") {
+    try {
+      afficherSpecificitesHistoriques(entry, entry.artifacts);
+      renderAnalysisHistory();
+    } catch (erreur) {
+      log(`[error] Réouverture des spécificités du mot impossible : ${erreur?.message || String(erreur)}`);
+    }
     return;
   }
 
@@ -1844,7 +1863,7 @@ function renderAnalysisHistory() {
   });
 }
 
-function rememberAnalysisHistoryEntry(entry) {
+function rememberAnalysisHistoryEntry(entry, { activer = true } = {}) {
   const persisted = Boolean(entry?.persisted || entry?.analysisId);
   if (!entry || (!persisted && (!Array.isArray(entry.artifacts) || !entry.artifacts.length))) {
     return;
@@ -1877,7 +1896,7 @@ function rememberAnalysisHistoryEntry(entry) {
     normalizedEntry,
     ...appState.analysisHistory.filter((item) => item.id !== normalizedEntry.id)
   ];
-  appState.activeAnalysisHistoryId = normalizedEntry.id;
+  if (activer) appState.activeAnalysisHistoryId = normalizedEntry.id;
   renderAnalysisHistory();
 }
 
@@ -10849,6 +10868,46 @@ function afficherResultatsMotDialogue(payload, terme, variable, index) {
   if (specificitiesDialogResults) specificitiesDialogResults.hidden = false;
 }
 
+function afficherSpecificitesHistoriques(entree, fichiers) {
+  // Les spécificités d'un mot sont toujours restituées dans le dialogue.
+  const resume = entree?.summary || {};
+  const terme = String(resume.term || "").trim();
+  const variable = String(resume.variable || "").trim();
+  const indice = String(resume.index || "hypergeo").trim();
+  if (!terme || !variable) {
+    throw new Error("Les métadonnées du mot enregistré sont incomplètes.");
+  }
+
+  appState.specificitiesRequest = null;
+  viderResultatsMotDialogue();
+  if (specificitiesDialogTitle) {
+    specificitiesDialogTitle.textContent = `Spécificités de « ${terme} » (historique)`;
+  }
+  if (specificitiesDialogMeta) {
+    specificitiesDialogMeta.textContent = "Résultat conservé : le calcul initial n'est pas relancé.";
+  }
+  if (specificitiesVariable) {
+    specificitiesVariable.replaceChildren();
+    const option = document.createElement("option");
+    option.value = variable;
+    option.textContent = String(resume.variable_label || variable);
+    specificitiesVariable.appendChild(option);
+  }
+  if (specificitiesIndex) specificitiesIndex.value = indice;
+  if (runSpecificitiesBtn) runSpecificitiesBtn.disabled = true;
+  if (specificitiesDialog && !specificitiesDialog.open) {
+    if (typeof specificitiesDialog.showModal === "function") specificitiesDialog.showModal();
+    else if (typeof specificitiesDialog.show === "function") specificitiesDialog.show();
+  }
+
+  afficherResultatsMotDialogue({
+    analysisId: entree.analysisId || entree.id,
+    summary: resume,
+    files: fichiers
+  }, terme, variable, indice);
+  setSpecificitiesDialogStatus("Résultat du mot restauré depuis l'historique.");
+}
+
 function closeSpecificitiesDialog() {
   appState.specificitiesRequest = null;
   viderResultatsMotDialogue();
@@ -10938,11 +10997,8 @@ async function runSpecificitiesFromDialog() {
     entry.artifacts = Array.isArray(payload?.files) ? payload.files : [];
     entry.summary = payload?.summary || entry.summary;
     entry.logs = Array.isArray(payload?.logs) ? payload.logs : entry.logs;
-    // Inscrire le calcul dans l'historique sans remplacer la CHD active ni naviguer.
-    const chdActive = appState.activeAnalysisHistoryId;
-    rememberAnalysisHistoryEntry(entry);
-    appState.activeAnalysisHistoryId = chdActive;
-    renderAnalysisHistory();
+    // Enregistrer le mot sans activer l'entrée ni quitter la CHD.
+    rememberAnalysisHistoryEntry(entry, { activer: false });
 
     // Le calcul du mot reste visible dans SA boîte, indépendamment des variables étoilées.
     if (appState.specificitiesRequest === request && specificitiesDialog?.open) {
@@ -16380,7 +16436,10 @@ closeSpecificitiesBtn?.addEventListener("click", () => {
   closeSpecificitiesDialog();
 });
 
-runSpecificitiesBtn?.addEventListener("click", () => {
+runSpecificitiesBtn?.addEventListener("click", (evenement) => {
+  // Ne jamais déclencher une navigation via le clic du calcul lexical.
+  evenement.preventDefault();
+  evenement.stopPropagation();
   void runSpecificitiesFromDialog();
 });
 
