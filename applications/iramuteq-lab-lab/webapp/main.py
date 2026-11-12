@@ -284,6 +284,10 @@ def index(request: Request) -> HTMLResponse:
     if session_id:
         ticket_gate.apply_session_cookie_headers(response, session_id)
     response.headers["X-Ticket-Status"] = str(snapshot.get("statut") or "")
+    # Toujours récupérer la version actualisée du dialogue et des scripts.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
