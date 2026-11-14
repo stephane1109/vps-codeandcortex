@@ -3271,6 +3271,7 @@ function buildJobConfig(analysisKind = "chd") {
     spacy_batch_size: 64,
     lexique_utiliser_lemmes: effectiveUseLemmas,
     expression_utiliser_dictionnaire: document.getElementById("useExpressions").checked,
+    methode_dictionnaire_expressions: document.getElementById("expressionMethod").value,
     utiliser_add_expression: document.getElementById("useAnnotationExpressions").checked,
     expression_annotations: expressionAnnotations,
     nettoyage_caracteres: document.getElementById("cleanChars").checked,
@@ -13083,6 +13084,7 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setValue("rst2", manualReplayConfig.iramuteq_rst2);
       setValue("svdMethod", manualReplayConfig.iramuteq_svd_method);
       setValue("dictionarySource", manualReplayConfig.source_dictionnaire);
+      setValue("expressionMethod", manualReplayConfig.methode_dictionnaire_expressions);
       setValue("spacyModel", manualReplayConfig.spacy_model);
       setChecked("useLemmas", manualReplayConfig.lexique_utiliser_lemmes);
       setChecked("removePunctuation", manualReplayConfig.supprimer_ponctuation);
@@ -16603,6 +16605,7 @@ function updateSpacyOptionsVisibility(scope = document) {
   const spacyModel = findField("spacyModel");
   const useExpressions = findField("useExpressions");
   const useAnnotationExpressions = findField("useAnnotationExpressions");
+  const expressionMethod = findField("expressionMethod");
   const isSpacy = dictionarySelection.isSpacy;
   const hasBaseExpressions = source === "lexique_fr" || source === "lexique_en";
 
@@ -16626,6 +16629,9 @@ function updateSpacyOptionsVisibility(scope = document) {
     useAnnotationExpressions.disabled = source !== "lexique_fr";
     if (source !== "lexique_fr") useAnnotationExpressions.checked = false;
   }
+  if (expressionMethod instanceof HTMLSelectElement) {
+    expressionMethod.disabled = !hasBaseExpressions || !(useExpressions instanceof HTMLInputElement && useExpressions.checked);
+  }
 }
 
 document.getElementById("suiviEmotionLexicon")?.addEventListener("change", () => {
@@ -16648,10 +16654,10 @@ document.addEventListener("change", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const sourceId = target.dataset.sourceId || target.id;
-  if (sourceId !== "dictionarySource") return;
+  if (sourceId !== "dictionarySource" && sourceId !== "useExpressions") return;
   const scope = target.closest("#chdConfigDialogContent") || document;
   updateSpacyOptionsVisibility(scope);
-  renderMorphoPickers(scope);
+  if (sourceId === "dictionarySource") renderMorphoPickers(scope);
 });
 
 [
