@@ -922,6 +922,15 @@
           </div>
 
           <div class="field">
+            <label for="expressionMethod">Méthode d'application du dictionnaire d'expressions</label>
+            <select id="expressionMethod">
+              <option value="classique" selected>Native / classique</option>
+              <option value="aho_corasick">Aho-Corasick (présélection rapide)</option>
+            </select>
+            <p class="field-help">Aho-Corasick présélectionne les documents ; les substitutions sont toujours effectuées par le moteur classique, sans modifier le dictionnaire.</p>
+          </div>
+
+          <div class="field">
             <label class="check-option" for="useAnnotationExpressions">
               <input id="useAnnotationExpressions" type="checkbox" />
               <span>Ajouter le dictionnaire utilisateur add_expression_fr.csv</span>
