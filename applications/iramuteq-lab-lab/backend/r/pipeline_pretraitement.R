@@ -430,7 +430,18 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     )
 
     if (nrow(expressions_actives_df) > 0) {
-      remplacements_expr <- appliquer_dictionnaire_expressions(textes_orig, expressions_actives_df)
+      if (identical(scalar_chr(config$methode_dictionnaire_expressions, "classique"), "aho_corasick")) {
+        source(file.path(repo_root, "backend", "r", "methodeAho.R"), local = TRUE)
+        log_info("Dictionnaire d'expressions : méthode Aho-Corasick (présélection) et substitutions natives.", progress = 27)
+        remplacements_expr <- appliquer_dictionnaire_expressions_aho(
+          textes = textes_orig,
+          expressions_df = expressions_actives_df,
+          script_python = file.path(repo_root, "backend", "r", "methodeAho.py"),
+          appliquer_natif = appliquer_dictionnaire_expressions
+        )
+      } else {
+        remplacements_expr <- appliquer_dictionnaire_expressions(textes_orig, expressions_actives_df)
+      }
       textes_orig <- remplacements_expr$textes
       log_info(
         paste0(
