@@ -1,4 +1,4 @@
-"""Streamlit : codage de corpus IRaMuTeQ avec le modèle local Qwen3-4B."""
+"""Application Streamlit Qwen3-4B : prompt libre et codage structuré optionnel."""
 from __future__ import annotations
 
 import hashlib
@@ -13,14 +13,27 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from codage_qwen import CHAMPS_BOOLEENS, MODELE, URL_OLLAMA, coder_commentaire, verifier_service
-from lecture_iramuteq import analyser_corpus, exporter_csv, exporter_iramuteq, tableau_documents
+from codage_qwen import (
+    CHAMPS_BOOLEENS,
+    MODELE,
+    PROMPT_LIBRE_DEFAUT,
+    PROMPT_VIOLENCE_DEFAUT,
+    URL_OLLAMA,
+    coder_commentaire,
+    verifier_service,
+)
+from lecture_iramuteq import (
+    analyser_corpus,
+    exporter_csv,
+    exporter_iramuteq,
+    tableau_documents,
+)
 
-st.set_page_config(page_title="Qwen3-4B — codage discursif", layout="wide")
+st.set_page_config(page_title="Qwen3-4B — analyse de corpus", layout="wide")
 
 
 def authentifier() -> None:
-    """Contrôler le droit d'utiliser l'inférence CPU."""
+    """Empêcher l'accès non autorisé à l'inférence sur le VPS."""
     secret = os.getenv("APP_PASSWORD", "")
     if not secret:
         if os.getenv("APP_ALLOW_PUBLIC", "0") != "1":
@@ -33,79 +46,289 @@ def authentifier() -> None:
         st.stop()
 
 
-def archive_resultats(tableau: pd.DataFrame, documents, signature: str,
-                      parametres: dict[str, object]) -> bytes:
-    """Produire un ZIP unique exportable et réimportable pour reprise."""
-    # Éviter d'interpréter les échecs comme des réponses négatives.
-    categories = {}
-    def est_vrai(valeur: object) -> bool:
-        return bool(valeur) if pd.notna(valeur) else False
+def est_vrai(valeur: object) -> bool:
+    """Lire des booléens provenant de l'interface ou d'un CSV de reprise."""
+    if pd.isna(valeur):
+        return False
+    if isinstance(valeur, str):
+        return valeur.strip().lower() in ("true", "vrai", "1", "oui")
+    return bool(valeur)
 
-    for ligne in tableau.itertuples(index=False):
-        if ligne.statut_codage != "ok":
-            categorie = "indetermine"
-        elif est_vrai(ligne.interpretation_indeterminee):
-            categorie = "indetermine"
-        elif est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
-            categorie = "ambivalent"
-        elif est_vrai(ligne.violence_justifiee):
-            categorie = "justification"
-        elif est_vrai(ligne.violence_denoncee):
-            categorie = "denonciation"
-        elif est_vrai(ligne.violence_minimisee):
-            categorie = "minimisation"
-        elif est_vrai(ligne.violence_evoquee):
-            categorie = "evocation"
-        else:
-            categorie = "hors_violence"
-        categories[int(ligne.numero_document)] = categorie
+
+def categorie_document(ligne, mode_analyse: str) -> str:
+    """Conserver les anciennes catégories, ou signaler une analyse libre."""
+    if ligne.statut_codage != "ok":
+        return "indetermine"
+    if mode_analyse == "libre":
+        return "analyse_libre"
+    if est_vrai(ligne.interpretation_indeterminee):
+        return "indetermine"
+    if est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
+        return "ambivalent"
+    if est_vrai(ligne.violence_justifiee):
+        return "justification"
+    if est_vrai(ligne.violence_denoncee):
+        return "denonciation"
+    if est_vrai(ligne.violence_minimisee):
+        return "minimisation"
+    if est_vrai(ligne.violence_evoquee):
+        return "evocation"
+    return "hors_violence"
+
+
+def archive_resultats(
+    tableau: pd.DataFrame,
+    documents,
+    signature: str,
+    parametres: dict[str, object],
+) -> bytes:
+    """Créer une archive ZIP unique incluant toutes les lignes et le prompt."""
+    mode_analyse = str(parametres["mode_analyse"])
+    categories = {
+        int(ligne.numero_document): categorie_document(ligne, mode_analyse)
+        for ligne in tableau.itertuples(index=False)
+    }
     texte = exporter_iramuteq(documents, categories, "qwen_position")
+    colonnes_reponses = [
+        "numero_document", "texte", "reponse_qwen",
+        "statut_codage", "erreur_codage", "mode_analyse",
+    ]
+    reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
     tampon = io.BytesIO()
-    with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as zipf:
-        zipf.writestr("codage_commentaires.csv", exporter_csv(tableau))
-        zipf.writestr("corpus_qwen_iramuteq.txt", texte)
-        zipf.writestr("parametres.json", json.dumps({**parametres, "signature": signature}, indent=2, ensure_ascii=False))
+    with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
+        archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
+        archive.writestr("corpus_qwen_iramuteq.txt", texte)
+        archive.writestr(
+            "parametres.json",
+            json.dumps(
+                {**parametres, "signature": signature},
+                ensure_ascii=False, indent=2,
+            ),
+        )
     return tampon.getvalue()
 
 
-def initialiser_tableau(tableau: pd.DataFrame, signature: str) -> pd.DataFrame:
-    """Préparer toutes les lignes, y compris les commentaires vides."""
-    donnees = tableau.copy()
+def initialiser_tableau(
+    tableau: pd.DataFrame,
+    signature: str,
+    cle_configuration: str = "",
+) -> pd.DataFrame:
+    """Initialiser les résultats en conservant les textes et les métadonnées."""
+    donnees = tableau.copy().reset_index(drop=True)
     donnees["signature_corpus"] = signature
+    donnees["cle_configuration"] = cle_configuration
     donnees["statut_codage"] = "non_traite"
     for champ in CHAMPS_BOOLEENS:
-        donnees[champ] = pd.Series([pd.NA] * len(donnees), dtype="boolean")
-    for champ in ("acteur_cible", "indice_textuel", "justification", "erreur_codage"):
+        donnees[champ] = pd.Series(
+            [pd.NA] * len(donnees), index=donnees.index, dtype="boolean"
+        )
+    for champ in (
+        "acteur_cible", "indice_textuel", "justification",
+        "erreur_codage", "reponse_qwen", "mode_analyse",
+    ):
         donnees[champ] = ""
     for champ in ("texte_tronque", "contexte_tronque"):
-        donnees[champ] = pd.Series([pd.NA] * len(donnees), dtype="boolean")
-    donnees.loc[donnees["texte"].str.strip().eq(""), "statut_codage"] = "vide"
+        donnees[champ] = pd.Series(
+            [pd.NA] * len(donnees), index=donnees.index, dtype="boolean"
+        )
+    donnees.loc[
+        donnees["texte"].fillna("").astype(str).str.strip().eq(""),
+        "statut_codage",
+    ] = "vide"
     return donnees
 
 
-authentifier()
-st.title("Qwen3-4B — codage des discours sur la violence")
-st.caption("Modèle local via Ollama, avec catégories proposées par LLM et contrôle nécessaire par le chercheur.")
-st.info("Chaque commentaire est conservé dans le corpus. Les textes impossibles à coder et les erreurs restent identifiés. Les catégories dénonciation, justification et minimisation ne sont pas exclusives.")
-try:
-    informations = verifier_service()
-    disponibles = [modele.get("name", "") for modele in informations.get("models", [])]
-    if not any(nom == MODELE or nom.startswith(MODELE + ":") for nom in disponibles):
-        st.warning(f"Le service Ollama répond, mais le modèle {MODELE} n'est pas présent : lancer `ollama pull {MODELE}` dans le conteneur Ollama.")
-    else:
-        st.success(f"Ollama disponible : {MODELE}.")
-except requests.RequestException as erreur:
-    st.error(f"Service Ollama inaccessible ({URL_OLLAMA}) : {erreur}")
+def restaurer_checkpoint(
+    donnees: pd.DataFrame,
+    anciens: pd.DataFrame,
+    signature: str,
+    cle_configuration: str,
+    autoriser_ancien_format: bool = False,
+) -> pd.DataFrame:
+    """Restaurer sans mélanger les corpus et les prompts différents."""
+    colonnes_indispensables = (
+        "numero_document", "signature_corpus", "texte", "statut_codage"
+    )
+    if any(col not in anciens.columns for col in colonnes_indispensables):
+        raise ValueError("Colonnes de reprise incomplètes.")
+    if (
+        len(anciens) != len(donnees)
+        or anciens["signature_corpus"].nunique() != 1
+        or anciens["signature_corpus"].iloc[0] != signature
+        or not anciens["numero_document"].equals(donnees["numero_document"])
+        or not anciens["texte"].fillna("").equals(donnees["texte"].fillna(""))
+    ):
+        raise ValueError("Le CSV de reprise ne correspond pas au corpus actuel.")
 
-fichiers = st.file_uploader("Importer les fichiers IRaMuTeQ (.txt)", type=["txt"], accept_multiple_files=True)
+    if "cle_configuration" in anciens.columns:
+        if (
+            anciens["cle_configuration"].nunique() != 1
+            or anciens["cle_configuration"].iloc[0] != cle_configuration
+        ):
+            raise ValueError(
+                "Le prompt, le mode ou les paramètres diffèrent de ceux de la reprise."
+            )
+    elif not autoriser_ancien_format:
+        raise ValueError(
+            "Cet ancien CSV n'enregistre pas le prompt utilisé. "
+            "Reprise autorisée seulement avec la grille structurée historique."
+        )
+
+    restauration = donnees.copy()
+    champs_restaurables = (
+        "statut_codage", *CHAMPS_BOOLEENS,
+        "acteur_cible", "indice_textuel", "justification",
+        "erreur_codage", "texte_tronque", "contexte_tronque",
+        "reponse_qwen", "mode_analyse",
+    )
+    for champ in champs_restaurables:
+        if champ in anciens.columns:
+            valeurs = anciens[champ].reset_index(drop=True)
+            if champ in (*CHAMPS_BOOLEENS, "texte_tronque", "contexte_tronque"):
+                def convertir_booleen(valeur):
+                    if pd.isna(valeur) or str(valeur).strip() == "":
+                        return pd.NA
+                    return est_vrai(valeur)
+                restauration[champ] = pd.Series(
+                    [convertir_booleen(v) for v in valeurs], dtype="boolean"
+                )
+            elif champ in (
+                "acteur_cible", "indice_textuel", "justification",
+                "erreur_codage", "reponse_qwen", "mode_analyse",
+            ):
+                restauration[champ] = valeurs.fillna("").astype(str)
+            else:
+                restauration[champ] = valeurs
+    return restauration
+
+
+def lancer_analyse(
+    donnees: pd.DataFrame,
+    indices: list[int],
+    mode_analyse: str,
+    prompt: str,
+    contexte_general: str,
+    contexte_variables: list[str],
+    temperature: float,
+) -> tuple[int, int, bool]:
+    """Analyser automatiquement toutes les lignes sélectionnées, sans lots visibles."""
+    nombre_total = len(indices)
+    barre = st.progress(0, text="Préparation de l'analyse")
+    information = st.empty()
+    termines = 0
+    erreurs = 0
+    erreurs_consecutives = 0
+    interruption_service = False
+
+    with requests.Session() as session:
+        for position, indice in enumerate(indices, start=1):
+            ligne = donnees.loc[indice]
+            details = "\n".join(
+                f"{colonne}: {ligne[colonne]}"
+                for colonne in contexte_variables
+                if pd.notna(ligne.get(colonne))
+            )
+            contexte = (contexte_general + "\n" + details).strip()
+            try:
+                resultat = coder_commentaire(
+                    texte=str(ligne["texte"]),
+                    contexte=contexte,
+                    temperature=temperature,
+                    session=session,
+                    consigne=prompt,
+                    mode_analyse=mode_analyse,
+                )
+                for champ, valeur in resultat.items():
+                    donnees.at[indice, champ] = valeur
+                donnees.at[indice, "statut_codage"] = "ok"
+                donnees.at[indice, "erreur_codage"] = ""
+                termines += 1
+                erreurs_consecutives = 0
+            except (requests.RequestException, json.JSONDecodeError, ValueError, KeyError) as erreur:
+                type_erreur = (
+                    "erreur_service" if isinstance(erreur, requests.RequestException)
+                    else "sortie_invalide"
+                )
+                donnees.at[indice, "statut_codage"] = type_erreur
+                donnees.at[indice, "erreur_codage"] = (
+                    f"{type(erreur).__name__}: {str(erreur)[:300]}"
+                )
+                erreurs += 1
+                erreurs_consecutives += 1
+            barre.progress(
+                round(position * 100 / max(1, nombre_total)),
+                text=f"Commentaires examinés : {position} / {nombre_total}",
+            )
+            information.caption(
+                f"Analyses abouties : {termenes} ; erreurs : {erreurs}. "
+                "Les résultats déjà obtenus sont conservés dans la session."
+            )
+            st.session_state["qwen_donnees"] = donnees
+            if erreurs_consecutives >= 3:
+                interruption_service = True
+                break
+    barre.empty()
+    return termines, erreurs, interruption_service
+
+
+authentifier()
+
+st.title("Qwen3-4B — analyser un corpus avec votre prompt")
+st.caption(
+    "Qwen fonctionne avec vos consignes. Le modèle traite chaque commentaire "
+    "séparément et conserve le texte original."
+)
+mode_affichage = st.radio(
+    "Type d'analyse",
+    ["Analyse libre avec mon prompt", "Codage structuré sur la violence"],
+    horizontal=True,
+    help=(
+        "L'analyse libre produit une réponse textuelle pour chaque commentaire. "
+        "Le codage structuré conserve les catégories binaires historiques."
+    ),
+)
+mode_analyse = "libre" if mode_affichage.startswith("Analyse libre") else "structure"
+prompt = st.text_area(
+    "Prompt à transmettre à Qwen pour chaque commentaire",
+    value=(
+        PROMPT_LIBRE_DEFAUT if mode_analyse == "libre"
+        else PROMPT_VIOLENCE_DEFAUT
+    ),
+    key=f"qwen_prompt_{mode_analyse}",
+    height=230,
+    help=(
+        "Modifiez librement les instructions. En mode structuré, "
+        "les colonnes de codage restent fixes ; en mode libre, "
+        "la réponse du modèle est conservée dans reponse_qwen."
+    ),
+)
+if mode_analyse == "structure":
+    st.info(
+        "Le mode structuré conserve les colonnes historiques "
+        "violence_evoquee, violence_denoncee, violence_justifiee, "
+        "violence_minimisee et interpretation_indeterminee. "
+        "Pour toute autre grille de lecture, choisissez Analyse libre."
+    )
+if not prompt.strip():
+    st.error("Vous devez saisir un prompt avant de lancer l'analyse.")
+
+fichiers = st.file_uploader(
+    "Importer un ou plusieurs corpus IRaMuTeQ (.txt)",
+    type=["txt"], accept_multiple_files=True,
+)
 if not fichiers:
     st.stop()
+
 try:
     documents = []
     for fichier in fichiers:
-        extrait = analyser_corpus(fichier.getvalue())
+        extraits = analyser_corpus(fichier.getvalue())
         depart = len(documents)
-        documents.extend(replace(doc, numero=depart + indice + 1) for indice, doc in enumerate(extrait))
+        documents.extend(
+            replace(doc, numero=depart + numero + 1)
+            for numero, doc in enumerate(extraits)
+        )
     tableau = tableau_documents(documents)
 except ValueError as erreur:
     st.error(str(erreur))
@@ -113,95 +336,188 @@ except ValueError as erreur:
 
 signature = hashlib.sha256(b"\0".join(f.getvalue() for f in fichiers)).hexdigest()
 st.write(f"Documents importés : **{len(documents)}**")
-st.dataframe(tableau.head(20), use_container_width=True, hide_index=True)
+with st.expander("Aperçu des textes et variables", expanded=False):
+    st.dataframe(tableau.head(30), use_container_width=True, hide_index=True)
 
-with st.expander("Configuration du codage", expanded=True):
-    lots = st.number_input("Nombre de commentaires par lot", 1, 100, 20)
-    temperature = st.slider("Température du modèle", 0.0, 0.8, 0.2, 0.05)
-    contexte_general = st.text_area("Contexte analytique facultatif commun aux commentaires", height=100,
-                                    help="Décrivez éventuellement la vidéo analysée. Aucun contenu vidéo n'est récupéré automatiquement.")
+with st.expander("Paramètres complémentaires", expanded=False):
+    temperature = st.slider(
+        "Température du modèle", 0.0, 0.8, 0.2, 0.05
+    )
+    contexte_general = st.text_area(
+        "Contexte analytique facultatif commun aux commentaires",
+        height=100,
+        help="Aucune vidéo, image ou donnée sonore n'est récupérée automatiquement.",
+    )
     variables = [col for col in tableau if col.startswith("variable_")]
-    contexte_variables = st.multiselect("Variables étoilées incluses dans le contexte", variables,
-                                       help="Les métadonnées sont fournies au modèle comme contexte, mais ne doivent pas justifier une position sans indice textuel.")
-    montrer_uniquement_valides = st.checkbox("Afficher uniquement les codages aboutis", value=False)
+    contexte_variables = st.multiselect(
+        "Variables étoilées incluses dans le contexte",
+        variables,
+        help="Les métadonnées ne remplacent pas les indices textuels.",
+    )
+    montrer_uniquement_valides = st.checkbox(
+        "Afficher uniquement les analyses abouties", value=False
+    )
 
-configuration = {"modele": MODELE, "temperature": float(temperature),
-                 "contexte_general": contexte_general, "contexte_variables": contexte_variables,
-                 "signature_corpus": signature}
-cle = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode("utf-8")).hexdigest()
-checkpoint = st.file_uploader("Reprendre une analyse : importer le CSV codage_commentaires.csv précédemment exporté (facultatif)", type=["csv"], key="checkpoint")
+configuration = {
+    "modele": MODELE,
+    "mode_analyse": mode_analyse,
+    "prompt": prompt,
+    "temperature": float(temperature),
+    "contexte_general": contexte_general,
+    "contexte_variables": contexte_variables,
+    "signature_corpus": signature,
+}
+cle = hashlib.sha256(
+    json.dumps(configuration, sort_keys=True, ensure_ascii=False)
+    .encode("utf-8")
+).hexdigest()
 
 if st.session_state.get("qwen_cle") != cle:
     st.session_state["qwen_cle"] = cle
-    st.session_state["qwen_donnees"] = initialiser_tableau(tableau, signature)
+    st.session_state["qwen_donnees"] = initialiser_tableau(tableau, signature, cle)
+    st.session_state["qwen_message"] = ""
 
-if checkpoint is not None and st.button("Restaurer le CSV de reprise"):
+checkpoint = st.file_uploader(
+    "Reprendre une analyse : importer le CSV de résultats précédent (facultatif)",
+    type=["csv"], key="checkpoint",
+)
+if checkpoint is not None and st.button("Restaurer les résultats enregistrés"):
     try:
-        anciens = pd.read_csv(io.BytesIO(checkpoint.getvalue()), sep=";", encoding="utf-8-sig", dtype={"signature_corpus": str})
-        champs = ["numero_document", "signature_corpus", "texte", "statut_codage", *CHAMPS_BOOLEENS,
-                  "acteur_cible", "indice_textuel", "justification", "erreur_codage",
-                  "texte_tronque", "contexte_tronque"]
-        if any(champ not in anciens.columns for champ in champs):
-            raise ValueError("Colonnes de reprise incomplètes.")
-        if (len(anciens) != len(tableau) or anciens["signature_corpus"].nunique() != 1
-                or anciens["signature_corpus"].iloc[0] != signature
-                or not anciens["numero_document"].equals(tableau["numero_document"])):
-            raise ValueError("CSV de reprise incompatible avec le corpus courant.")
-        donnees = st.session_state["qwen_donnees"]
-        donnees.loc[:, [champ for champ in champs if champ not in ("numero_document", "signature_corpus", "texte")]] = anciens[
-            [champ for champ in champs if champ not in ("numero_document", "signature_corpus", "texte")]
-        ].to_numpy()
-        st.success("Codages restaurés. Les lignes non traitées peuvent être poursuivies.")
+        anciens = pd.read_csv(
+            io.BytesIO(checkpoint.getvalue()),
+            sep=";", encoding="utf-8-sig",
+            dtype={"signature_corpus": str, "cle_configuration": str},
+        )
+        compatible_ancien = (
+            mode_analyse == "structure" and prompt == PROMPT_VIOLENCE_DEFAUT
+        )
+        st.session_state["qwen_donnees"] = restaurer_checkpoint(
+            st.session_state["qwen_donnees"],
+            anciens,
+            signature,
+            cle,
+            autoriser_ancien_format=compatible_ancien,
+        )
+        st.success("Résultats restaurés. Vous pouvez poursuivre les analyses restantes.")
+        if "cle_configuration" not in anciens.columns:
+            st.warning(
+                "Cet ancien CSV ne contenait pas la consigne du modèle. "
+                "La compatibilité exacte du prompt historique ne peut pas être vérifiée."
+            )
     except (ValueError, pd.errors.ParserError) as erreur:
         st.error(f"Reprise impossible : {erreur}")
 
 donnees = st.session_state["qwen_donnees"]
 reste = donnees.index[donnees["statut_codage"].eq("non_traite")].tolist()
-erreurs = donnees.index[donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])].tolist()
-st.write(f"Codages aboutis : **{int(donnees['statut_codage'].eq('ok').sum())}** ; à traiter : **{len(reste)}** ; erreurs : **{len(erreurs)}**")
+erreurs = donnees.index[
+    donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])
+].tolist()
+aboutis = int(donnees["statut_codage"].eq("ok").sum())
+vides = int(donnees["statut_codage"].eq("vide").sum())
+st.write(
+    f"Analyses réalisées : **{aboutis}** ; "
+    f"à analyser : **{len(reste)}** ; "
+    f"en erreur : **{len(erreurs)}** ; "
+    f"textes vides : **{vides}**."
+)
+if st.session_state.get("qwen_message"):
+    st.info(st.session_state["qwen_message"])
 
-colonne_traitement, colonne_reprise = st.columns(2)
-traiter = colonne_traitement.button("Traiter le prochain lot", type="primary", disabled=not reste)
-reessayer = colonne_reprise.button("Réessayer un lot en erreur", disabled=not erreurs)
-if traiter or reessayer:
-    indices = (reste if traiter else erreurs)[:int(lots)]
-    barre = st.progress(0, text="Codage en cours")
-    with requests.Session() as session:
-        for position, indice in enumerate(indices):
-            ligne = donnees.loc[indice]
-            contexte_details = "\n".join(f"{colonne}: {ligne[colonne]}" for colonne in contexte_variables
-                                          if pd.notna(ligne.get(colonne)))
-            contexte = contexte_general + "\n" + contexte_details
-            try:
-                resultat = coder_commentaire(str(ligne["texte"]), contexte, float(temperature), session=session)
-                for champ, valeur in resultat.items():
-                    donnees.at[indice, champ] = valeur
-                donnees.at[indice, "statut_codage"] = "ok"
-                donnees.at[indice, "erreur_codage"] = ""
-            except (requests.RequestException, json.JSONDecodeError, ValueError, KeyError) as erreur:
-                donnees.at[indice, "statut_codage"] = "erreur_service" if isinstance(erreur, requests.RequestException) else "sortie_invalide"
-                donnees.at[indice, "erreur_codage"] = f"{type(erreur).__name__}: {str(erreur)[:300]}"
-            barre.progress(round((position + 1) / len(indices) * 100),
-                           text=f"Commentaire {position + 1}/{len(indices)}")
+try:
+    informations = verifier_service()
+    disponibles = [modele.get("name", "") for modele in informations.get("models", [])]
+    if not any(nom == MODELE or nom.startswith(MODELE + ":") for nom in disponibles):
+        st.warning(
+            f"Ollama répond, mais le modèle {MODELE} n'est pas encore présent. "
+            "Vérifiez le téléchargement dans Coolify."
+        )
+    else:
+        st.success(f"Modèle local disponible : {MODELE}.")
+except requests.RequestException as erreur:
+    st.error(f"Service Ollama inaccessible ({URL_OLLAMA}) : {erreur}")
+
+colonne_analyser, colonne_erreurs = st.columns(2)
+lancer = colonne_analyser.button(
+    "Analyser tous les commentaires restants",
+    type="primary", disabled=not reste or not prompt.strip(),
+)
+relancer = colonne_erreurs.button(
+    "Réessayer les commentaires en erreur",
+    disabled=not erreurs or not prompt.strip(),
+)
+if lancer or relancer:
+    indices = reste if lancer else erreurs
+    termines, nombre_erreurs, interrompu = lancer_analyse(
+        donnees,
+        indices,
+        mode_analyse,
+        prompt,
+        contexte_general,
+        contexte_variables,
+        float(temperature),
+    )
     st.session_state["qwen_donnees"] = donnees
+    if interrompu:
+        st.session_state["qwen_message"] = (
+            f"Analyse interrompue après trois erreurs consécutives : "
+            f"{termines} réussites et {nombre_erreurs} erreurs dans cette exécution. "
+            "Vérifiez Ollama, puis relancez les commentaires restants ou en erreur."
+        )
+    else:
+        st.session_state["qwen_message"] = (
+            f"Exécution terminée : {termines} analyses abouties, "
+            f"{nombre_erreurs} erreurs. Tous les résultats restent exportables."
+        )
     st.rerun()
 
 st.subheader("Résultats")
-vue = donnees.loc[donnees["statut_codage"].eq("ok")] if montrer_uniquement_valides else donnees
-st.dataframe(vue, hide_index=True, use_container_width=True)
-avec_resultat = donnees[donnees["statut_codage"].eq("ok")]
-if not avec_resultat.empty:
-    frequences = pd.Series({champ: int(avec_resultat[champ].fillna(False).sum()) for champ in CHAMPS_BOOLEENS})
+vue = (
+    donnees.loc[donnees["statut_codage"].eq("ok")]
+    if montrer_uniquement_valides else donnees
+)
+st.dataframe(vue.head(1000), hide_index=True, use_container_width=True)
+if len(vue) > 1000:
+    st.caption(
+        "Aperçu limité à 1 000 lignes pour préserver la fluidité de l'interface. "
+        "Le ZIP et le CSV contiennent toutes les lignes."
+    )
+
+avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
+if mode_analyse == "structure" and not avec_resultat.empty:
+    frequences = pd.Series({
+        champ: int(avec_resultat[champ].fillna(False).sum())
+        for champ in CHAMPS_BOOLEENS
+    })
     st.bar_chart(frequences, x_label="Catégorie", y_label="Commentaires codés")
-    variables_disponibles = [col for col in donnees if col.startswith("variable_")]
+    variables_disponibles = [
+        col for col in donnees if col.startswith("variable_")
+    ]
     if variables_disponibles:
-        variable = st.selectbox("Croiser un codage avec une variable du corpus", variables_disponibles)
-        categorie = st.selectbox("Catégorie à croiser", list(CHAMPS_BOOLEENS))
-        st.dataframe(pd.crosstab(avec_resultat[variable].fillna("absent"),
-                                avec_resultat[categorie].astype(str)), use_container_width=True)
+        variable = st.selectbox(
+            "Croiser un codage avec une variable du corpus",
+            variables_disponibles,
+        )
+        categorie = st.selectbox(
+            "Catégorie à croiser", list(CHAMPS_BOOLEENS)
+        )
+        st.dataframe(
+            pd.crosstab(
+                avec_resultat[variable].fillna("absent"),
+                avec_resultat[categorie].astype(str),
+            ),
+            use_container_width=True,
+        )
 
 archive = archive_resultats(donnees, documents, signature, configuration)
-st.download_button("Télécharger tous les résultats, même partiels (ZIP)", archive,
-                   file_name="resultats_qwen3_4b_iramuteq.zip", mime="application/zip")
-st.download_button("Télécharger le CSV de reprise", exporter_csv(donnees),
-                   file_name="codage_commentaires.csv", mime="text/csv")
+st.download_button(
+    "Télécharger tous les résultats, même partiels (ZIP)",
+    archive,
+    file_name="resultats_qwen3_4b_iramuteq.zip",
+    mime="application/zip",
+)
+st.download_button(
+    "Télécharger le CSV de reprise",
+    exporter_csv(donnees),
+    file_name="codage_commentaires.csv",
+    mime="text/csv",
+)
