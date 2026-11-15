@@ -54,6 +54,9 @@ my.svd <- function(x, nu, nv, libsvdc.path=NULL, sparse.path=NULL) {
 #from anacor package
 boostana<-function (tab, ndim = 2, svd.method = 'svdR', libsvdc.path=NULL) 
 {
+    # Préserver le calcul de l'AFC sur une matrice creuse dgCMatrix.
+    colSums <- Matrix::colSums
+    rowSums <- Matrix::rowSums
     #tab <- as.matrix(tab)
     if (ndim > min(dim(tab)) - 1) 
         stop("Too many dimensions!")

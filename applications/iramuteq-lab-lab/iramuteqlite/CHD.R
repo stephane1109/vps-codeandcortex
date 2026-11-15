@@ -57,6 +57,10 @@ find.max <- function(dtable, chitable, compte, rmax, maxinter, sc, TT) {
 
 
 CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
+    # Les matrices creuses nécessitent les méthodes de sommation du package Matrix.
+    # Utiliser explicitement ces méthodes sans modifier la représentation des données.
+    colSums <- Matrix::colSums
+    rowSums <- Matrix::rowSums
 #	sink('/home/pierre/workspace/iramuteq/dev/findchi2.txt')
 	dataori <- data.in
     row.names(dataori) <- rownames(data.in)
