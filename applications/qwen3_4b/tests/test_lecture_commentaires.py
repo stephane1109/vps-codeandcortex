@@ -14,10 +14,10 @@ class TestImportCommentaires(unittest.TestCase):
         contenu = (
             "nom_affiche;texte\n"
             'Beryl;"Rome, Milan et Turin en vrac."\n'
-            'julie;"l\\'Italie et la France aujourd\\'hui"\n'
+            "julie;\"l'Italie et la France aujourd'hui\"\n"
             'M@th_❤️💙;"Paname influence le monde"\n'
             "Cysko🇨🇫🇨🇦🇫🇷;Y a 1-1 merci la pluie\n"
-        ).replace("\\\\'", "'")
+        )
         documents, infos = analyser_commentaires_csv(contenu.encode("utf-8-sig"))
         self.assertEqual(len(documents), 4)
         self.assertEqual(documents[0].texte, "Rome, Milan et Turin en vrac.")
@@ -29,9 +29,9 @@ class TestImportCommentaires(unittest.TestCase):
     def test_csv_virgules_et_sauts_ligne(self):
         source = (
             'nom_affiche,texte\n'
-            'kray!!,"c\\'est partout comme ça"\n'
+            "kray!!,\"c'est partout comme ça\"\n"
             'Beryl,"Première ligne\nseconde ligne"\n'
-        ).replace("\\\\'", "'")
+        )
         documents, infos = analyser_commentaires_csv(source)
         self.assertEqual(documents[0].texte, "c'est partout comme ça")
         self.assertEqual(documents[1].texte, "Première ligne\nseconde ligne")
