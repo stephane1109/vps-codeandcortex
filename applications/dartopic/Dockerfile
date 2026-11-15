@@ -9,7 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/* && useradd -m -u 10001 app \
     && mkdir -p /data/huggingface /home/app/nltk_data && chown -R app:app /data /home/app
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt \
+# Installation des roues CPU : éviter les dépendances CUDA inutiles sur le VPS.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements.txt \
     && python -m nltk.downloader -d /usr/local/nltk_data stopwords
 ENV NLTK_DATA=/usr/local/nltk_data
 COPY . /app
