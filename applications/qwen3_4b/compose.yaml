@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
     mem_limit: 768m
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
     expose:
       - "11434"
     environment:
@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     mem_limit: 7g
   charger_modele:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
     entrypoint: ["/bin/sh", "-c"]
     command: ["until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull qwen3:4b-q4_K_M"]
     environment:
