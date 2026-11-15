@@ -59,6 +59,8 @@ def charger_mots_vides(
         try:
             from nltk.corpus import stopwords
             mots.update(stopwords.words("french"))
+            # Variantes orales fréquentes non systématiquement couvertes par NLTK.
+            mots.update({"ça", "ca", "cest"})
         except LookupError as erreur:
             raise RuntimeError(
                 "La liste NLTK française n'est pas installée. "
