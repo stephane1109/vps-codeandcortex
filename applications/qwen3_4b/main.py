@@ -271,6 +271,7 @@ def lancer_analyse(
                 interruption_service = True
                 break
     barre.empty()
+    information.empty()
     return termines, erreurs, interruption_service
 
 
@@ -459,64 +460,202 @@ st.write(
 if st.session_state.get("qwen_message"):
     st.info(st.session_state["qwen_message"])
 
+# Lancer une analyse uniquement lorsque l'API répond ET que le modèle est présent.
+service_disponible = False
 try:
     informations = verifier_service()
-    disponibles = [modele.get("name", "") for modele in informations.get("models", [])]
-    if not any(nom == MODELE or nom.startswith(MODELE + ":") for nom in disponibles):
-        st.warning(
-            f"Ollama répond, mais le modèle {MODELE} n'est pas encore présent. "
-            "Vérifiez le téléchargement dans Coolify."
-        )
+    modeles_disponibles = [
+        str(modele.get("name", "")) for modele in informations.get("models", [])
+    ]
+    service_disponible = any(
+        nom == MODELE or nom.startswith(MODELE + ":")
+        for nom in modeles_disponibles
+    )
+    if service_disponible:
+        st.success(f"Qwen est disponible et prêt à analyser les commentaires : {MODELE}.")
     else:
-        st.success(f"Modèle local disponible : {MODELE}.")
+        st.error(
+            f"Ollama répond, mais le modèle {MODELE} est absent. "
+            "Aucune analyse ne peut commencer : vérifiez le téléchargement "
+            "des poids Qwen dans le service charger_modele de Coolify."
+        )
 except requests.RequestException as erreur:
-    st.error(f"Service Ollama inaccessible ({URL_OLLAMA}) : {erreur}")
+    st.error(
+        f"Impossible de joindre Ollama ({URL_OLLAMA}) : {type(erreur).__name__} : {erreur}. "
+        "Vérifiez le service ollama dans Coolify ; les données CSV "
+        "ne constituent pas un résultat d'analyse."
+    )
 
-colonne_analyser, colonne_erreurs = st.columns(2)
+st.subheader("Lancer l'analyse")
+st.caption(
+    "Le bouton de test analyse un seul commentaire et affiche immédiatement "
+    "sa réponse. Le bouton principal analyse ensuite automatiquement "
+    "tous les commentaires restants, sans intervention par lots."
+)
+colonne_test, colonne_analyser, colonne_erreurs = st.columns([1, 2, 1])
+tester = colonne_test.button(
+    "Tester sur un commentaire",
+    disabled=not reste or not prompt.strip() or not service_disponible,
+)
 lancer = colonne_analyser.button(
     "Analyser tous les commentaires restants",
-    type="primary", disabled=not reste or not prompt.strip(),
+    type="primary",
+    disabled=not reste or not prompt.strip() or not service_disponible,
 )
 relancer = colonne_erreurs.button(
     "Réessayer les commentaires en erreur",
-    disabled=not erreurs or not prompt.strip(),
+    disabled=not erreurs or not prompt.strip() or not service_disponible,
 )
-if lancer or relancer:
-    indices = reste if lancer else erreurs
+if tester or lancer or relancer:
+    indices = reste[:1] if tester else (reste if lancer else erreurs)
     termines, nombre_erreurs, interrompu = lancer_analyse(
-        donnees,
-        indices,
-        mode_analyse,
-        prompt,
-        contexte_general,
-        contexte_variables,
-        float(temperature),
+        donnees, indices, mode_analyse, prompt,
+        contexte_general, contexte_variables, float(temperature),
     )
     st.session_state["qwen_donnees"] = donnees
     if interrompu:
         st.session_state["qwen_message"] = (
             f"Analyse interrompue après trois erreurs consécutives : "
-            f"{termines} réussites et {nombre_erreurs} erreurs dans cette exécution. "
-            "Vérifiez Ollama, puis relancez les commentaires restants ou en erreur."
+            f"{termines} réussites et {nombre_erreurs} erreurs. "
+            "Consultez la rubrique Erreurs de Qwen et vérifiez Ollama."
+        )
+    elif nombre_erreurs:
+        st.session_state["qwen_message"] = (
+            f"{termines} analyse(s) aboutie(s), {nombre_erreurs} erreur(s). "
+            "Les détails techniques sont visibles dans la rubrique Erreurs de Qwen."
         )
     else:
         st.session_state["qwen_message"] = (
-            f"Exécution terminée : {termines} analyses abouties, "
-            f"{nombre_erreurs} erreurs. Tous les résultats restent exportables."
+            f"{termines} commentaire(s) analysé(s) avec succès. "
+            "Les réponses sont affichées ci-dessous."
         )
     st.rerun()
 
-st.subheader("Résultats")
-vue = (
-    donnees.loc[donnees["statut_codage"].eq("ok")]
-    if montrer_uniquement_valides else donnees
-)
-st.dataframe(vue.head(1000), hide_index=True, use_container_width=True)
-if len(vue) > 1000:
-    st.caption(
-        "Aperçu limité à 1 000 lignes pour préserver la fluidité de l'interface. "
-        "Le ZIP et le CSV contiennent toutes les lignes."
+st.subheader("Réponses produites par Qwen")
+reponses_valides = donnees.loc[
+    donnees["statut_codage"].eq("ok")
+    & donnees["reponse_qwen"].fillna("").astype(str).str.strip().ne("")
+].copy()
+tableau_erreurs = donnees.loc[
+    donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])
+].copy()
+nombre_a_traiter = int(donnees["statut_codage"].eq("non_traite").sum())
+
+if reponses_valides.empty:
+    if not tableau_erreurs.empty:
+        st.error(
+            "Aucune réponse produite par Qwen : les tentatives ont rencontré "
+            "des erreurs. Leur détail est affiché ci-dessous. "
+            "Le tableau importé n'est PAS une analyse."
+        )
+    elif nombre_a_traiter:
+        st.info(
+            f"Aucune réponse Qwen pour le moment. "
+            f"{nombre_a_traiter} commentaire(s) attendent une analyse. "
+            "Utilisez « Tester sur un commentaire » pour vérifier "
+            "le fonctionnement du modèle avant l'analyse du corpus entier."
+        )
+    else:
+        st.warning(
+            "Aucune réponse Qwen disponible. "
+            "Consultez le statut des commentaires et les éventuelles erreurs."
+        )
+else:
+    st.success(
+        f"{len(reponses_valides)} réponse(s) effectivement générée(s) par le modèle."
     )
+    colonnes_principales = [
+        "numero_document", "nom_affiche", "texte", "reponse_qwen",
+        "statut_codage",
+    ]
+    if mode_analyse == "structure":
+        colonnes_principales += list(CHAMPS_BOOLEENS) + ["acteur_cible"]
+    st.dataframe(
+        reponses_valides[
+            [col for col in colonnes_principales if col in reponses_valides]
+        ].head(1000),
+        hide_index=True,
+        use_container_width=True,
+        height=380,
+        column_config={
+            "texte": st.column_config.TextColumn("Commentaire", width="large"),
+            "nom_affiche": st.column_config.TextColumn("Auteur"),
+            "reponse_qwen": st.column_config.TextColumn(
+                "Analyse produite par Qwen", width="large"
+            ),
+        },
+    )
+    if len(reponses_valides) > 1000:
+        st.caption(
+            "Aperçu limité à 1 000 réponses. Les exports contiennent toutes les lignes."
+        )
+
+    identifiants = reponses_valides["numero_document"].astype(int).tolist()
+    descriptions = {
+        int(ligne.numero_document): (
+            f"{int(ligne.numero_document)} — "
+            f"{str(ligne.nom_affiche) if str(ligne.nom_affiche).strip() else 'Sans pseudonyme'}"
+        )
+        for ligne in reponses_valides.itertuples(index=False)
+    }
+    commentaire_choisi = st.selectbox(
+        "Lire intégralement une analyse",
+        identifiants,
+        format_func=lambda numero: descriptions.get(numero, str(numero)),
+    )
+    selection = reponses_valides.loc[
+        reponses_valides["numero_document"].eq(commentaire_choisi)
+    ].iloc[0]
+    st.text_area(
+        "Commentaire original",
+        value=str(selection["texte"]),
+        height=100,
+        disabled=True,
+    )
+    st.text_area(
+        "Réponse effective de Qwen",
+        value=str(selection["reponse_qwen"]),
+        height=260,
+        disabled=True,
+    )
+
+if not tableau_erreurs.empty:
+    st.subheader("Erreurs de Qwen")
+    st.error(
+        f"{len(tableau_erreurs)} commentaire(s) n'ont pas reçu de réponse valide. "
+        "Une erreur HTTP, une indisponibilité d'Ollama ou une sortie invalide "
+        "n'est pas un résultat d'analyse."
+    )
+    st.dataframe(
+        tableau_erreurs[
+            [
+                col for col in (
+                    "numero_document", "nom_affiche", "texte",
+                    "statut_codage", "erreur_codage",
+                )
+                if col in tableau_erreurs
+            ]
+        ].head(200),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "erreur_codage": st.column_config.TextColumn(
+                "Cause technique (Ollama ou modèle)", width="large"
+            ),
+        },
+    )
+
+with st.expander("Tableau complet, métadonnées et variables du corpus", expanded=False):
+    vue = (
+        donnees.loc[donnees["statut_codage"].eq("ok")]
+        if montrer_uniquement_valides else donnees
+    )
+    st.dataframe(vue.head(1000), hide_index=True, use_container_width=True)
+    if len(vue) > 1000:
+        st.caption(
+            "Aperçu limité à 1 000 lignes. Le ZIP et le CSV "
+            "contiennent toutes les lignes."
+        )
 
 avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
 if mode_analyse == "structure" and not avec_resultat.empty:
