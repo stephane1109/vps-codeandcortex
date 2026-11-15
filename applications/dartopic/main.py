@@ -6,6 +6,7 @@ import hmac
 import io
 import json
 import os
+import threading
 import zipfile
 
 import numpy as np
@@ -18,6 +19,15 @@ from detection_langue import detecter_langues
 from modele_dartopic import MODELE_PLURILINGUE, ParametresDARTopic, entrainer_dartopic
 
 st.set_page_config(page_title="DARTopic — IRaMuTeQ et CSV", layout="wide")
+
+
+@st.cache_resource(show_spinner=False)
+def obtenir_verrou() -> threading.Lock:
+    """Empêcher les entraînements concurrents sur ce processus VPS."""
+    return threading.Lock()
+
+
+VERROU_ENTRAINEMENT = obtenir_verrou()
 
 
 def authentifier() -> None:
@@ -330,12 +340,16 @@ if st.button("Lancer la découverte thématique", type="primary"):
     def progression(fraction: float, message: str) -> None:
         barre.progress(min(100, max(0, int(fraction * 100))), text=message)
 
+    if not VERROU_ENTRAINEMENT.acquire(blocking=False):
+        st.error("Un entraînement DARTopic est déjà en cours sur le VPS.")
+        st.stop()
     try:
         sortie = entrainer_dartopic(textes, parametres, progression, mots_vides)
     except Exception as erreur:
         st.error(f"Échec du calcul : {type(erreur).__name__} : {erreur}")
         st.stop()
     finally:
+        VERROU_ENTRAINEMENT.release()
         barre.empty()
 
     resultat = analyse.copy()
