@@ -8,6 +8,24 @@ Importer un ou plusieurs fichiers `.txt` structurés sous la forme `**** *source
 
 Architecture : encodeur Transformer figé (par défaut **multilingue** pour commentaires français), graphe de similarité cosinus entre tokens, GCN à deux couches, agrégation moyenne, VAE et décodeur multinomial. Les paramètres tels que le poids KL et les dimensions cachées sont des choix de cette reproduction. L'inférence est calculée sur CPU, et la mémoire dépend du corpus.
 
+## Import des commentaires CSV (15 novembre 2026)
+
+Un fichier CSV peut remplacer le TXT IRaMuTeQ, sans suppression de la compatibilité TXT.
+La première ligne contient obligatoirement les noms de colonnes :
+
+    nom_affiche;texte
+    Beryl;"Rome, Milan et Turin en vrac."
+    julie;"l'Italie et la France aujourd'hui"
+    M@th_❤️💙;"Paname influence le monde"
+
+Séparateurs reconnus : \`; \`, \`,\` et tabulation, avec ou sans BOM UTF-8 ; prise en charge du texte entre guillemets, des retours à la ligne dans une cellule, des accents et des emoji. Les colonnes \`nom_affiche\` et \`texte\` sont indispensables ; la casse et les espaces entourant les noms de colonnes sont ignorés. Chaque ligne devient un document distinct, même si le commentaire est vide. Un texte vide n'est pas entraîné mais reste présent dans les résultats.
+
+Le CSV source conserve exactement le nom affiché dans la colonne \`nom_affiche\` du fichier \`documents_themes.csv\` ainsi que le texte dans \`texte\`. Le fichier TXT IRaMuTeQ généré contient un identifiant d'auteur normalisé et une empreinte stable pour respecter la syntaxe des variables étoilées, ainsi que l'identifiant de la ligne, sans insérer d'emoji ou d'espaces dans l'en-tête. La correspondance exacte reste disponible dans le CSV. Un import mixte de plusieurs CSV et TXT IRaMuTeQ conserve la numérotation globale et l'ordre des documents.
+
+### Stopwords NLTK
+
+La liste française est chargée depuis \`nltk.corpus.stopwords.words("french")\` ; il ne s'agit pas d'une liste de mots vide reconstruite arbitrairement. L'interface indique le nombre de mots exclus, permet de les visualiser, d'ajouter des exclusions manuelles et de conserver les négations si nécessaire. L'option de conservation des négations est désactivée par défaut pour ne pas changer les résultats de l'ancienne configuration. Les stopwords sont retirés uniquement du vocabulaire \`CountVectorizer\` ; ils restent présents dans le texte transmis à l'encodeur Transformer. Les mots originaux et les pseudonymes ne sont pas modifiés.
+
 ## Coolify
 
 Créer une application Dockerfile depuis `main`, répertoire de base `applications/dartopic`, Dockerfile `Dockerfile`, port `8501`, exposé uniquement derrière un domaine HTTPS avec authentification. Définir `APP_PASSWORD` avec un secret fort. Le lancement est refusé si cette variable manque, sauf `APP_ALLOW_PUBLIC=1` expressément choisi. Monter un volume persistant à `/data/huggingface` pour éviter le téléchargement du modèle à chaque redéploiement. Prévoir une limite mémoire et limiter l'usage simultané avec Qwen3, car le VPS héberge d'autres applications. Aucun secret ne doit être commité.

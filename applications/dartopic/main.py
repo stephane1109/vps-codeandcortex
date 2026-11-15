@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -12,9 +13,10 @@ import pandas as pd
 import streamlit as st
 
 from lecture_iramuteq import analyser_corpus, exporter_csv, exporter_iramuteq, tableau_documents
+from lecture_commentaires import analyser_commentaires_csv
 from modele_dartopic import MODELE_PLURILINGUE, ParametresDARTopic, entrainer_dartopic
 
-st.set_page_config(page_title="DARTopic — IRaMuTeQ", layout="wide")
+st.set_page_config(page_title="DARTopic — IRaMuTeQ et CSV", layout="wide")
 
 
 def authentifier() -> None:
@@ -26,21 +28,34 @@ def authentifier() -> None:
             st.stop()
         st.warning("Mode public activé explicitement : APP_ALLOW_PUBLIC=1.")
         return
-    import hmac
     saisie = st.text_input("Mot de passe de l'application", type="password")
     if not hmac.compare_digest(saisie.encode("utf-8"), mot_de_passe.encode("utf-8")):
         st.stop()
 
 
-def charger_mots_vides(personnalises: str, supprimer: bool) -> list[str]:
-    """Utiliser les mots vides français de NLTK lorsqu'ils sont installés."""
-    if not supprimer:
-        return [mot.strip().lower() for mot in personnalises.splitlines() if mot.strip()]
-    try:
-        from nltk.corpus import stopwords
-        mots = set(stopwords.words("french"))
-    except LookupError:
-        mots = set("le la les de du des un une et ou mais donc que qui à au aux en dans sur pour par ce cette ces est sont il elle ils elles je tu nous vous on avec ne pas se sa son ses leur leurs".split())
+NEGATIONS_A_CONSERVER = frozenset({
+    "ne", "n", "n'", "pas", "plus", "jamais", "aucun", "aucune",
+    "ni", "rien", "personne", "non", "sans", "nul", "nulle",
+})
+
+
+def charger_mots_vides(
+    personnalises: str, supprimer: bool, conserver_negations: bool = False
+) -> list[str]:
+    """Charger NLTK français, avec conservation facultative des négations."""
+    mots = set()
+    if supprimer:
+        try:
+            from nltk.corpus import stopwords
+            mots.update(stopwords.words("french"))
+        except LookupError as erreur:
+            raise RuntimeError(
+                "La liste NLTK française n'est pas installée. "
+                "Vérifier l'installation des données NLTK dans Docker."
+            ) from erreur
+        if conserver_negations:
+            mots.difference_update(NEGATIONS_A_CONSERVER)
+    # Les exclusions manuelles restent prioritaires, même pour une négation.
     mots.update(mot.strip().lower() for mot in personnalises.splitlines() if mot.strip())
     return sorted(mots)
 
@@ -63,23 +78,61 @@ st.title("DARTopic — découverte des thèmes")
 st.caption("Reproduction expérimentale non officielle de Seo, Cho et Yoo (2026), adaptée au français ; résultats à valider sur le corpus.")
 st.info("DARTopic découvre des thèmes latents ; il ne détermine pas directement si un commentaire dénonce ou justifie la violence. Les thèmes doivent être interprétés par le chercheur.")
 
-fichiers = st.file_uploader("Importer un ou plusieurs corpus IRaMuTeQ (.txt)", type=["txt"], accept_multiple_files=True)
+st.caption(
+    "Importer des commentaires CSV (colonnes nom_affiche et texte) ou des corpus IRaMuTeQ. "
+    "Le nom affiché et le texte des commentaires sont conservés sans réécriture."
+)
+fichiers = st.file_uploader(
+    "Importer un ou plusieurs fichiers CSV de commentaires ou TXT IRaMuTeQ",
+    type=["csv", "txt"], accept_multiple_files=True,
+)
 if not fichiers:
     st.stop()
 try:
+    from dataclasses import replace
+
     documents = []
+    metadonnees = {}
     for fichier in fichiers:
-        # Numéroter globalement pour préserver l'unicité entre les fichiers.
-        nouveau = analyser_corpus(fichier.getvalue())
-        from dataclasses import replace
-        depart = len(documents)
-        documents.extend(replace(doc, numero=depart + indice + 1) for indice, doc in enumerate(nouveau))
+        nom_fichier = fichier.name
+        if nom_fichier.lower().endswith(".csv"):
+            nouveaux, informations = analyser_commentaires_csv(
+                fichier.getvalue(), numero_depart=len(documents)
+            )
+            documents.extend(nouveaux)
+            for numero, infos in informations.items():
+                metadonnees[numero] = {
+                    **infos, "fichier_source": nom_fichier,
+                    "format_source": "csv_commentaires",
+                }
+        else:
+            nouveaux = analyser_corpus(fichier.getvalue())
+            depart = len(documents)
+            documents.extend(
+                replace(doc, numero=depart + indice + 1)
+                for indice, doc in enumerate(nouveaux)
+            )
+            for doc in documents[depart:]:
+                metadonnees[doc.numero] = {
+                    "nom_affiche": "", "fichier_source": nom_fichier,
+                    "format_source": "iramuteq",
+                }
     tableau = tableau_documents(documents)
-except ValueError as erreur:
+    for colonne in ("nom_affiche", "fichier_source", "format_source", "ligne_csv"):
+        tableau[colonne] = [
+            metadonnees.get(int(numero), {}).get(colonne, "")
+            for numero in tableau["numero_document"]
+        ]
+except (ValueError, UnicodeError) as erreur:
     st.error(str(erreur))
     st.stop()
 
-st.write(f"Documents importés : **{len(documents)}** ; textes non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**")
+textes_non_vides = int(tableau["texte"].str.strip().ne("").sum())
+st.write(
+    f"Documents importés : **{len(documents)}** ; "
+    f"textes non vides : **{textes_non_vides}** ; "
+    f"textes vides : **{len(documents) - textes_non_vides}**"
+)
 st.dataframe(tableau.head(25), use_container_width=True, hide_index=True)
 
 with st.expander("Paramètres du modèle", expanded=True):
@@ -101,9 +154,26 @@ with st.expander("Paramètres du modèle", expanded=True):
         [MODELE_PLURILINGUE, "sentence-transformers/all-MiniLM-L6-v2"],
         help="Le modèle multilingue est conseillé pour le français. L'encodeur anglophone reproduit plus étroitement le protocole de l'article."
     )
-    retirer_mots_vides = st.checkbox("Retirer les mots vides français du vocabulaire", value=True)
+    retirer_mots_vides = st.checkbox(
+        "Exclure les stopwords français NLTK du vocabulaire lexical", value=True,
+        help="NLTK fournit la liste française. L'encodeur sémantique reçoit toujours les textes complets.",
+    )
+    conserver_negations = st.checkbox(
+        "Conserver les négations (ne, pas, jamais, plus, rien, non...)",
+        value=False, disabled=not retirer_mots_vides,
+        help="Utile pour l'analyse des prises de position. Décochez pour retrouver le filtrage NLTK intégral.",
+    )
     mots_sup = st.text_area("Mots exclus supplémentaires (un par ligne)", height=80)
     taille_echantillon = st.number_input("Nombre maximal de textes analysés (échantillon reproductible)", 5, 4000, 1000, step=100)
+
+try:
+    mots_vides = charger_mots_vides(mots_sup, retirer_mots_vides, conserver_negations)
+except RuntimeError as erreur:
+    st.error(str(erreur))
+    st.stop()
+with st.expander(f"Liste effective des mots exclus du vocabulaire ({len(mots_vides)})"):
+    st.write(", ".join(mots_vides) if mots_vides else "Aucun mot exclu.")
+    st.caption("Ces mots restent présents dans les textes transmis au Transformer ; seule la matrice lexicale est filtrée.")
 
 if len(documents) > 4000:
     st.warning("Pour préserver la mémoire du VPS, un échantillon aléatoire de 4 000 textes maximum peut être traité par calcul.")
@@ -117,7 +187,9 @@ parametres = ParametresDARTopic(
 )
 configuration = {**parametres.__dict__, "fichiers": [f.name for f in fichiers],
                  "empreinte_sha256": empreinte, "max_documents": int(taille_echantillon),
-                 "mots_vides_francais": bool(retirer_mots_vides), "mots_exclus_supplementaires": mots_sup}
+                 "mots_vides_francais": bool(retirer_mots_vides), "mots_exclus_supplementaires": mots_sup,
+                 "conserver_negations": bool(conserver_negations),
+                 "stopwords_source": "NLTK - français", "nombre_stopwords": len(mots_vides)}
 cle_calcul = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode("utf-8")).hexdigest()
 
 if st.button("Lancer la découverte thématique", type="primary"):
@@ -136,8 +208,7 @@ if st.button("Lancer la découverte thématique", type="primary"):
         barre.progress(min(100, max(0, int(fraction * 100))), text=message)
 
     try:
-        sortie = entrainer_dartopic(textes, parametres, progression,
-                                   charger_mots_vides(mots_sup, retirer_mots_vides))
+        sortie = entrainer_dartopic(textes, parametres, progression, mots_vides)
     except Exception as erreur:
         st.error(f"Échec du calcul : {type(erreur).__name__} : {erreur}")
         st.stop()
@@ -174,9 +245,13 @@ if stockage and stockage[0] == cle_calcul:
     st.dataframe(resultat, hide_index=True, use_container_width=True)
     st.subheader("Historique de l'entraînement")
     st.line_chart(historique.set_index("epoque"))
-    variables = [colonne for colonne in resultat if colonne.startswith("variable_") and colonne != "variables_iramuteq"]
+    variables = [
+        colonne for colonne in resultat
+        if colonne.startswith("variable_") and colonne != "variables_iramuteq"
+    ]
+    variables.extend(["nom_affiche", "fichier_source", "format_source"])
     if variables:
-        variable = st.selectbox("Croiser les thèmes avec une variable étoilée", variables)
+        variable = st.selectbox("Croiser les thèmes avec une variable étoilée ou une colonne CSV", variables)
         st.dataframe(pd.crosstab(resultat[variable].fillna("absent"), resultat["theme_dominant"]), use_container_width=True)
     st.download_button("Télécharger tous les résultats (ZIP)", archive,
                        file_name="resultats_dartopic_iramuteq.zip", mime="application/zip")
