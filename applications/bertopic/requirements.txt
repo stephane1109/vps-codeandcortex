@@ -1,0 +1,11 @@
+streamlit>=1.40,<2
+bertopic==0.17.4
+sentence-transformers>=3.3,<6
+transformers>=4.46,<5
+umap-learn>=0.5.7,<0.6
+hdbscan>=0.8.39,<0.9
+scikit-learn>=1.5,<1.8
+numpy>=1.26,<2.1
+pandas>=2.2,<3
+scipy>=1.11,<1.16
+nltk>=3.9,<4
