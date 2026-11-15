@@ -23,7 +23,15 @@ from moteur_bertopic import (
 from traitements import construire_croisement, enrichir_documents
 
 st.set_page_config(page_title="BERTopic — IRaMuTeQ", layout="wide")
-VERROU_ENTRAINEMENT = threading.Lock()
+
+
+@st.cache_resource(show_spinner=False)
+def obtenir_verrou() -> threading.Lock:
+    """Partager le verrou entre toutes les sessions Streamlit du processus."""
+    return threading.Lock()
+
+
+VERROU_ENTRAINEMENT = obtenir_verrou()
 
 
 def authentifier() -> None:
