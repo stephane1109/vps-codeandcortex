@@ -261,7 +261,7 @@ def lancer_analyse(
                 text=f"Commentaires examinés : {position} / {nombre_total}",
             )
             information.caption(
-                f"Analyses abouties : {termenes} ; erreurs : {erreurs}. "
+                f"Analyses abouties : {termines} ; erreurs : {erreurs}. "
                 "Les résultats déjà obtenus sont conservés dans la session."
             )
             st.session_state["qwen_donnees"] = donnees
@@ -386,7 +386,7 @@ if checkpoint is not None and st.button("Restaurer les résultats enregistrés")
         anciens = pd.read_csv(
             io.BytesIO(checkpoint.getvalue()),
             sep=";", encoding="utf-8-sig",
-            dtype={"signature_corpus": str, "cle_configuration": str},
+            dtype={"signature_corpus": str, "cle_configuration": str, "texte": str},
         )
         compatible_ancien = (
             mode_analyse == "structure" and prompt == PROMPT_VIOLENCE_DEFAUT
