@@ -54,6 +54,37 @@ class TestAnalyseQwen(unittest.TestCase):
                 "Une phrase", consigne="   ", mode_analyse="libre",
             )
 
+    def test_erreur_http_ollama_avec_detail(self):
+        import requests
+        reponse = Mock()
+        reponse.status_code = 500
+        reponse.text = "llama runner process has terminated"
+        reponse.raise_for_status.side_effect = requests.HTTPError("500")
+        session = Mock()
+        session.post.return_value = reponse
+        with self.assertRaisesRegex(
+            requests.HTTPError, "llama runner process has terminated"
+        ):
+            coder_commentaire(
+                "Commentaire d'essai",
+                consigne="Analyse ce commentaire.",
+                mode_analyse="libre",
+                session=session,
+            )
+
+    def test_reponse_ollama_vide_explicitement_signalee(self):
+        reponse = Mock()
+        reponse.json.return_value = {"message": {"content": ""}}
+        session = Mock()
+        session.post.return_value = reponse
+        with self.assertRaisesRegex(ValueError, "message.content"):
+            coder_commentaire(
+                "Commentaire d'essai",
+                consigne="Analyse ce commentaire.",
+                mode_analyse="libre",
+                session=session,
+            )
+
     def test_schema_rejette_les_chaine_boolean(self):
         valeurs = {champ: "false" for champ in CHAMPS_BOOLEENS}
         valeurs.update({
