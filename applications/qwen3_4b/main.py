@@ -22,6 +22,7 @@ from codage_qwen import (
     coder_commentaire,
     verifier_service,
 )
+from lecture_commentaires import analyser_commentaires_csv
 from lecture_iramuteq import (
     analyser_corpus,
     exporter_csv,
@@ -90,7 +91,8 @@ def archive_resultats(
     }
     texte = exporter_iramuteq(documents, categories, "qwen_position")
     colonnes_reponses = [
-        "numero_document", "texte", "reponse_qwen",
+        "numero_document", "nom_affiche", "texte", "fichier_source",
+        "ligne_csv", "reponse_qwen",
         "statut_codage", "erreur_codage", "mode_analyse",
     ]
     reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
@@ -314,28 +316,62 @@ if not prompt.strip():
     st.error("Vous devez saisir un prompt avant de lancer l'analyse.")
 
 fichiers = st.file_uploader(
-    "Importer un ou plusieurs corpus IRaMuTeQ (.txt)",
-    type=["txt"], accept_multiple_files=True,
+    "Importer un ou plusieurs fichiers : commentaires CSV ou corpus IRaMuTeQ TXT",
+    type=["csv", "txt"], accept_multiple_files=True,
+    help=(
+        "CSV : colonnes obligatoires nom_affiche et texte, séparées par "
+        "point-virgule, virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
+    ),
 )
 if not fichiers:
     st.stop()
 
 try:
     documents = []
+    metadonnees = {}
     for fichier in fichiers:
-        extraits = analyser_corpus(fichier.getvalue())
-        depart = len(documents)
-        documents.extend(
-            replace(doc, numero=depart + numero + 1)
-            for numero, doc in enumerate(extraits)
-        )
+        nom_fichier = fichier.name
+        if nom_fichier.lower().endswith(".csv"):
+            nouveaux, informations = analyser_commentaires_csv(
+                fichier.getvalue(), numero_depart=len(documents)
+            )
+            documents.extend(nouveaux)
+            for numero_document, informations_document in informations.items():
+                metadonnees[numero_document] = {
+                    **informations_document,
+                    "fichier_source": nom_fichier,
+                    "format_source": "csv_commentaires",
+                }
+        else:
+            extraits = analyser_corpus(fichier.getvalue())
+            depart = len(documents)
+            documents.extend(
+                replace(doc, numero=depart + numero + 1)
+                for numero, doc in enumerate(extraits)
+            )
+            for doc in documents[depart:]:
+                metadonnees[doc.numero] = {
+                    "nom_affiche": "",
+                    "ligne_csv": "",
+                    "fichier_source": nom_fichier,
+                    "format_source": "iramuteq",
+                }
+
     tableau = tableau_documents(documents)
-except ValueError as erreur:
+    for colonne in ("nom_affiche", "ligne_csv", "fichier_source", "format_source"):
+        tableau[colonne] = [
+            metadonnees.get(int(numero), {}).get(colonne, "")
+            for numero in tableau["numero_document"]
+        ]
+except (ValueError, UnicodeError) as erreur:
     st.error(str(erreur))
     st.stop()
 
 signature = hashlib.sha256(b"\0".join(f.getvalue() for f in fichiers)).hexdigest()
-st.write(f"Documents importés : **{len(documents)}**")
+st.write(
+    f"Documents importés : **{len(documents)}** ; "
+    f"commentaires non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**."
+)
 with st.expander("Aperçu des textes et variables", expanded=False):
     st.dataframe(tableau.head(30), use_container_width=True, hide_index=True)
 

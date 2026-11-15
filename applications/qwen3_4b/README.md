@@ -16,6 +16,21 @@ Le ZIP unique regroupe le fichier historique \`codage_commentaires.csv\`, le nou
 
 Un prompt libre n'impose pas les catégories liées à la violence. Seul le mode structuré conserve volontairement cette grille ; pour une autre problématique, choisir le mode libre. Le modèle ne reçoit pas le corpus entier dans une seule requête : chaque commentaire est envoyé séparément, conformément à la consigne affichée dans l'interface.
 
+## Import de commentaire.csv
+
+Qwen accepte désormais un ou plusieurs fichiers \`commentaire.csv\` (ou d'autres CSV) contenant les colonnes obligatoires \`nom_affiche\` et \`texte\`. Le séparateur peut être le point-virgule, la virgule ou la tabulation ; les caractères accentués, les emojis et les retours à la ligne contenus dans les champs entre guillemets sont pris en charge. Le CSV peut être encodé en UTF-8, UTF-8 avec BOM ou Windows-1252. Par exemple :
+
+\`\`\`csv
+nom_affiche;texte
+Beryl;"Rome, Milan et Turin en vrac."
+julie;"l'Italie et la France aujourd'hui"
+M@th_❤️💙;"Paname influence le monde"
+\`\`\`
+
+Chaque ligne CSV devient un document distinct. Le texte originel est conservé et analysé individuellement selon le prompt choisi. Le nom affiché est conservé intégralement dans les colonnes \`nom_affiche\` de \`codage_commentaires.csv\` et de \`reponses_qwen.csv\`. L'identifiant d'auteur du TXT IRaMuTeQ est normalisé et complété par une empreinte pour respecter la syntaxe des métadonnées étoilées, sans perte de la correspondance dans les CSV. L'archive ZIP inclut les fichiers de résultats historiques et ne change pas de nom.
+
+Les imports IRaMuTeQ TXT fonctionnent toujours. On peut charger plusieurs CSV, plusieurs TXT, ou les deux formats dans une même analyse. L'ordre des lignes, les numéros des documents, le fichier source, le statut d'analyse, les réponses, les prompts personnalisés et la possibilité de reprise par CSV sont conservés. Les commentaires vides restent visibles avec le statut \`vide\`, mais ne sont pas envoyés au modèle.
+
 ## Réduction de l'espace disque pour un VPS CPU (15 novembre 2026)
 
 Le fichier \`compose.yaml\` utilise désormais, par défaut, l'image \`alpine/ollama:latest\`, une distribution **tierce** d'Ollama dédiée au CPU (environ 70 Mo, hors modèle). Elle est construite à partir d'Ollama mais n'est **pas l'image officielle** \`ollama/ollama\`. Son code source et son processus de construction sont consultables sur https://github.com/alpine-docker/ollama. Ce choix évite le téléchargement des bibliothèques CUDA, inutiles sur un VPS sans GPU. Le service de téléchargement \`charger_modele\` utilise la même image, et ne duplique pas les couches de stockage. L'interface Streamlit, les exports et les catégories Qwen restent inchangés.
