@@ -156,10 +156,24 @@ def coder_commentaire(
         json=charge_utile,
         timeout=(10, 240),
     )
-    reponse.raise_for_status()
+    try:
+        reponse.raise_for_status()
+    except requests.HTTPError as erreur:
+        # Ollama fournit souvent la cause réelle dans le corps de l'erreur.
+        details = reponse.text[:1000].strip()
+        code_http = reponse.status_code
+        description = (
+            f"Ollama a répondu HTTP {code_http} sur /api/chat. "
+            + (f"Détail : {details}" if details else "Aucun détail retourné.")
+        )
+        raise requests.HTTPError(description, response=reponse) from erreur
+
     corps = reponse.json().get("message", {}).get("content", "")
     if not isinstance(corps, str) or not corps.strip():
-        raise ValueError("Réponse vide du modèle.")
+        raise ValueError(
+            "Ollama a répondu sans texte d'analyse dans message.content. "
+            "Vérifiez le modèle chargé et la compatibilité de la requête."
+        )
 
     if mode_analyse == "structure":
         codage = verifier_resultat(json.loads(corps))
