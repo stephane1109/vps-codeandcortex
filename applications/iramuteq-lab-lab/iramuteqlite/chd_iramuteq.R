@@ -194,13 +194,17 @@ calculer_chd_iramuteq <- function(
     )
   }
   
-  mat <- as.matrix(dfm_utilise)
+  # Conserver la représentation creuse de la matrice comme dans IRaMuTeQ.
+  # Les zéros ne sont pas matérialisés dans un tableau dense.
+  mat <- methods::as(dfm_utilise, "dgCMatrix")
   if (nrow(mat) < 2 || ncol(mat) < 2) {
     stop("CHD IRaMuTeQ-like: matrice trop pauvre (>=2 lignes et >=2 colonnes requises).")
   }
   
-  if (isTRUE(binariser)) {
-    mat <- ifelse(mat > 0, 1, 0)
+  if (isTRUE(binariser) && length(mat@x) > 0L) {
+    # Conserver la binarisation historique sans transformer la matrice en dense.
+    mat@x[] <- as.numeric(mat@x > 0)
+    mat <- Matrix::drop0(mat)
   }
   
   rownames(mat) <- as.character(seq_len(nrow(mat)))

@@ -87,7 +87,9 @@ CHD<-function(data.in, x=9, mode.patate = FALSE, svd.method, libsvdc.path=NULL){
 		# Les sous-tableaux très petits apparaissent sur les corpus courts lorsque k
 		# est élevé. Conserver les dimensions matricielles et arrêter au dernier
 		# niveau calculable évite de transformer la CHD en erreur d'indexation.
-		if (!is.matrix(dtable)) {
+		# Les matrices creuses de Matrix sont déjà des matrices exploitables.
+		# Ne convertir que les objets qui ne sont ni matriciels ni creux.
+		if (!is.matrix(dtable) && !inherits(dtable, "Matrix")) {
 			dtable <- as.matrix(dtable)
 		}
 		if (nrow(dtable) < 2 || ncol(dtable) < 2) {
