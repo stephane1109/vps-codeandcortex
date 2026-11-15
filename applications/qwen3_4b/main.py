@@ -458,7 +458,26 @@ st.write(
     f"textes vides : **{vides}**."
 )
 if st.session_state.get("qwen_message"):
-    st.info(st.session_state["qwen_message"])
+    if erreurs:
+        st.error(st.session_state["qwen_message"])
+    else:
+        st.info(st.session_state["qwen_message"])
+
+if erreurs:
+    st.error(
+        f"Échec de l'inférence Qwen pour {len(erreurs)} commentaire(s). "
+        "Le corpus importé ne constitue pas un résultat du modèle. "
+        "Voici les causes techniques, enregistrées par l'application :"
+    )
+    for numero_erreur, (_, ligne_erreur) in enumerate(
+        donnees.loc[erreurs].head(3).iterrows(), start=1
+    ):
+        st.code(
+            f"Commentaire {int(ligne_erreur['numero_document'])} — "
+            f"{ligne_erreur['statut_codage']}\n"
+            f"{ligne_erreur['erreur_codage'] or 'Détail non fourni'}",
+            language="text",
+        )
 
 # Lancer une analyse uniquement lorsque l'API répond ET que le modèle est présent.
 service_disponible = False
@@ -514,10 +533,17 @@ if tester or lancer or relancer:
     )
     st.session_state["qwen_donnees"] = donnees
     if interrompu:
+        indice_derniere_erreur = indices[min(
+            len(indices) - 1, termines + nombre_erreurs - 1
+        )]
+        detail_derniere_erreur = str(
+            donnees.at[indice_derniere_erreur, "erreur_codage"]
+        )
         st.session_state["qwen_message"] = (
-            f"Analyse interrompue après trois erreurs consécutives : "
-            f"{termines} réussites et {nombre_erreurs} erreurs. "
-            "Consultez la rubrique Erreurs de Qwen et vérifiez Ollama."
+            "Analyse interrompue après trois erreurs consécutives : "
+            f"{termines} réussite(s), {nombre_erreurs} erreur(s). "
+            f"Dernière cause : {detail_derniere_erreur}. "
+            "Les analyses abouties restent conservées."
         )
     elif nombre_erreurs:
         st.session_state["qwen_message"] = (
