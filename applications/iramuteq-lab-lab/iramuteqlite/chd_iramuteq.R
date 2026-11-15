@@ -141,6 +141,14 @@ preparer_entrees_chd_iramuteq <- function(
 
 .charger_scripts_iramuteq_chd <- function(base_dir = NULL) {
   paths <- .trouver_rscripts_iramuteq(base_dir)
+  # Comme dans IRaMuTeQ historique, attacher Matrix avant la CHD :
+  # les méthodes S4 de transposition et de calcul doivent être disponibles.
+  if (!requireNamespace("Matrix", quietly = TRUE)) {
+    stop("CHD IRaMuTeQ-like : package Matrix requis.")
+  }
+  if (!("package:Matrix" %in% search())) {
+    suppressPackageStartupMessages(library(Matrix))
+  }
   for (p in paths) {
     source(p, local = .GlobalEnv)
   }

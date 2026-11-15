@@ -1,13 +1,13 @@
-# Vérifie l'utilisation du moteur historique sur une matrice creuse.
-# Ce test couvre les sommes de lignes/colonnes et l'entrée de la CHD,
-# sans attacher explicitement le package Matrix avec library().
+# Vérifie le chargement historique de Matrix avant la CHD creuse.
+# Les fonctions R de transposition doivent traiter les objets dgCMatrix.
 
 if (!requireNamespace("Matrix", quietly = TRUE)) {
   stop("Le package Matrix est nécessaire au test.")
 }
 
-source(file.path("iramuteqlite", "anacor.R"))
-source(file.path("iramuteqlite", "CHD.R"))
+source(file.path("iramuteqlite", "chd_iramuteq.R"))
+.charger_scripts_iramuteq_chd("iramuteqlite")
+stopifnot("package:Matrix" %in% search())
 
 # Préparer un petit corpus binaire avec deux groupes lexicaux distincts.
 nb_segments <- 40L
@@ -33,6 +33,10 @@ matrice_creuse[seq(1L, nb_segments, by = 2L), 12L] <- 1
 matrice_creuse <- Matrix::drop0(matrice_creuse)
 
 stopifnot(inherits(matrice_creuse, "dgCMatrix"))
+# Sans library(Matrix), t() peut appeler t.default et refuser une dgCMatrix.
+matrice_transposee <- t(matrice_creuse)
+stopifnot(inherits(matrice_transposee, "Matrix"))
+stopifnot(identical(dim(matrice_transposee), rev(dim(matrice_creuse))))
 stopifnot(isTRUE(all.equal(
   unname(Matrix::colSums(matrice_creuse)),
   unname(base::colSums(as.matrix(matrice_creuse))),
