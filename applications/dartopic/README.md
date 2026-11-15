@@ -48,7 +48,7 @@ L'application calcule le chevauchement moyen des listes des quinze mots distinct
 
 Créer une application Dockerfile depuis `main`, répertoire de base `applications/dartopic`, Dockerfile `Dockerfile`, port `8501`, exposé uniquement derrière un domaine HTTPS avec authentification. Définir `APP_PASSWORD` avec un secret fort. Le lancement est refusé si cette variable manque, sauf `APP_ALLOW_PUBLIC=1` expressément choisi. Monter un volume persistant à `/data/huggingface` pour éviter le téléchargement du modèle à chaque redéploiement. Prévoir une limite mémoire et limiter l'usage simultané avec Qwen3, car le VPS héberge d'autres applications. Aucun secret ne doit être commité.
 
-Le premier calcul exige l'accès à Hugging Face pour obtenir les poids du modèle (~plusieurs centaines de Mo). Il peut être lent sur CPU. Valeurs de départ suggérées : 8 thèmes, 35 époques, 64 tokens, 1 000 documents maximum, lot de 16. Limite de sécurité de 4 000 documents par calcul. Pour traiter un grand corpus, vérifier d'abord les résultats sur un échantillon représentatif puis programmer des lots reproductibles.
+Le premier calcul exige l'accès à Hugging Face pour obtenir les poids du modèle (~plusieurs centaines de Mo). Il peut être lent sur CPU. Valeurs de départ suggérées pour vérifier la qualité : 8 thèmes, 10 à 20 époques, 64 tokens, 1 000 à 3 000 documents, lot de 16. Limite de sécurité de 30 000 textes admissibles par calcul. Pour traiter un grand corpus, vérifier d'abord les résultats sur un échantillon représentatif puis programmer des lots reproductibles.
 
 ## Analyse R
 
