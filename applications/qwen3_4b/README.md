@@ -16,6 +16,14 @@ Le ZIP unique regroupe le fichier historique \`codage_commentaires.csv\`, le nou
 
 Un prompt libre n'impose pas les catégories liées à la violence. Seul le mode structuré conserve volontairement cette grille ; pour une autre problématique, choisir le mode libre. Le modèle ne reçoit pas le corpus entier dans une seule requête : chaque commentaire est envoyé séparément, conformément à la consigne affichée dans l'interface.
 
+## Affichage des réponses et diagnostic du modèle (15 novembre 2026)
+
+L'interface donne maintenant la priorité aux **réponses réellement générées par Qwen**, avec les colonnes `nom_affiche`, `texte`, `reponse_qwen` et `statut_codage`. Une sélection par numéro de document permet de lire intégralement, dans deux zones distinctes, le commentaire d'origine et la réponse produite par le LLM. Le tableau intégral des variables IRaMuTeQ et des métadonnées CSV est conservé dans un panneau secondaire.
+
+L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la génération d'une réponse avant d'exécuter **Analyser tous les commentaires restants**. Le bouton principal conserve l'analyse automatique sans lots. En l'absence de résultat, une explication indique si les commentaires attendent encore l'analyse, si Ollama est indisponible, si le modèle manque ou si les requêtes ont échoué. Une section distincte **Erreurs de Qwen** présente `statut_codage` et `erreur_codage` pour les commentaires concernés. Les boutons d'analyse sont désactivés lorsque l'API Ollama ne répond pas ou que le modèle n'est pas téléchargé.
+
+Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
+
 ## Import de commentaire.csv
 
 Qwen accepte désormais un ou plusieurs fichiers \`commentaire.csv\` (ou d'autres CSV) contenant les colonnes obligatoires \`nom_affiche\` et \`texte\`. Le séparateur peut être le point-virgule, la virgule ou la tabulation ; les caractères accentués, les emojis et les retours à la ligne contenus dans les champs entre guillemets sont pris en charge. Le CSV peut être encodé en UTF-8, UTF-8 avec BOM ou Windows-1252. Par exemple :
