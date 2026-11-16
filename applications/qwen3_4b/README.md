@@ -12,11 +12,11 @@ Lorsque le prompt contient explicitement des intitulés de thèmes entre guillem
 
 ## Modèles proposés et moteurs (16 novembre 2026)
 
-Le sélecteur sous l'import propose quatre modèles génératifs dans Ollama : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B. Le modèle défini par la variable Coolify `OLLAMA_MODEL` est le choix initial ; tout autre modèle choisi est transmis réellement à Ollama pour toutes les analyses. Le conteneur `charger_modele` télécharge les quatre modèles, avec un seul modèle actif simultanément.
+Le sélecteur unique sous l'import propose six modèles : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B pour la génération via Ollama, ainsi que JuriBERT et BERTweetFR pour les encodages spécialisés via Transformers. Le modèle défini par la variable Coolify `OLLAMA_MODEL` est le choix initial ; tout autre modèle choisi est transmis réellement à Ollama pour toutes les analyses. Le conteneur `charger_modele` télécharge les quatre modèles, avec un seul modèle actif simultanément.
 
 ## Modèles français spécialisés JuriBERT et BERTweetFR
 
-Un service `encodeurs` indépendant d'Ollama charge les poids de `dascim/juribert-base` et `Yanzhu/bertweetfr-base` par Transformers (CPU). Le conteneur `charger_encodeurs` télécharge les deux modèles sur un volume persistant lors du déploiement. Une rubrique Streamlit permet d'explorer la similarité cosinus entre un texte et les thèmes définis. **Ces scores ne sont ni des classifications ni des probabilités** : aucun entraînement supervisé sur la grille de recherche n'a été réalisé. Les annotations thématiques, les validations humaines et les CSV Qwen restent inchangés.
+Un service `encodeurs` indépendant d'Ollama charge les poids de `dascim/juribert-base` et `Yanzhu/bertweetfr-base` par Transformers (CPU). Le conteneur `charger_encodeurs` télécharge les deux modèles sur un volume persistant lors du déploiement. Le même menu principal permet désormais de choisir ces modèles, de tester un texte, d'analyser le corpus entier, de reprendre les erreurs et de télécharger les similarités dans une archive ZIP. Les scores sont calculés par comparaison cosinus entre chaque texte et les définitions de thèmes ; ils restent exploratoires et sont conservés dans des colonnes `similarite_theme_N`. Les textes de plus de 256 tokens peuvent être tronqués. **Ces scores ne sont ni des classifications ni des probabilités** : aucun entraînement supervisé sur la grille de recherche n'a été réalisé. Les annotations thématiques, les validations humaines et les CSV Qwen restent inchangés.
 
 ## Colonne type_source invisible
 

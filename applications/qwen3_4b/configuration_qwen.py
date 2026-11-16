@@ -13,12 +13,20 @@ MODELES_PROPOSES = (
     "gemma3:1b",
     "llama3.2:3b",
     "qwen3:4b-q4_K_M",
+    "juribert",
+    "bertweetfr",
 )
+MODELES_SPECIALISES = {
+    "juribert": "dascim/juribert-base",
+    "bertweetfr": "Yanzhu/bertweetfr-base",
+}
 LIBELLES_MODELES = {
     "qwen3:0.6b-q4_K_M": "Qwen3 0.6B — très léger",
     "gemma3:1b": "Gemma 3 1B — léger",
     "llama3.2:3b": "Llama 3.2 3B — multilingue",
     "qwen3:4b-q4_K_M": "Qwen3 4B — analyse approfondie",
+    "juribert": "JuriBERT — textes juridiques français (Transformers)",
+    "bertweetfr": "BERTweetFR — réseaux sociaux français (Transformers)",
 }
 CONTEXTE_MAXIMUM = max(1024, min(4096, int(os.getenv("QWEN_NUM_CTX", "2048"))))
 

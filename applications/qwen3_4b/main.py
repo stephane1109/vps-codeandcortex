@@ -16,12 +16,12 @@ import streamlit as st
 
 from configuration_qwen import (
     MODELE as MODELE_CONFIGURATION, MODELES_PROPOSES, LIBELLES_MODELES,
-    CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
+    MODELES_SPECIALISES, CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
 )
 from codage_multithemes import (
     PROMPT_MATRICE_DEFAUT, NOMBRE_THEMES_MAXIMUM,
-    proposer_themes_depuis_prompt, valider_themes, codes_themes,
-    coder_multithemes,
+    proposer_themes_depuis_prompt, extraire_themes_explicites,
+    valider_themes, codes_themes, coder_multithemes,
 )
 from matrice_thematique import (
     SOURCES_TEXTE, LIBELLES_SOURCES,
@@ -30,6 +30,7 @@ from matrice_thematique import (
     construire_bilan_sources, comparer_sources_par_video,
     exporter_iramuteq_matrice,
 )
+from analyse_specialisee import interroger_encodeur_specialise
 from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
@@ -231,6 +232,15 @@ def restaurer_checkpoint(
             restauration[champ] = pd.Series(
                 valeurs.to_numpy(), index=restauration.index, dtype="Float64"
             )
+    # Restaurer séparément les similarités d'encodeurs non génératifs.
+    for champ in ("similarite_" + code for code in codes):
+        if champ in anciens.columns:
+            valeurs = pd.to_numeric(anciens[champ], errors="coerce")
+            if valeurs.dropna().lt(-1).any() or valeurs.dropna().gt(1).any():
+                raise ValueError(f"Similarité hors de [-1, 1] : {champ}.")
+            restauration[champ] = pd.Series(
+                valeurs.to_numpy(), index=restauration.index, dtype="Float64"
+            )
     return restauration
 
 
@@ -380,8 +390,8 @@ fichiers = st.file_uploader(
         "virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
     ),
 )
-# Ne proposer que deux modèles, sans modifier la variable Coolify OLLAMA_MODEL.
-# Le modèle léger apparaît en premier ; l'utilisateur peut conserver le 4B.
+# Réunir les modèles génératifs Ollama et les encodeurs français dans un menu.
+# Le choix initial suit la configuration Coolify, sans modifier ses variables.
 if "qwen_modele_selectionne" not in st.session_state:
     st.session_state["qwen_modele_selectionne"] = (
         MODELE_CONFIGURATION
@@ -389,17 +399,26 @@ if "qwen_modele_selectionne" not in st.session_state:
         else MODELES_PROPOSES[0]
     )
 MODELE = st.selectbox(
-    "Modèle Ollama pour l'analyse",
+    "Modèle d'analyse (Ollama ou Transformers)",
     options=MODELES_PROPOSES,
     format_func=lambda nom: LIBELLES_MODELES.get(nom, nom),
     key="qwen_modele_selectionne",
     help=(
-        "Le modèle sélectionné sera utilisé pour proposer les thèmes, "
-        "tester un texte et analyser le corpus. "
-        "Un changement de modèle nécessite une nouvelle analyse."
+        "Qwen, Gemma et Llama utilisent Ollama pour annoter les textes. "
+        "JuriBERT et BERTweetFR utilisent Transformers pour calculer "
+        "des similarités exploratoires, et non des classifications. "
+        "Changer de modèle réinitialise les résultats de l'analyse en cours."
     ),
 )
-mention_version.caption(f"version 16-11-2026 - modèle : {MODELE} — Ollama")
+MODELE_EST_SPECIALISE = MODELE in MODELES_SPECIALISES
+moteur = "Transformers" if MODELE_EST_SPECIALISE else "Ollama"
+mention_version.caption(f"version 16-11-2026 - modèle : {MODELE} — {moteur}")
+if MODELE_EST_SPECIALISE:
+    st.caption(
+        "JuriBERT et BERTweetFR produisent des similarités cosinus avec "
+        "les définitions thématiques. Ces scores ne sont pas des "
+        "probabilités de présence et ne remplacent pas une annotation humaine."
+    )
 if not fichiers:
     st.stop()
 
@@ -751,9 +770,15 @@ with st.expander("Paramètres complémentaires", expanded=False):
 
 st.subheader("Définir les thèmes à partir de votre prompt")
 st.caption(
-    "Qwen peut proposer une grille à partir de la consigne, sans thème ni "
-    "nombre de catégories imposés. Vous pouvez aussi saisir ou modifier "
-    "manuellement chaque titre et sa définition. Les catégories ne sont pas exclusives."
+    (
+        "Pour un modèle spécialisé, indiquez les thèmes entre guillemets "
+        "dans le prompt ou définissez-les manuellement. "
+        "JuriBERT et BERTweetFR ne génèrent pas de catégories."
+        if MODELE_EST_SPECIALISE
+        else "Qwen peut proposer une grille à partir de la consigne, sans thème ni "
+        "nombre de catégories imposés. Vous pouvez aussi saisir ou modifier "
+        "manuellement chaque titre et sa définition. Les catégories ne sont pas exclusives."
+    )
 )
 identifiant_grille = hashlib.sha256(
     (signature + prompt).encode("utf-8")
@@ -763,15 +788,31 @@ if st.session_state.get("qwen_id_grille_libre") != identifiant_grille:
     st.session_state["qwen_themes_proposes"] = []
     st.session_state["qwen_origine_grille"] = ""
 
-if st.button("Construire les thèmes avec Qwen à partir du prompt"):
+if st.button(
+    "Reprendre les thèmes nommés dans le prompt"
+    if MODELE_EST_SPECIALISE
+    else "Construire les thèmes avec Qwen à partir du prompt"
+):
     try:
-        propositions = proposer_themes_depuis_prompt(
-            prompt,
-            tableau["texte"].fillna("").astype(str).head(20).tolist(),
-            modele=MODELE,
-        )
+        if MODELE_EST_SPECIALISE:
+            propositions = extraire_themes_explicites(prompt)
+            if not propositions:
+                raise ValueError(
+                    "Aucun thème explicite détecté : utilisez des intitulés "
+                    "entre guillemets après « thèmes : », ou ajoutez des "
+                    "thèmes manuellement."
+                )
+        else:
+            propositions = proposer_themes_depuis_prompt(
+                prompt,
+                tableau["texte"].fillna("").astype(str).head(20).tolist(),
+                modele=MODELE,
+            )
         st.session_state["qwen_themes_proposes"] = propositions
-        st.session_state["qwen_origine_grille"] = "Proposition de Qwen"
+        st.session_state["qwen_origine_grille"] = (
+            "Extraction depuis le prompt"
+            if MODELE_EST_SPECIALISE else "Proposition de Qwen"
+        )
         for indice, theme in enumerate(propositions, start=1):
             st.session_state[
                 f"qwen_titre_libre_{identifiant_grille[:12]}_{indice}"
@@ -840,15 +881,24 @@ st.session_state["qwen_themes_proposes"] = themes_courants
 themes_valides: list[dict[str, str]] | None = None
 if not themes_courants:
     st.info(
-        "La grille n'est pas encore définie. Cliquez sur « Construire les "
-        "thèmes avec Qwen à partir du prompt » ou ajoutez vos catégories."
+        (
+            "La grille n'est pas encore définie. Ajoutez des thèmes "
+            "manuellement ou reprenez ceux nommés dans votre prompt."
+            if MODELE_EST_SPECIALISE
+            else "La grille n'est pas encore définie. Cliquez sur « Construire les "
+            "thèmes avec Qwen à partir du prompt » ou ajoutez vos catégories."
+        )
     )
 else:
     try:
         themes_valides = valider_themes(themes_courants)
         st.success(
             f"Grille valide : {len(themes_valides)} thème(s) indépendant(s). "
-            "Vous pouvez commencer à annoter les textes."
+            (
+                "Vous pouvez calculer les similarités."
+                if MODELE_EST_SPECIALISE
+                else "Vous pouvez commencer à annoter les textes."
+            )
         )
     except ValueError as erreur:
         st.error(f"Grille incomplète : {erreur}")
@@ -906,6 +956,254 @@ if checkpoint is not None and st.button(
         st.error(f"Reprise impossible : {erreur}")
 
 donnees = st.session_state["qwen_donnees"]
+if MODELE_EST_SPECIALISE:
+    st.subheader("Analyse textuelle avec le modèle spécialisé")
+    st.caption(
+        f"Modèle : {LIBELLES_MODELES[MODELE]}. "
+        "Chaque valeur représente une similarité cosinus entre un texte "
+        "et la définition d'un thème, pas une probabilité de présence. "
+        "Les modèles ne produisent ni justification générée ni codage binaire."
+    )
+    etat_encodeurs = False
+    try:
+        adresse_encodeurs = os.getenv(
+            "ENCODEURS_URL", "http://encodeurs:8502"
+        ).rstrip("/")
+        inventaire = requests.get(
+            adresse_encodeurs + "/modeles", timeout=10
+        )
+        inventaire.raise_for_status()
+        etat_encodeurs = MODELE in inventaire.json().get("modeles", {})
+        if not etat_encodeurs:
+            st.warning("Le modèle sélectionné n'est pas déclaré par le service.")
+    except (requests.RequestException, ValueError) as erreur:
+        st.warning(
+            f"Vérification des encodeurs impossible : {erreur}. "
+            "Vous pouvez tester un texte pour afficher le diagnostic précis."
+        )
+
+    lignes_restantes = donnees.index[
+        donnees["statut_codage"].eq("non_traite")
+    ].tolist()
+    lignes_erreur = donnees.index[
+        donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])
+    ].tolist()
+    lignes_traitees = donnees.index[
+        donnees["statut_codage"].eq("similarite")
+    ].tolist()
+    st.write(
+        f"Textes avec similarités : **{len(lignes_traitees)}** ; "
+        f"restants : **{len(lignes_restantes)}** ; "
+        f"erreurs : **{len(lignes_erreur)}**."
+    )
+    if st.session_state.get("qwen_message"):
+        st.info(st.session_state["qwen_message"])
+    if themes_valides is None:
+        st.warning("Définissez et validez d'abord vos thèmes.")
+    col_test, col_tous, col_reprise, col_stop = st.columns([1, 2, 1, 1])
+    test_encodeur = col_test.button(
+        "Tester sur un texte",
+        disabled=not lignes_restantes or themes_valides is None,
+    )
+    tous_encodeur = col_tous.button(
+        "Analyser tous les textes restants",
+        type="primary",
+        disabled=not lignes_restantes or themes_valides is None,
+    )
+    relancer_encodeur = col_reprise.button(
+        "Réessayer les textes en erreur",
+        disabled=not lignes_erreur or themes_valides is None,
+    )
+    col_stop.button(
+        "Arrêter l'analyse",
+        on_click=demander_arret_analyse,
+        help="Arrêt entre deux textes, sans effacer les similarités calculées.",
+    )
+    if test_encodeur:
+        indice = min(
+            lignes_restantes[:200],
+            key=lambda i: len(str(donnees.at[i, "texte"])),
+        )
+        texte_test = str(donnees.at[indice, "texte"])
+        debut = time.perf_counter()
+        try:
+            resultat_test = interroger_encodeur_specialise(
+                texte_test, themes_valides, MODELE, delai_lecture=60,
+            )
+            st.session_state["qwen_test_rapide"] = {
+                "reussi": True,
+                "modele": MODELE,
+                "resultat": resultat_test,
+                "duree_secondes": round(time.perf_counter() - debut, 2),
+            }
+            for champ, valeur in resultat_test.items():
+                donnees.at[indice, champ] = valeur
+            donnees.at[indice, "statut_codage"] = "similarite"
+            donnees.at[indice, "erreur_codage"] = ""
+            st.session_state["qwen_donnees"] = donnees
+        except (requests.RequestException, ValueError, KeyError) as erreur:
+            st.session_state["qwen_test_rapide"] = {
+                "reussi": False,
+                "modele": MODELE,
+                "erreur": f"{type(erreur).__name__} : {erreur}",
+                "duree_secondes": round(time.perf_counter() - debut, 2),
+            }
+        st.rerun()
+    if tous_encodeur or relancer_encodeur:
+        indices = lignes_restantes if tous_encodeur else lignes_erreur
+        st.session_state["qwen_arret_demande"] = False
+        avancement = st.progress(0, text="Calcul des similarités")
+        nombre_reussites = 0
+        nombre_erreurs = 0
+        with requests.Session() as session:
+            for position, indice in enumerate(indices, start=1):
+                if st.session_state.get("qwen_arret_demande", False):
+                    break
+                try:
+                    resultat = interroger_encodeur_specialise(
+                        str(donnees.at[indice, "texte"]), themes_valides,
+                        MODELE, session=session,
+                    )
+                    for champ, valeur in resultat.items():
+                        donnees.at[indice, champ] = valeur
+                    donnees.at[indice, "statut_codage"] = "similarite"
+                    donnees.at[indice, "erreur_codage"] = ""
+                    nombre_reussites += 1
+                except (requests.RequestException, ValueError, KeyError) as erreur:
+                    donnees.at[indice, "statut_codage"] = (
+                        "erreur_service"
+                        if isinstance(erreur, requests.RequestException)
+                        else "sortie_invalide"
+                    )
+                    donnees.at[indice, "erreur_codage"] = (
+                        f"{type(erreur).__name__} : {str(erreur)[:800]}"
+                    )
+                    nombre_erreurs += 1
+                st.session_state["qwen_donnees"] = donnees
+                avancement.progress(
+                    position / max(1, len(indices)),
+                    text=f"Textes examinés : {position}/{len(indices)}",
+                )
+                # Éviter les requêtes répétées si le service est indisponible.
+                if nombre_erreurs >= 3 and nombre_reussites == 0:
+                    break
+        avancement.empty()
+        st.session_state["qwen_message"] = (
+            f"Similarités obtenues : {nombre_reussites} ; "
+            f"erreurs : {nombre_erreurs}. "
+            "Les textes non traités peuvent être repris."
+        )
+        st.rerun()
+
+    retour_encodeur = st.session_state.get("qwen_test_rapide")
+    if retour_encodeur:
+        if retour_encodeur["reussi"]:
+            st.success(
+                f"Test réussi avec {retour_encodeur['modele']} "
+                f"en {retour_encodeur['duree_secondes']} s."
+            )
+            resultat = retour_encodeur["resultat"]
+            st.dataframe(
+                pd.DataFrame([
+                    {"theme": theme["titre"],
+                     "similarite_cosinus": resultat["similarite_" + code]}
+                    for code, theme in zip(codes_themes(themes_valides), themes_valides)
+                ]),
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.error(
+                f"Test échoué : {retour_encodeur['erreur']}. "
+                "Aucun résultat n'a été inventé."
+            )
+
+    if lignes_traitees:
+        st.subheader("Similarités par texte et par thème")
+        codes = codes_themes(themes_valides)
+        colonnes = [
+            "numero_document", "id_video", "source_texte", "texte",
+            *("similarite_" + code for code in codes), "texte_tronque",
+        ]
+        st.dataframe(
+            donnees.loc[lignes_traitees].reindex(columns=colonnes).head(1000),
+            hide_index=True, use_container_width=True,
+            column_config={
+                "similarite_" + code: st.column_config.NumberColumn(
+                    theme["titre"], format="%.4f"
+                )
+                for code, theme in zip(codes, themes_valides)
+            },
+        )
+        st.caption(
+            "Le texte peut être tronqué à 256 tokens par l'encodeur. "
+            "Ces valeurs exploratoires ne sont pas calibrées."
+        )
+    if lignes_erreur:
+        st.subheader("Erreurs du modèle spécialisé")
+        st.dataframe(
+            donnees.loc[lignes_erreur, [
+                "numero_document", "texte", "erreur_codage",
+            ]].head(200),
+            hide_index=True, use_container_width=True,
+        )
+
+    def generer_csv_specialise() -> bytes:
+        """Exporter la totalité des lignes sans colonnes internes masquées."""
+        colonnes = [
+            "numero_document", "id_video", "source_texte", "texte",
+            *("similarite_" + code for code in codes_themes(themes_valides or [])),
+            "texte_tronque",
+        ]
+        return exporter_csv(donnees.reindex(columns=colonnes))
+
+    def generer_checkpoint_specialise() -> bytes:
+        """Conserver la reprise même si la source logique reste masquée."""
+        return exporter_csv(
+            donnees.drop(columns=["type_source"], errors="ignore")
+        )
+
+    def generer_archive_specialisee() -> bytes:
+        """Fournir un ZIP avec les similarités, le corpus et les paramètres."""
+        memoire = io.BytesIO()
+        with zipfile.ZipFile(memoire, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "similarites_modeles_specialises.csv",
+                generer_csv_specialise(),
+            )
+            archive.writestr(
+                "codage_commentaires.csv", generer_checkpoint_specialise()
+            )
+            archive.writestr(
+                "grille_themes.json",
+                json.dumps(
+                    {"themes": themes_valides}, ensure_ascii=False, indent=2,
+                ),
+            )
+            archive.writestr(
+                "parametres.json",
+                json.dumps(
+                    {**configuration, "signature": signature},
+                    ensure_ascii=False, indent=2,
+                ),
+            )
+        return memoire.getvalue()
+
+    st.download_button(
+        "Télécharger tous les résultats, même partiels (ZIP)",
+        data=generer_archive_specialisee,
+        file_name="resultats_" + MODELE + "_similarites.zip",
+        mime="application/zip",
+        on_click="ignore",
+    )
+    st.download_button(
+        "Télécharger le CSV de reprise",
+        data=generer_checkpoint_specialise,
+        file_name="codage_commentaires.csv",
+        mime="text/csv",
+        on_click="ignore",
+    )
+    st.stop()
+
 reste = donnees.index[donnees["statut_codage"].eq("non_traite")].tolist()
 erreurs = donnees.index[
     donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])
@@ -1384,75 +1682,6 @@ if themes_valides is not None:
             "Une source absente est non_disponible ; une source non analysée "
             "est non_traite. Les discordances exigent deux annotations connues."
         )
-
-    st.subheader("Exploration avec JuriBERT et BERTweetFR")
-    st.caption(
-        "Ces modèles français produisent des représentations textuelles. "
-        "La similarité cosinus avec chaque définition de thème constitue "
-        "un indicateur exploratoire, PAS une probabilité ni une annotation. "
-        "Les résultats de Qwen et la matrice restent inchangés."
-    )
-    modele_encodeur = st.selectbox(
-        "Modèle spécialisé",
-        ("juribert", "bertweetfr"),
-        format_func=lambda identifiant: (
-            "JuriBERT — droit français (dascim/juribert-base)"
-            if identifiant == "juribert"
-            else "BERTweetFR — réseaux sociaux français (Yanzhu/bertweetfr-base)"
-        ),
-        key="qwen_modele_encodeur",
-    )
-    lignes_explorables = donnees.loc[
-        donnees["texte"].fillna("").astype(str).str.strip().ne("")
-    ]
-    if not lignes_explorables.empty:
-        numero_exploration = st.selectbox(
-            "Texte à comparer aux définitions thématiques",
-            lignes_explorables["numero_document"].astype(int).tolist(),
-            key="qwen_numero_exploration",
-        )
-        if st.button("Calculer les similarités avec le modèle spécialisé"):
-            texte_exploration = str(
-                lignes_explorables.loc[
-                    lignes_explorables["numero_document"].eq(numero_exploration),
-                    "texte",
-                ].iloc[0]
-            )
-            try:
-                with st.spinner("Calcul des représentations textuelles..."):
-                    reponse_encodeur = requests.post(
-                        os.getenv(
-                            "ENCODEURS_URL", "http://encodeurs:8502"
-                        ).rstrip("/") + "/similarites",
-                        json={
-                            "modele": modele_encodeur,
-                            "texte": texte_exploration[:12000],
-                            "themes": themes_valides,
-                        },
-                        timeout=(10, 180),
-                    )
-                if not reponse_encodeur.ok:
-                    st.error(
-                        f"Encodeur indisponible (HTTP "
-                        f"{reponse_encodeur.status_code}) : "
-                        f"{reponse_encodeur.text[:700]}"
-                    )
-                else:
-                    resultat_encodeur = reponse_encodeur.json()
-                    st.dataframe(
-                        pd.DataFrame(resultat_encodeur["scores"]),
-                        hide_index=True, use_container_width=True,
-                    )
-                    if resultat_encodeur.get("texte_tronque"):
-                        st.warning(
-                            "Le modèle a tronqué le texte à 256 tokens. "
-                            "Ces scores ne décrivent pas tout le document."
-                        )
-            except requests.RequestException as erreur:
-                st.error(
-                    "Service des modèles spécialisés indisponible : "
-                    f"{type(erreur).__name__} : {erreur}"
-                )
 
     st.subheader("Validation et correction manuelles")
     lignes_verifiables = donnees.loc[donnees["statut_codage"].eq("ok")]
