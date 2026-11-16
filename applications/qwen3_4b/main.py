@@ -588,6 +588,70 @@ with st.expander("Paramètres complémentaires", expanded=False):
         "Afficher uniquement les analyses abouties", value=False
     )
 
+theses_validees: list[dict[str, str]] | None = None
+source_grille = ""
+if mode_analyse == "theses":
+    st.subheader("Définir les trois thèmes")
+    st.caption(
+        "La grille initiale est indicative. Cliquez sur « Proposer trois thèmes "
+        "avec Qwen » pour obtenir une nouvelle proposition à partir du corpus. "
+        "Vous pouvez corriger les trois titres et définitions."
+    )
+    identifiant_grille = hashlib.sha256(
+        (signature + prompt).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("qwen_identifiant_grille") != identifiant_grille:
+        st.session_state["qwen_identifiant_grille"] = identifiant_grille
+        st.session_state["qwen_source_grille"] = "Grille initiale modifiable"
+        for indice, these in enumerate(THESES_INITIALES, start=1):
+            st.session_state[f"qwen_theme_titre_{indice}"] = these["titre"]
+            st.session_state[f"qwen_theme_definition_{indice}"] = these["definition"]
+    if st.button("Proposer trois thèmes avec Qwen"):
+        try:
+            propositions = proposer_trois_theses(
+                tableau["texte"].fillna("").astype(str).tolist(),
+                consigne=prompt,
+            )
+            for indice, theme in enumerate(propositions, start=1):
+                st.session_state[f"qwen_theme_titre_{indice}"] = theme["titre"]
+                st.session_state[f"qwen_theme_definition_{indice}"] = theme["definition"]
+            st.session_state["qwen_source_grille"] = (
+                "Proposition de Qwen sur un échantillon du corpus"
+            )
+            st.rerun()
+        except (requests.RequestException, ValueError, json.JSONDecodeError) as erreur:
+            st.error(
+                f"Qwen n'a pas pu proposer trois thèmes avec {MODELE} : "
+                f"{type(erreur).__name__} : {erreur}"
+            )
+    themes_modifiables = []
+    for indice in range(1, 4):
+        st.text_input(
+            f"Thème {indice} — intitulé",
+            key=f"qwen_theme_titre_{indice}",
+        )
+        st.text_area(
+            f"Thème {indice} — définition",
+            key=f"qwen_theme_definition_{indice}",
+            height=80,
+        )
+        themes_modifiables.append({
+            "titre": st.session_state[f"qwen_theme_titre_{indice}"],
+            "definition": st.session_state[f"qwen_theme_definition_{indice}"],
+        })
+    source_grille = st.session_state.get(
+        "qwen_source_grille", "Grille initiale modifiable"
+    )
+    st.caption(
+        f"Origine de la grille : {source_grille}. "
+        "Les thèmes proposés automatiquement ne constituent pas une typologie "
+        "scientifiquement validée. Vérifiez leur pertinence avant le codage."
+    )
+    try:
+        theses_validees = valider_theses(themes_modifiables)
+    except ValueError as erreur:
+        st.error(f"Grille invalide : {erreur}")
+
 configuration = {
     "modele": MODELE,
     "mode_analyse": mode_analyse,
@@ -599,6 +663,9 @@ configuration = {
 }
 if selection_personnalisee:
     configuration["correspondances_csv"] = correspondances_csv
+if mode_analyse == "theses":
+    configuration["theses"] = theses_validees
+    configuration["source_grille"] = source_grille
 
 cle = hashlib.sha256(
     json.dumps(configuration, sort_keys=True, ensure_ascii=False)
@@ -729,22 +796,32 @@ st.caption(
 colonne_test, colonne_analyser, colonne_erreurs = st.columns([1, 2, 1])
 tester = colonne_test.button(
     "Tester sur un commentaire",
-    disabled=not reste or not prompt.strip() or not service_disponible,
+    disabled=(
+        not reste or not prompt.strip() or not service_disponible
+        or (mode_analyse == "theses" and theses_validees is None)
+    ),
 )
 lancer = colonne_analyser.button(
     "Analyser tous les commentaires restants",
     type="primary",
-    disabled=not reste or not prompt.strip() or not service_disponible,
+    disabled=(
+        not reste or not prompt.strip() or not service_disponible
+        or (mode_analyse == "theses" and theses_validees is None)
+    ),
 )
 relancer = colonne_erreurs.button(
     "Réessayer les commentaires en erreur",
-    disabled=not erreurs or not prompt.strip() or not service_disponible,
+    disabled=(
+        not erreurs or not prompt.strip() or not service_disponible
+        or (mode_analyse == "theses" and theses_validees is None)
+    ),
 )
 if tester or lancer or relancer:
     indices = reste[:1] if tester else (reste if lancer else erreurs)
     termines, nombre_erreurs, interrompu = lancer_analyse(
         donnees, indices, mode_analyse, prompt,
         contexte_general, contexte_variables, float(temperature),
+        theses=theses_validees,
     )
     st.session_state["qwen_donnees"] = donnees
     if interrompu:
@@ -821,6 +898,10 @@ else:
     ]
     if mode_analyse == "structure":
         colonnes_principales += list(CHAMPS_BOOLEENS) + ["acteur_cible"]
+    elif mode_analyse == "theses":
+        colonnes_principales += [
+            "these_retenue", "these_intitule", "indice_textuel", "justification"
+        ]
     st.dataframe(
         reponses_valides[
             [col for col in colonnes_principales if col in reponses_valides]
@@ -831,6 +912,8 @@ else:
         column_config={
             "texte": st.column_config.TextColumn("Commentaire", width="large"),
             "nom_affiche": st.column_config.TextColumn("Auteur"),
+            "these_retenue": st.column_config.TextColumn("Code du thème"),
+            "these_intitule": st.column_config.TextColumn("Thème retenu"),
             "reponse_qwen": st.column_config.TextColumn(
                 "Analyse produite par Qwen", width="large"
             ),
@@ -909,6 +992,30 @@ with st.expander("Tableau complet, métadonnées et variables du corpus", expand
         )
 
 avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
+if mode_analyse == "theses" and theses_validees is not None:
+    st.subheader("Répartition des commentaires dans les trois thèmes")
+    frequences_themes = avec_resultat["these_retenue"].value_counts()
+    repartition = pd.DataFrame([
+        {
+            "Thème": theme["titre"],
+            "Code": f"these_{indice}",
+            "Commentaires": int(frequences_themes.get(f"these_{indice}", 0)),
+            "Définition": theme["definition"],
+        }
+        for indice, theme in enumerate(theses_validees, start=1)
+    ] + [{
+        "Thème": "Indéterminé / hors des trois thèmes",
+        "Code": "indetermine",
+        "Commentaires": int(frequences_themes.get("indetermine", 0)),
+        "Définition": "Aucun thème suffisamment étayé par ce commentaire",
+    }])
+    st.dataframe(repartition, hide_index=True, use_container_width=True)
+    if not avec_resultat.empty:
+        st.bar_chart(
+            repartition.set_index("Thème")["Commentaires"],
+            x_label="Thème",
+            y_label="Commentaires classés",
+        )
 if mode_analyse == "structure" and not avec_resultat.empty:
     frequences = pd.Series({
         champ: int(avec_resultat[champ].fillna(False).sum())
