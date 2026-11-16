@@ -257,7 +257,11 @@ def lancer_analyse(
                     f"{type(erreur).__name__}: {str(erreur)[:300]}"
                 )
                 erreurs += 1
-                erreurs_consecutives += 1
+                # Interrompre immédiatement si le système a tué le moteur d'inférence.
+                erreurs_consecutives = (
+                    3 if 'signal: killed' in str(erreur).lower()
+                    else erreurs_consecutives + 1
+                )
             barre.progress(
                 round(position * 100 / max(1, nombre_total)),
                 text=f"Commentaires examinés : {position} / {nombre_total}",

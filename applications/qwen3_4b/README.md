@@ -39,6 +39,17 @@ Chaque ligne CSV devient un document distinct. Le texte originel est conservé e
 
 Les imports IRaMuTeQ TXT fonctionnent toujours. On peut charger plusieurs CSV, plusieurs TXT, ou les deux formats dans une même analyse. L'ordre des lignes, les numéros des documents, le fichier source, le statut d'analyse, les réponses, les prompts personnalisés et la possibilité de reprise par CSV sont conservés. Les commentaires vides restent visibles avec le statut \`vide\`, mais ne sont pas envoyés au modèle.
 
+## Erreur 500 « llama-server process has terminated: signal: killed »
+
+Cette erreur signifie que le processus d'inférence a été arrêté de force. Une saturation de la mémoire RAM du VPS ou du groupe mémoire Docker est l'explication la plus probable, mais elle doit être confirmée dans les compteurs du système. Le conteneur `ollama` peut rester actif tandis que son processus `llama-server` est tué. Dans ce cas, le statut global du conteneur ne suffit pas à diagnostiquer la panne.
+
+L'application conserve **Qwen3-4B par défaut**. Le fichier Compose permet maintenant de sélectionner un modèle moins gourmand en RAM avec la variable Coolify `OLLAMA_MODEL=qwen3:1.7b-q4_K_M`. Le modèle 1.7B est officiel, avec des poids d'environ 1,4 Go, contre 2,6 Go pour Qwen3-4B. Le service `charger_modele` téléchargera le même modèle que celui demandé par Streamlit. Le modèle 1.7B est différent et sa qualité de codage doit être validée : ne pas mélanger ses résultats avec ceux du 4B sans conserver le nom du modèle dans le rapport.
+
+La fenêtre de contexte est réglable avec `QWEN_NUM_CTX=1024` (2048 par défaut), au prix d'une réduction de la quantité de texte et de réponse pouvant être prise en compte. La limite Docker d'Ollama est réglable avec `OLLAMA_MEMORY_LIMIT` (valeur 7g par défaut). Ne l'augmentez pas sans examiner la RAM disponible sur le VPS, qui héberge d'autres applications.
+
+Pour confirmer un événement OOM, identifier le conteneur Ollama avec `docker ps`, puis inspecter `docker exec ID_CONTENEUR cat /sys/fs/cgroup/memory.events` si le système utilise cgroup v2. Un compteur `oom_kill` non nul signifie qu'au moins un processus de ce groupe a subi un arrêt faute de mémoire ; comparer les valeurs avant et après l'essai pour l'attribuer à l'analyse en cours. Vérifier aussi `free -h` et `journalctl -k` pour les messages du noyau.
+
+En cas de signal `killed`, l'application interrompt désormais l'analyse dès le premier échec au lieu de renouveler trois fois la requête, tout en conservant les résultats précédents.
 ## Réduction de l'espace disque pour un VPS CPU (15 novembre 2026)
 
 Le fichier \`compose.yaml\` utilise désormais, par défaut, l'image \`alpine/ollama:latest\`, une distribution **tierce** d'Ollama dédiée au CPU (environ 70 Mo, hors modèle). Elle est construite à partir d'Ollama mais n'est **pas l'image officielle** \`ollama/ollama\`. Son code source et son processus de construction sont consultables sur https://github.com/alpine-docker/ollama. Ce choix évite le téléchargement des bibliothèques CUDA, inutiles sur un VPS sans GPU. Le service de téléchargement \`charger_modele\` utilise la même image, et ne duplique pas les couches de stockage. L'interface Streamlit, les exports et les catégories Qwen restent inchangés.
