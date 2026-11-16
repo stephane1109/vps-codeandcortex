@@ -19,7 +19,7 @@ def evaluer_commandes_analyse(
     causes: list[str] = []
     if not prompt.strip():
         causes.append("Le prompt est vide.")
-    if mode_analyse == "theses" and not grille_valide:
+    if not grille_valide:
         causes.append(
             "La grille des trois thèmes est invalide : vérifiez les titres "
             "et les définitions dans « Définir les trois thèmes »."
@@ -31,7 +31,7 @@ def evaluer_commandes_analyse(
         )
 
     conditions_valides = bool(prompt.strip()) and (
-        mode_analyse != "theses" or grille_valide
+        grille_valide
     )
     return {
         "tester": conditions_valides and nombre_restants > 0,
