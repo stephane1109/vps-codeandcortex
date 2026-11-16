@@ -10,13 +10,25 @@ from configuration_qwen import (
     CONTEXTE_MAXIMUM, MODELE, SYSTEME_COMMUN, URL_OLLAMA,
 )
 
-PROMPT_MATRICE_DEFAUT = """Analyse un corpus de sciences humaines et sociales.
-Repère les thèmes pertinents pour la question de recherche formulée ici.
-Pour chaque texte, applique la grille validée sans créer de nouvelles catégories.
-Plusieurs thèmes peuvent être présents dans un même texte.
-Distingue les indices textuels explicites des interprétations incertaines.
-Respecte les formulations SMS, les commentaires courts et les textes longs.
-N'invente pas de fait, de citation ni d'intention non exprimée."""
+PROMPT_MATRICE_DEFAUT = """Analyse les textes et commentaires de ce corpus de sciences humaines et sociales sous l'angle des discours sur la violence.
+
+Construis une grille de codage comportant exactement trois thèmes.
+
+Dénonciation de la violence : le texte condamne ou critique explicitement des actes de violence, leurs auteurs ou leurs conséquences.
+
+Indignation face à la violence : le texte manifeste explicitement une réaction de colère, de révolte, de consternation ou un sentiment d'injustice devant des violences.
+
+Détermination d'un persécuteur face à la violence : le texte désigne explicitement une personne, un groupe ou une institution comme responsable de violences, de persécutions ou d'oppression envers une cible. Cette désignation constitue une attribution de responsabilité dans le discours, et non une culpabilité établie.
+
+Annote chaque unité textuelle selon ces trois thèmes non exclusifs. Un même texte peut relever simultanément de plusieurs thèmes. Ne force pas l'attribution d'une catégorie lorsque les indices textuels sont insuffisants.
+
+Pour chaque thème présent, relève un extrait littéral du texte et justifie brièvement l'annotation. Signale les interprétations incertaines. N'invente aucun fait, aucune citation, aucune émotion ni aucune intention qui ne soit exprimée dans le texte.
+
+Applique les mêmes critères aux commentaires courts, aux formulations SMS, aux publications des auteurs, aux transcriptions vocales, aux textes descriptifs longs et aux textes générés par l'IA.
+
+Conserve les formulations originales. Les textes longs peuvent être segmentés, mais leurs annotations doivent être regroupées au niveau du document initial.
+
+Présente les résultats dans une matrice comportant une ligne par texte, une colonne binaire pour chacun des trois thèmes, les indices textuels justificatifs et une indication d'incertitude. Cette matrice doit permettre une validation ou une correction manuelle ultérieure."""
 
 NOMBRE_THEMES_MAXIMUM = 8
 
@@ -84,8 +96,8 @@ def proposer_themes_depuis_prompt(
     """Déduire une proposition de grille à partir de la consigne du chercheur."""
     if not consigne.strip():
         raise ValueError("Le prompt doit être renseigné.")
-    if len(consigne.strip()) > 1600:
-        raise ValueError("Le prompt dépasse 1600 caractères.")
+    if len(consigne.strip()) > 2200:
+        raise ValueError("Le prompt dépasse 2200 caractères.")
     non_vides = [str(texte).strip() for texte in textes if str(texte).strip()]
     if not non_vides:
         raise ValueError("Aucun texte non vide pour la proposition de thèmes.")
@@ -264,8 +276,8 @@ def coder_multithemes(
     grille = valider_themes(themes)
     if not consigne.strip():
         raise ValueError("Le prompt d'annotation est vide.")
-    if len(consigne.strip()) > 1600:
-        raise ValueError("Le prompt dépasse 1600 caractères.")
+    if len(consigne.strip()) > 2200:
+        raise ValueError("Le prompt dépasse 2200 caractères.")
     if not texte.strip():
         raise ValueError("Impossible d'annoter un texte vide.")
     if longueur_segment > 1200:

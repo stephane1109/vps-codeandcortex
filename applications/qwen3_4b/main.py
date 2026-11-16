@@ -311,16 +311,20 @@ st.caption(
 # Un seul parcours : le même prompt et la même matrice pour les commentaires
 # courts et pour les documents longs. Aucun choix de méthode n'est nécessaire.
 mode_analyse = "matrice"
+# Migrer uniquement l'ancien texte générique ; conserver tout prompt personnalisé.
+PROMPT_GENERIQUE_PRECEDENT = "Analyse un corpus de sciences humaines et sociales.\nRepère les thèmes pertinents pour la question de recherche formulée ici.\nPour chaque texte, applique la grille validée sans créer de nouvelles catégories.\nPlusieurs thèmes peuvent être présents dans un même texte.\nDistingue les indices textuels explicites des interprétations incertaines.\nRespecte les formulations SMS, les commentaires courts et les textes longs.\nN'invente pas de fait, de citation ni d'intention non exprimée."
+if st.session_state.get("qwen_prompt_matrice") == PROMPT_GENERIQUE_PRECEDENT:
+    st.session_state["qwen_prompt_matrice"] = PROMPT_MATRICE_DEFAUT
 prompt = st.text_area(
     "Prompt d'annotation des textes et commentaires",
     value=PROMPT_MATRICE_DEFAUT,
     key="qwen_prompt_matrice",
     height=260,
     help=(
-        "Définissez les critères des trois thèmes. Qwen les applique à "
-        "chaque texte ; les textes longs sont segmentés automatiquement. "
-        "Les trois thèmes sont indépendants et leurs résultats sont exportés "
-        "dans une matrice que vous pouvez corriger manuellement."
+        "Le prompt initial traite trois thèmes de la violence. Vous pouvez "
+        "modifier librement ces thèmes et leurs définitions. "
+        "Qwen propose une grille à valider avant le codage. Les textes longs "
+        "sont segmentés ; les résultats restent corrigeables et exportables."
     ),
 )
 st.caption(

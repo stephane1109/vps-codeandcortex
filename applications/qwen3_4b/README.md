@@ -2,6 +2,10 @@
 
 L'application annote des corpus textuels pour les sciences humaines et sociales. Aucun thème ni domaine de recherche n'est imposé. Le chercheur rédige son prompt, Qwen propose une grille de catégories, puis le chercheur peut modifier les titres et les définitions avant d'annoter les textes. Les thèmes ne sont pas exclusifs : plusieurs catégories peuvent être présentes dans une même unité.
 
+## Prompt initial sur la violence (16 novembre 2026)
+
+L'interface affiche maintenant, par défaut, le prompt sur les trois thèmes demandés : dénonciation de la violence, indignation face à la violence et détermination d'un persécuteur face à la violence. Ce prompt sert de **point de départ modifiable** et ne réintroduit pas un menu de codage structuré. Le bouton de proposition des thèmes reconstruit une grille à partir de la consigne et d'extraits du corpus, qui reste éditable avant l'annotation. La limite du champ de consigne est passée de 1 600 à 2 200 caractères pour accepter intégralement ce prompt. Lors du redéploiement, seule une session contenant l'ancien texte générique strictement inchangé est migrée ; un prompt personnalisé est préservé.
+
 ## Utilisation
 
 L'interface propose un seul parcours pour des commentaires courts (y compris des formulations SMS), des publications et des descriptions longues. Les textes longs sont segmentés automatiquement, puis les annotations sont réunies sans changer de grille.
