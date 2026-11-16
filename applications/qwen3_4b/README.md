@@ -12,7 +12,7 @@ Lorsque le prompt contient explicitement des intitulés de thèmes entre guillem
 
 ## Modèles proposés et moteurs (16 novembre 2026)
 
-Le sélecteur unique sous l'import propose six modèles : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B pour la génération via Ollama, ainsi que JuriBERT et BERTweetFR pour les encodages spécialisés via Transformers. Le modèle défini par la variable Coolify `OLLAMA_MODEL` est le choix initial ; tout autre modèle choisi est transmis réellement à Ollama pour toutes les analyses. Le conteneur `charger_modele` télécharge les quatre modèles, avec un seul modèle actif simultanément.
+Le sélecteur unique sous l'import propose six modèles : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B pour la génération via Ollama, ainsi que JuriBERT et BERTweetFR pour les encodages spécialisés via Transformers. La variable Coolify `OLLAMA_MODEL` définit le choix initial. Les quatre modèles génératifs sont envoyés à Ollama ; les deux modèles spécialisés passent par le service Transformers indépendant. Le conteneur `charger_modele` télécharge les quatre modèles Ollama, avec un seul modèle chargé simultanément.
 
 ## Modèles français spécialisés JuriBERT et BERTweetFR
 
