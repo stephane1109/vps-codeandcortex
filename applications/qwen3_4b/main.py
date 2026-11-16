@@ -933,11 +933,27 @@ else:
         st.success(
             f"Grille valide : {len(themes_valides)} thème(s) indépendant(s). "
             + (
-                "Vous pouvez calculer les similarités."
-                if MODELE_EST_SPECIALISE
-                else "Vous pouvez commencer à annoter les textes."
+                "Vous pouvez lancer la classification NLI."
+                if MODE_NLI
+                else (
+                    "Vous pouvez calculer les similarités."
+                    if MODELE_EST_SPECIALISE
+                    else "Vous pouvez commencer à annoter les textes."
+                )
             )
         )
+        if MODE_NLI and any(
+            theme["definition"].casefold().startswith(
+                "le texte comporte un indice explicite relevant du thème"
+            )
+            for theme in themes_valides
+        ):
+            st.warning(
+                "Certaines définitions des thèmes sont encore génériques. "
+                "Pour améliorer la classification NLI, précisez les indices "
+                "discursifs recherchés dans chaque définition. "
+                "Les intitulés seuls risquent de produire des faux positifs."
+            )
     except ValueError as erreur:
         st.error(f"Grille incomplète : {erreur}")
 
