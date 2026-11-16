@@ -12,9 +12,9 @@ class TestImports(unittest.TestCase):
     def test_csv_utf8_avec_emoji(self):
         donnees = (
             "nom_affiche;texte\n"
-            'Exemple_❤️;"Ce débat porte sur l\\'éducation."\n'
+            "Exemple_❤️;\"Ce débat porte sur l'éducation.\"\n"
             'Autre;"Première ligne\nseconde ligne"\n'
-        ).replace("\\'", "'")
+        )
         documents, infos = analyser_commentaires_csv(
             donnees.encode("utf-8-sig")
         )
