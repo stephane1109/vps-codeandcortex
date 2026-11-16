@@ -1042,18 +1042,11 @@ else:
         "numero_document", "nom_affiche", "texte", "reponse_qwen",
         "statut_codage",
     ]
-    if mode_analyse == "structure":
-        colonnes_principales += list(CHAMPS_BOOLEENS) + ["acteur_cible"]
-    elif mode_analyse == "matrice":
-        colonnes_principales = [
-            "numero_document", "id_video", "source_texte", "texte",
-            *CHAMPS_THEMES, "acteur_designe",
-            "incertitude_interpretation", "statut_codage",
-        ]
-    elif mode_analyse == "theses":
-        colonnes_principales += [
-            "theme_retenu", "theme_intitule", "indice_textuel", "justification"
-        ]
+    colonnes_principales = [
+        "numero_document", "id_video", "source_texte", "texte",
+        *(codes_themes(themes_valides) if themes_valides else []),
+        "incertitude_interpretation", "statut_codage",
+    ]
     st.dataframe(
         reponses_valides[
             [col for col in colonnes_principales if col in reponses_valides]
@@ -1064,8 +1057,6 @@ else:
         column_config={
             "texte": st.column_config.TextColumn("Commentaire", width="large"),
             "nom_affiche": st.column_config.TextColumn("Auteur"),
-            "theme_retenu": st.column_config.TextColumn("Code du thème"),
-            "theme_intitule": st.column_config.TextColumn("Thème retenu"),
             "reponse_qwen": st.column_config.TextColumn(
                 "Analyse produite par Qwen", width="large"
             ),
@@ -1144,80 +1135,72 @@ with st.expander("Tableau complet, métadonnées et variables du corpus", expand
         )
 
 
-if mode_analyse == "matrice":
+if themes_valides is not None:
     st.subheader("Matrice des annotations par texte et par thème")
-    matrice_affichage = construire_matrice(donnees)
+    matrice_affichage = construire_matrice(donnees, themes_valides)
+    codes = codes_themes(themes_valides)
     colonnes_matrice = [
         "numero_document", "id_video", "source_texte", "texte",
-        "statut_codage", *("final_" + theme for theme in CHAMPS_THEMES),
-        "incertitude_interpretation", "acteur_designe",
-        "validation_humaine",
+        "statut_codage", *("final_" + code for code in codes),
+        "incertitude_interpretation", "validation_humaine",
     ]
     st.dataframe(
         matrice_affichage[colonnes_matrice].head(1000),
         use_container_width=True, hide_index=True,
     )
     st.caption(
-        "Une ligne représente un texte ou un commentaire. Les trois colonnes "
-        "thématiques sont indépendantes. Les valeurs manquantes correspondent "
-        "aux textes non analysés, et non à une absence de thème. "
-        "Le ZIP contient la matrice intégrale."
+        "Une ligne correspond à un texte ; chaque colonne thématique est "
+        "indépendante. Les valeurs manquantes sont distinctes d'un thème absent. "
+        "Les exports conservent l'intégralité du corpus."
     )
     with st.expander("Consulter les textes regroupés par thème", expanded=False):
-        panneaux = st.tabs([
-            LIBELLES_THEMES[theme] for theme in CHAMPS_THEMES
-        ])
-        for panneau, theme in zip(panneaux, CHAMPS_THEMES):
+        panneaux = st.tabs([theme["titre"] for theme in themes_valides])
+        for panneau, code, theme in zip(panneaux, codes, themes_valides):
             with panneau:
                 sous_corpus = matrice_affichage.loc[
                     matrice_affichage["statut_codage"].eq("ok")
-                    & matrice_affichage["final_" + theme].eq(True).fillna(False)
+                    & matrice_affichage["final_" + code].eq(True).fillna(False)
                 ]
                 st.caption(
-                    f"{len(sous_corpus)} texte(s) associé(s) à "
-                    f"{LIBELLES_THEMES[theme]}. "
-                    "Un même texte peut apparaître dans plusieurs thèmes."
+                    f"{len(sous_corpus)} texte(s) associé(s) à {theme['titre']}. "
+                    "Le même texte peut relever de plusieurs catégories."
                 )
                 st.dataframe(
                     sous_corpus[
                         ["numero_document", "id_video", "source_texte", "texte"]
                     ].head(1000),
-                    use_container_width=True,
-                    hide_index=True,
+                    use_container_width=True, hide_index=True,
                 )
 
-    st.subheader("Fréquences des thèmes selon la source textuelle")
-    bilan_sources = construire_bilan_sources(matrice_affichage)
-    st.dataframe(
-        bilan_sources, use_container_width=True, hide_index=True,
-    )
+    st.subheader("Répartition des thèmes selon la source textuelle")
+    bilan_sources = construire_bilan_sources(matrice_affichage, themes_valides)
+    st.dataframe(bilan_sources, use_container_width=True, hide_index=True)
 
-    st.subheader("Comparaison des sources appariées par identifiant vidéo")
-    comparaison = comparer_sources_par_video(matrice_affichage)
+    st.subheader("Comparaison des textes appariés par identifiant vidéo")
+    comparaison = comparer_sources_par_video(matrice_affichage, themes_valides)
     if comparaison.empty:
         st.info(
-            "Aucune vidéo appariée disponible. Choisissez la colonne ID vidéo "
-            "dans le CSV pour comparer textes IA, auteurs et voix transcrites."
+            "Aucun appariement par identifiant vidéo disponible. "
+            "Ce réglage reste facultatif pour l'annotation des corpus."
         )
     else:
         st.dataframe(
             comparaison.head(1000), use_container_width=True, hide_index=True
         )
         st.caption(
-            "Une absence de source est notée non_disponible, jamais non. "
-            "Les discordances IA-auteur et IA-voix ne sont calculées que "
-            "lorsque les deux textes ont reçu une annotation exploitable."
+            "Une source absente est non_disponible ; une source non analysée "
+            "est non_traite. Les discordances exigent deux annotations connues."
         )
 
-    st.subheader("Validation et correction manuelles des annotations")
+    st.subheader("Validation et correction manuelles")
     lignes_verifiables = donnees.loc[donnees["statut_codage"].eq("ok")]
     if lignes_verifiables.empty:
-        st.info("Analysez au moins un texte pour activer la validation humaine.")
+        st.info("Analysez au moins un texte pour activer la correction manuelle.")
     else:
-        identifiants_manuels = lignes_verifiables["numero_document"].astype(int).tolist()
+        identifiants = lignes_verifiables["numero_document"].astype(int).tolist()
         numero_validation = st.selectbox(
-            "Texte à valider ou corriger",
-            identifiants_manuels,
+            "Texte à valider",
+            identifiants,
             format_func=lambda numero: (
                 f"{numero} — "
                 + str(
@@ -1232,7 +1215,7 @@ if mode_analyse == "matrice":
             donnees["numero_document"].eq(numero_validation)
         ].iloc[0]
         st.text_area(
-            "Texte original pour validation",
+            "Texte original",
             value=str(ligne_validation["texte"]),
             height=180, disabled=True,
         )
@@ -1241,93 +1224,39 @@ if mode_analyse == "matrice":
             clear_on_submit=False,
         ):
             corrections = {}
-            for theme in CHAMPS_THEMES:
-                actuel = ligne_validation["manuel_" + theme]
+            for code, theme in zip(codes, themes_valides):
+                actuel = ligne_validation["manuel_" + code]
                 if pd.isna(actuel):
-                    actuel = ligne_validation[theme]
-                corrections[theme] = st.checkbox(
-                    LIBELLES_THEMES[theme],
+                    actuel = ligne_validation[code]
+                corrections[code] = st.checkbox(
+                    theme["titre"],
                     value=bool(actuel) if pd.notna(actuel) else False,
                 )
-            note_validation = st.text_area(
+            note = st.text_area(
                 "Observation du chercheur",
                 value=str(ligne_validation["note_humaine"]),
                 height=80,
             )
-            enregistrer_validation = st.form_submit_button(
+            enregistrer = st.form_submit_button(
                 "Enregistrer la validation ou la correction"
             )
-        if enregistrer_validation:
-            indice_validation = donnees.index[
+        if enregistrer:
+            indice = donnees.index[
                 donnees["numero_document"].eq(numero_validation)
             ][0]
-            correction_effective = any(
-                bool(corrections[theme]) != bool(
-                    donnees.at[indice_validation, theme]
-                )
-                for theme in CHAMPS_THEMES
+            correction = any(
+                bool(corrections[code]) != bool(donnees.at[indice, code])
+                for code in codes
             )
-            for theme in CHAMPS_THEMES:
-                donnees.at[
-                    indice_validation, "manuel_" + theme
-                ] = corrections[theme]
-            donnees.at[indice_validation, "validation_humaine"] = (
-                "corrige" if correction_effective else "valide"
+            for code in codes:
+                donnees.at[indice, "manuel_" + code] = corrections[code]
+            donnees.at[indice, "validation_humaine"] = (
+                "corrige" if correction else "valide"
             )
-            donnees.at[indice_validation, "note_humaine"] = note_validation
+            donnees.at[indice, "note_humaine"] = note
             st.session_state["qwen_donnees"] = donnees
-            st.success("Annotation humaine enregistrée dans la matrice.")
+            st.success("Validation humaine enregistrée dans la matrice.")
             st.rerun()
-
-avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
-if mode_analyse == "theses" and theses_validees is not None:
-    st.subheader("Répartition des commentaires dans les trois thèmes")
-    frequences_themes = avec_resultat["theme_retenu"].value_counts()
-    repartition = pd.DataFrame([
-        {
-            "Thème": theme["titre"],
-            "Code": f"theme_{indice}",
-            "Commentaires": int(frequences_themes.get(f"theme_{indice}", 0)),
-            "Définition": theme["definition"],
-        }
-        for indice, theme in enumerate(theses_validees, start=1)
-    ] + [{
-        "Thème": "Indéterminé / hors des trois thèmes",
-        "Code": "indetermine",
-        "Commentaires": int(frequences_themes.get("indetermine", 0)),
-        "Définition": "Aucun thème suffisamment étayé par ce commentaire",
-    }])
-    st.dataframe(repartition, hide_index=True, use_container_width=True)
-    if not avec_resultat.empty:
-        st.bar_chart(
-            repartition.set_index("Thème")["Commentaires"],
-            x_label="Thème",
-            y_label="Commentaires classés",
-        )
-if mode_analyse == "structure" and not avec_resultat.empty:
-    frequences = pd.Series({
-        champ: int(avec_resultat[champ].fillna(False).sum())
-        for champ in CHAMPS_BOOLEENS
-    })
-    st.bar_chart(frequences, x_label="Catégorie", y_label="Commentaires codés")
-    variables_disponibles = [
-        col for col in donnees if col.startswith("variable_")
-    ]
-    if variables_disponibles:
-        variable = st.selectbox(
-            "Croiser un codage avec une variable du corpus",
-            variables_disponibles,
-        )
-        categorie = st.selectbox(
-            "Catégorie à croiser", list(CHAMPS_BOOLEENS)
-        )
-        st.dataframe(
-            pd.crosstab(
-                avec_resultat[variable].fillna("absent"),
-                avec_resultat[categorie].astype(str),
-            ),
-            use_container_width=True,
-        )
 
 # L'export des dizaines de milliers de lignes n'est pas exécuté
 # lors de chaque affichage : Streamlit le prépare au clic uniquement.
