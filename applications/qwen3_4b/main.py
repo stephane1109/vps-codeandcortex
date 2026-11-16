@@ -136,6 +136,16 @@ def archive_resultats(
         archive.writestr("corpus_qwen_iramuteq.txt", texte)
         if mode_analyse == "matrice":
             archive.writestr("matrice_annotations_qwen.csv", exporter_csv(matrice))
+            for theme in CHAMPS_THEMES:
+                # Une même unité peut figurer dans plusieurs fichiers.
+                extraits_thematiques = matrice.loc[
+                    matrice["statut_codage"].eq("ok")
+                    & matrice["final_" + theme].eq(True).fillna(False)
+                ]
+                archive.writestr(
+                    "textes_" + theme.removeprefix("theme_") + "_qwen.csv",
+                    exporter_csv(extraits_thematiques),
+                )
             archive.writestr(
                 "comparaison_videos_qwen.csv",
                 exporter_csv(comparer_sources_par_video(matrice)),
@@ -1287,6 +1297,28 @@ if mode_analyse == "matrice":
         "aux textes non analysés, et non à une absence de thème. "
         "Le ZIP contient la matrice intégrale."
     )
+    with st.expander("Consulter les textes regroupés par thème", expanded=False):
+        panneaux = st.tabs([
+            LIBELLES_THEMES[theme] for theme in CHAMPS_THEMES
+        ])
+        for panneau, theme in zip(panneaux, CHAMPS_THEMES):
+            with panneau:
+                sous_corpus = matrice_affichage.loc[
+                    matrice_affichage["statut_codage"].eq("ok")
+                    & matrice_affichage["final_" + theme].eq(True).fillna(False)
+                ]
+                st.caption(
+                    f"{len(sous_corpus)} texte(s) associé(s) à "
+                    f"{LIBELLES_THEMES[theme]}. "
+                    "Un même texte peut apparaître dans plusieurs thèmes."
+                )
+                st.dataframe(
+                    sous_corpus[
+                        ["numero_document", "id_video", "source_texte", "texte"]
+                    ].head(1000),
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
     st.subheader("Fréquences des thèmes selon la source textuelle")
     bilan_sources = construire_bilan_sources(matrice_affichage)

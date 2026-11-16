@@ -185,14 +185,15 @@ def construire_bilan_sources(tableau: pd.DataFrame) -> pd.DataFrame:
 
 def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
     """Comparer les sources appariées par vidéo sans confondre absence et manque."""
-    valides = tableau.loc[
-        tableau["statut_codage"].eq("ok")
-        & tableau["id_video"].fillna("").astype(str).str.strip().ne("")
+    # Inclure les unités non traitées pour ne pas les confondre avec
+    # une source absente lors des comparaisons asynchrones ou partielles.
+    disponibles = tableau.loc[
+        tableau["id_video"].fillna("").astype(str).str.strip().ne("")
     ]
     groupes: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(
         lambda: defaultdict(list)
     )
-    for ligne in valides.to_dict("records"):
+    for ligne in disponibles.to_dict("records"):
         groupes[str(ligne["id_video"])][str(ligne["source_texte"])].append(ligne)
     resultats: list[dict[str, object]] = []
     for id_video, sources in groupes.items():
@@ -203,20 +204,29 @@ def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
             }
             for source in SOURCES_TEXTE:
                 lignes = sources.get(source, [])
-                valeurs = [ligne["final_" + theme] for ligne in lignes]
+                annotees = [
+                    ligne for ligne in lignes
+                    if ligne["statut_codage"] == "ok"
+                ]
+                valeurs = [ligne["final_" + theme] for ligne in annotees]
                 if not lignes:
                     code = "non_disponible"
+                elif not annotees:
+                    code = "non_traite"
                 elif any(
                     pd.notna(valeur) and bool(valeur) for valeur in valeurs
                 ):
                     code = "oui"
-                elif all(
-                    pd.notna(valeur) and not bool(valeur)
-                    for valeur in valeurs
+                elif (
+                    len(annotees) == len(lignes)
+                    and all(
+                        pd.notna(valeur) and not bool(valeur)
+                        for valeur in valeurs
+                    )
                 ):
                     code = "non"
                 else:
-                    code = "indetermine"
+                    code = "partiel"
                 enregistrement[source] = code
             enregistrement["discordance_ia_auteur"] = (
                 enregistrement["texte_ia"] != enregistrement["texte_auteur"]
