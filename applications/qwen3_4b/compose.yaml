@@ -30,7 +30,7 @@ services:
   charger_modele:
     image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
     entrypoint: ["/bin/sh", "-c"]
-    command: ["until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull $$OLLAMA_MODEL"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull qwen3:0.6b-q4_K_M && ollama pull qwen3:4b-q4_K_M"]
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-q4_K_M}

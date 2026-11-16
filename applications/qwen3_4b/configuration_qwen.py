@@ -8,6 +8,10 @@ import requests
 
 URL_OLLAMA = os.getenv("OLLAMA_URL", "http://ollama:11434").rstrip("/")
 MODELE = os.getenv("OLLAMA_MODEL", "qwen3:4b-q4_K_M")
+MODELES_PROPOSES = (
+    "qwen3:0.6b-q4_K_M",
+    "qwen3:4b-q4_K_M",
+)
 CONTEXTE_MAXIMUM = max(1024, min(4096, int(os.getenv("QWEN_NUM_CTX", "2048"))))
 
 SYSTEME_COMMUN = """Tu réalises une annotation textuelle en sciences humaines et sociales.

@@ -15,7 +15,8 @@ import requests
 import streamlit as st
 
 from configuration_qwen import (
-    MODELE, CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
+    MODELE as MODELE_CONFIGURATION, MODELES_PROPOSES,
+    CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
 )
 from codage_multithemes import (
     PROMPT_MATRICE_DEFAUT, NOMBRE_THEMES_MAXIMUM,
@@ -33,7 +34,7 @@ from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
 
-st.set_page_config(page_title=f"Qwen {MODELE} — analyse de corpus", layout="wide")
+st.set_page_config(page_title="Qwen — analyse de corpus", layout="wide")
 
 # Harmoniser en rouge tous les titres de section de niveau 3.
 # Les autres niveaux de titre et le contenu des tableaux restent inchangés.
@@ -244,6 +245,7 @@ def lancer_analyse(
     contexte_general: str,
     contexte_variables: list[str],
     temperature: float,
+    modele: str,
 ) -> tuple[int, int, bool]:
     """Analyser automatiquement toutes les lignes sélectionnées, sans lots visibles."""
     nombre_total = len(indices)
@@ -275,6 +277,7 @@ def lancer_analyse(
                     temperature=temperature,
                     session=session,
                     consigne=prompt,
+                    modele=modele,
                 )
                 for champ, valeur in resultat.items():
                     donnees.at[indice, champ] = valeur
@@ -293,7 +296,7 @@ def lancer_analyse(
                 details_erreur = str(erreur)
                 if "Modèle sollicité :" not in details_erreur:
                     details_erreur = (
-                        f"Modèle sollicité : {MODELE} ; "
+                        f"Modèle sollicité : {modele} ; "
                         f"Contexte demandé : {CONTEXTE_MAXIMUM} tokens ; "
                         + details_erreur
                     )
@@ -328,7 +331,8 @@ def lancer_analyse(
 authentifier()
 
 st.title("Qwen — analyser un corpus avec votre prompt")
-st.caption("version 16-11-2026 - modèle : qwen3:1.7b-q4_K_M — Ollama")
+# La mention de version reste sous le titre, avec le modèle réellement sélectionné.
+mention_version = st.empty()
 # Un seul parcours : le même prompt et la même matrice pour les commentaires
 # courts et pour les documents longs. Aucun choix de méthode n'est nécessaire.
 mode_analyse = "matrice"
@@ -370,6 +374,30 @@ fichiers = st.file_uploader(
         "virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
     ),
 )
+# Ne proposer que deux modèles, sans modifier la variable Coolify OLLAMA_MODEL.
+# Le modèle léger apparaît en premier ; l'utilisateur peut conserver le 4B.
+if "qwen_modele_selectionne" not in st.session_state:
+    st.session_state["qwen_modele_selectionne"] = (
+        MODELE_CONFIGURATION
+        if MODELE_CONFIGURATION in MODELES_PROPOSES
+        else MODELES_PROPOSES[0]
+    )
+MODELE = st.selectbox(
+    "Modèle Ollama pour l'analyse",
+    options=MODELES_PROPOSES,
+    format_func=lambda nom: (
+        "Qwen3 0.6B — ultra léger (523 Mo)"
+        if nom == MODELES_PROPOSES[0]
+        else "Qwen3 4B — analyse approfondie (2,6 Go)"
+    ),
+    key="qwen_modele_selectionne",
+    help=(
+        "Le modèle sélectionné sera utilisé pour proposer les thèmes, "
+        "tester un texte et analyser le corpus. "
+        "Un changement de modèle nécessite une nouvelle analyse."
+    ),
+)
+mention_version.caption(f"version 16-11-2026 - modèle : {MODELE} — Ollama")
 if not fichiers:
     st.stop()
 
@@ -733,7 +761,9 @@ if st.session_state.get("qwen_id_grille_libre") != identifiant_grille:
 if st.button("Construire les thèmes avec Qwen à partir du prompt"):
     try:
         propositions = proposer_themes_depuis_prompt(
-            prompt, tableau["texte"].fillna("").astype(str).head(20).tolist()
+            prompt,
+            tableau["texte"].fillna("").astype(str).head(20).tolist(),
+            modele=MODELE,
         )
         st.session_state["qwen_themes_proposes"] = propositions
         st.session_state["qwen_origine_grille"] = "Proposition de Qwen"
@@ -1036,6 +1066,7 @@ if tester:
                     session=session,
                     consigne=prompt,
                     timeout_lecture=60,
+                    modele=MODELE,
                 )
         except (requests.RequestException, json.JSONDecodeError, ValueError, KeyError) as erreur:
             erreur_test = f"{type(erreur).__name__} : {erreur}"
@@ -1066,7 +1097,7 @@ if lancer or relancer:
     indices = reste if lancer else erreurs
     termines, nombre_erreurs, interrompu = lancer_analyse(
         donnees, indices, prompt, themes_valides,
-        contexte_general, contexte_variables, float(temperature),
+        contexte_general, contexte_variables, float(temperature), MODELE,
     )
     st.session_state["qwen_donnees"] = donnees
     if st.session_state.get("qwen_arret_demande", False):

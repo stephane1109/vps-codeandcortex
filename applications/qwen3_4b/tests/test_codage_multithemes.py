@@ -74,6 +74,45 @@ class TestCodageMultithemes(unittest.TestCase):
         )
         self.assertTrue(resultat["theme_1"])
 
+    def test_modele_leger_transmis_a_ollama(self):
+        modele = "qwen3:0.6b-q4_K_M"
+        session = self.simulation(self.annotation())
+        coder_multithemes(
+            "C nul jss deg", themes=THEMES,
+            session=session, modele=modele,
+        )
+        self.assertEqual(
+            session.post.call_args.kwargs["json"]["model"], modele,
+        )
+
+    def test_modele_4b_transmis_a_ollama(self):
+        modele = "qwen3:4b-q4_K_M"
+        session = self.simulation(self.annotation())
+        coder_multithemes(
+            "C nul jss deg", themes=THEMES,
+            session=session, modele=modele,
+        )
+        self.assertEqual(
+            session.post.call_args.kwargs["json"]["model"], modele,
+        )
+
+    def test_modele_choisi_pour_proposer_des_themes_libres(self):
+        modele = "qwen3:0.6b-q4_K_M"
+        session = self.simulation({
+            "themes": [
+                {"titre": "Mobilité", "definition": "Discours sur les transports."}
+            ]
+        })
+        proposer_themes_depuis_prompt(
+            "Repérer les enjeux des transports.",
+            ["Ce train est en retard."],
+            session=session,
+            modele=modele,
+        )
+        self.assertEqual(
+            session.post.call_args.kwargs["json"]["model"], modele,
+        )
+
     def test_delai_hors_limites_refuse(self):
         with self.assertRaisesRegex(ValueError, "délai"):
             coder_multithemes(

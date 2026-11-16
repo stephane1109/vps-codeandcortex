@@ -111,6 +111,7 @@ def proposer_themes_depuis_prompt(
     consigne: str,
     textes: list[str],
     session: requests.Session | None = None,
+    modele: str = MODELE,
 ) -> list[dict[str, str]]:
     """Déduire une proposition de grille à partir de la consigne du chercheur."""
     if not consigne.strip():
@@ -142,7 +143,7 @@ def proposer_themes_depuis_prompt(
     reponse = (session or requests).post(
         URL_OLLAMA + "/api/chat",
         json={
-            "model": MODELE,
+            "model": modele,
             "stream": False,
             "think": False,
             "messages": [
@@ -170,7 +171,7 @@ def proposer_themes_depuis_prompt(
         details = reponse.text[:1400].strip() or "Aucun détail renvoyé par Ollama."
         raise requests.HTTPError(
             f"Échec Ollama lors de la proposition de thèmes : "
-            f"modèle {MODELE}, HTTP {reponse.status_code}. "
+            f"modèle {modele}, HTTP {reponse.status_code}. "
             f"Diagnostic du serveur : {details}",
             response=reponse,
         ) from erreur
@@ -340,6 +341,7 @@ def coder_multithemes(
     session: requests.Session | None = None,
     longueur_segment: int = 650,
     timeout_lecture: int = 240,
+    modele: str = MODELE,
 ) -> dict[str, object]:
     """Appliquer la même grille à tout texte, quelle que soit sa longueur."""
     grille = valider_themes(themes)
@@ -383,7 +385,7 @@ def coder_multithemes(
         reponse = requetes.post(
             URL_OLLAMA + "/api/chat",
             json={
-                "model": MODELE,
+                "model": modele,
                 "stream": False,
                 "think": False,
                 "messages": [
@@ -404,7 +406,7 @@ def coder_multithemes(
             reponse.raise_for_status()
         except requests.HTTPError as erreur:
             raise requests.HTTPError(
-                f"Modèle : {MODELE}, segment {numero}/{len(segments)} ; "
+                f"Modèle : {modele}, segment {numero}/{len(segments)} ; "
                 f"HTTP {reponse.status_code} : {reponse.text[:500]}",
                 response=reponse,
             ) from erreur

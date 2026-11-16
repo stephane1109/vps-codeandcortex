@@ -10,6 +10,12 @@ L'interface affiche maintenant, par défaut, la consigne courte demandée pour l
 
 Lorsque le prompt contient explicitement des intitulés de thèmes entre guillemets à la suite de « thèmes : » ou « catégories : », l'application construit la grille directement, sans solliciter Ollama. Les intitulés sont restitués tels quels, les définitions provisoires peuvent être modifiées avant l'analyse et aucune grille propre à la violence n'est imposée par le code. Pour les demandes ouvertes qui nécessitent effectivement une génération, le message détaillé renvoyé par Ollama est affiché en cas d'erreur HTTP, au lieu du seul « 500 Internal Server Error ». Ce changement ne modifie ni le modèle sélectionné dans Coolify ni les paramètres mémoire du VPS. Une erreur interne d'Ollama sur une véritable inférence doit toujours être examinée dans ses journaux.
 
+## Sélecteur de deux modèles Ollama (16 novembre 2026)
+
+Un sélecteur est situé immédiatement sous l'import CSV/TXT. Il propose en premier « Qwen3 0.6B — ultra léger » (`qwen3:0.6b-q4_K_M`, environ 523 Mo de poids) et en second « Qwen3 4B — analyse approfondie » (`qwen3:4b-q4_K_M`, environ 2,6 Go). Le choix prérempli reprend le modèle de la variable d'environnement `OLLAMA_MODEL` lorsqu'il fait partie de ces deux options, afin de respecter la configuration existante ; l'utilisateur peut changer de modèle à tout moment. La mention sous le titre reflète le modèle choisi.
+
+Le choix du modèle est transmis effectivement à Ollama pour la proposition de thèmes, le test et l'analyse complète. Il entre dans la signature de configuration pour éviter toute réutilisation accidentelle d'annotations obtenues avec un autre modèle. Le service `charger_modele` télécharge les deux modèles et le service `ollama` ne charge qu'un seul modèle à la fois (`OLLAMA_MAX_LOADED_MODELS=1`). Les deux modèles occupent du stockage, mais pas simultanément la mémoire d'inférence. Le 0.6B peut être moins fiable que le 4B sur les distinctions discursives complexes et la sortie JSON structurée.
+
 ## Utilisation
 
 L'interface propose un seul parcours pour des commentaires courts (y compris des formulations SMS), des publications et des descriptions longues. Les textes longs sont segmentés automatiquement, puis les annotations sont réunies sans changer de grille.
