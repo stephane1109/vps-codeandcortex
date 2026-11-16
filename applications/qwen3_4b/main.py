@@ -501,8 +501,8 @@ try:
         ).hexdigest()[:16]
         noms_suggeres = {
             "texte_ia": (
-                "texte_ia", "texte_genere_ia", "statut_resume_ia",
-                "resume_ia", "description_ia", "ai_generated_text",
+                "texte_ia", "texte_genere_ia", "resume_ia",
+                "description_ia", "ai_generated_text",
             ),
             "texte_auteur": (
                 "texte_auteur", "texte_original", "caption", "legende",
@@ -514,7 +514,7 @@ try:
             ),
             "commentaire": (
                 "commentaire", "commentaires", "texte_commentaire",
-                "texte", "comment", "message", "content",
+                "comment", "message", "content",
             ),
         }
         suggestions_tous_textes = (
