@@ -22,7 +22,7 @@ from codage_qwen import (
     coder_commentaire,
     verifier_service,
 )
-from lecture_commentaires import analyser_commentaires_csv
+from lecture_commentaires import analyser_commentaires_csv, lister_colonnes_csv
 from lecture_iramuteq import (
     analyser_corpus,
     exporter_csv,
@@ -92,8 +92,8 @@ def archive_resultats(
     texte = exporter_iramuteq(documents, categories, "qwen_position")
     colonnes_reponses = [
         "numero_document", "nom_affiche", "texte", "fichier_source",
-        "ligne_csv", "reponse_qwen",
-        "statut_codage", "erreur_codage", "mode_analyse",
+        "ligne_csv", "colonne_texte_source", "colonne_auteur_source",
+        "reponse_qwen", "statut_codage", "erreur_codage", "mode_analyse",
     ]
     reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
     tampon = io.BytesIO()
@@ -259,8 +259,10 @@ def lancer_analyse(
                 erreurs += 1
                 # Interrompre immédiatement si le système a tué le moteur d'inférence.
                 erreurs_consecutives = (
-                    3 if 'signal: killed' in str(erreur).lower()
-                    else erreurs_consecutives + 1
+                    3 if (
+                        "signal: killed" in str(erreur).lower()
+                        or "unexpected eof" in str(erreur).lower()
+                    ) else erreurs_consecutives + 1
                 )
             barre.progress(
                 round(position * 100 / max(1, nombre_total)),
@@ -324,21 +326,99 @@ fichiers = st.file_uploader(
     "Importer un ou plusieurs fichiers : commentaires CSV ou corpus IRaMuTeQ TXT",
     type=["csv", "txt"], accept_multiple_files=True,
     help=(
-        "CSV : colonnes obligatoires nom_affiche et texte, séparées par "
-        "point-virgule, virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
+        "CSV : choisissez librement la colonne des commentaires et, "
+        "si elle existe, celle des auteurs. Séparateurs : point-virgule, "
+        "virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
     ),
 )
 if not fichiers:
     st.stop()
 
+
+def proposer_colonne(colonnes: list[str], suggestions: tuple[str, ...]) -> str | None:
+    """Trouver une colonne habituelle sans imposer son intitulé."""
+    normalisees = {nom.strip().casefold(): nom for nom in colonnes}
+    for suggestion in suggestions:
+        if suggestion in normalisees:
+            return normalisees[suggestion]
+    return None
+
+
+st.subheader("Choix des colonnes CSV")
+st.caption(
+    "Pour chaque fichier CSV, sélectionnez la colonne contenant les "
+    "commentaires à analyser. La colonne auteur est facultative. "
+    "Les autres colonnes restent disponibles dans le CSV complet exporté."
+)
+correspondances_csv: list[dict[str, object]] = []
+try:
+    for numero_fichier, fichier in enumerate(fichiers):
+        if not fichier.name.lower().endswith(".csv"):
+            continue
+        colonnes_csv = lister_colonnes_csv(fichier.getvalue())
+        defaut_texte = proposer_colonne(
+            colonnes_csv,
+            ("texte", "commentaire", "commentaires", "comment", "text",
+             "content", "message", "body", "description"),
+        ) or colonnes_csv[0]
+        cle_fichier = hashlib.sha256(
+            f"{numero_fichier}:{fichier.name}:".encode("utf-8")
+            + fichier.getvalue()
+        ).hexdigest()[:16]
+        colonne_gauche, colonne_droite = st.columns(2)
+        with colonne_gauche:
+            texte_choisi = st.selectbox(
+                f"Colonne contenant les commentaires — {fichier.name}",
+                options=colonnes_csv,
+                index=colonnes_csv.index(defaut_texte),
+                key=f"qwen_texte_csv_{cle_fichier}",
+            )
+        with colonne_droite:
+            choix_auteurs = [None] + [
+                nom for nom in colonnes_csv if nom != texte_choisi
+            ]
+            auteur_propose = proposer_colonne(
+                colonnes_csv,
+                ("nom_affiche", "display_name", "auteur", "author",
+                 "utilisateur", "username", "profil"),
+            )
+            if auteur_propose not in choix_auteurs:
+                auteur_propose = None
+            auteur_choisi = st.selectbox(
+                f"Colonne auteur (facultative) — {fichier.name}",
+                options=choix_auteurs,
+                index=choix_auteurs.index(auteur_propose),
+                format_func=lambda valeur: (
+                    "Aucune colonne auteur" if valeur is None else valeur
+                ),
+                key=f"qwen_auteur_csv_{cle_fichier}",
+            )
+        correspondances_csv.append({
+            "numero_fichier": numero_fichier,
+            "nom_fichier": fichier.name,
+            "colonne_texte": texte_choisi,
+            "colonne_auteur": auteur_choisi,
+        })
+except (ValueError, UnicodeError) as erreur:
+    st.error(f"Impossible de lire les en-têtes CSV : {erreur}")
+    st.stop()
+
+choix_par_fichier = {
+    int(choix["numero_fichier"]): choix for choix in correspondances_csv
+}
+
 try:
     documents = []
     metadonnees = {}
-    for fichier in fichiers:
+    for numero_fichier, fichier in enumerate(fichiers):
         nom_fichier = fichier.name
         if nom_fichier.lower().endswith(".csv"):
+            choix = choix_par_fichier[numero_fichier]
             nouveaux, informations = analyser_commentaires_csv(
-                fichier.getvalue(), numero_depart=len(documents)
+                fichier.getvalue(),
+                numero_depart=len(documents),
+                colonne_texte=str(choix["colonne_texte"]),
+                colonne_auteur=choix["colonne_auteur"],
             )
             documents.extend(nouveaux)
             for numero_document, informations_document in informations.items():
@@ -363,7 +443,13 @@ try:
                 }
 
     tableau = tableau_documents(documents)
-    for colonne in ("nom_affiche", "ligne_csv", "fichier_source", "format_source"):
+    colonnes_metadonnees = {
+        "nom_affiche", "ligne_csv", "fichier_source", "format_source",
+        "colonne_texte_source", "colonne_auteur_source",
+    }
+    for informations_document in metadonnees.values():
+        colonnes_metadonnees.update(informations_document.keys())
+    for colonne in sorted(colonnes_metadonnees):
         tableau[colonne] = [
             metadonnees.get(int(numero), {}).get(colonne, "")
             for numero in tableau["numero_document"]
@@ -372,7 +458,23 @@ except (ValueError, UnicodeError) as erreur:
     st.error(str(erreur))
     st.stop()
 
-signature = hashlib.sha256(b"\0".join(f.getvalue() for f in fichiers)).hexdigest()
+signature_fichiers = hashlib.sha256(
+    b"\0".join(f.getvalue() for f in fichiers)
+).hexdigest()
+# Les importations historiques conservent leur signature pour les reprises.
+selection_personnalisee = any(
+    choix["colonne_texte"] != "texte"
+    or choix["colonne_auteur"] != "nom_affiche"
+    for choix in correspondances_csv
+)
+signature = (
+    hashlib.sha256(
+        (signature_fichiers + json.dumps(
+            correspondances_csv, ensure_ascii=False, sort_keys=True,
+        )).encode("utf-8")
+    ).hexdigest()
+    if selection_personnalisee else signature_fichiers
+)
 st.write(
     f"Documents importés : **{len(documents)}** ; "
     f"commentaires non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**."
@@ -408,6 +510,9 @@ configuration = {
     "contexte_variables": contexte_variables,
     "signature_corpus": signature,
 }
+if selection_personnalisee:
+    configuration["correspondances_csv"] = correspondances_csv
+
 cle = hashlib.sha256(
     json.dumps(configuration, sort_keys=True, ensure_ascii=False)
     .encode("utf-8")
@@ -468,6 +573,19 @@ if st.session_state.get("qwen_message"):
         st.info(st.session_state["qwen_message"])
 
 if erreurs:
+    if any(
+        "unexpected eof" in str(valeur).lower()
+        for valeur in donnees.loc[erreurs, "erreur_codage"]
+    ):
+        st.warning(
+            "Ollama a perdu la connexion avec le processus d'inférence "
+            "(unexpected EOF). Il faut consulter les journaux du conteneur "
+            "ollama dans Coolify, au moment exact de l'échec. "
+            "Une saturation mémoire, un plantage du moteur ou un problème "
+            "de compatibilité sont possibles ; ce message seul ne permet "
+            "pas de les départager. Le choix de la colonne CSV ne résout "
+            "pas cette panne d'Ollama."
+        )
     st.error(
         f"Échec de l'inférence Qwen pour {len(erreurs)} commentaire(s). "
         "Le corpus importé ne constitue pas un résultat du modèle. "
@@ -713,7 +831,10 @@ if mode_analyse == "structure" and not avec_resultat.empty:
             use_container_width=True,
         )
 
-archive = archive_resultats(donnees, documents, signature, configuration)
+archive = archive_resultats(
+    donnees, documents, signature,
+    {**configuration, "correspondances_csv": correspondances_csv},
+)
 st.download_button(
     "Télécharger tous les résultats, même partiels (ZIP)",
     archive,
