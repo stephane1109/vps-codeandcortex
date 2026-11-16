@@ -28,6 +28,7 @@ from codage_qwen import (
     verifier_service,
 )
 from lecture_commentaires import analyser_commentaires_csv, obtenir_apercu_csv
+from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import (
     analyser_corpus,
     exporter_csv,
@@ -643,16 +644,26 @@ if mode_analyse == "theses":
                 f"{type(erreur).__name__} : {erreur}"
             )
     themes_modifiables = []
+    st.write(
+        "**Thèmes sélectionnés :** "
+        + " ; ".join(
+            st.session_state[f"qwen_theme_titre_{indice}"]
+            for indice in range(1, 4)
+        )
+    )
+    with st.expander("Modifier les intitulés et les définitions", expanded=False):
+        for indice in range(1, 4):
+            st.text_input(
+                f"Thème {indice} — intitulé",
+                key=f"qwen_theme_titre_{indice}",
+            )
+            st.text_area(
+                f"Thème {indice} — définition",
+                key=f"qwen_theme_definition_{indice}",
+                height=80,
+            )
+    # Toujours recueillir les trois valeurs, même lorsque le panneau est fermé.
     for indice in range(1, 4):
-        st.text_input(
-            f"Thème {indice} — intitulé",
-            key=f"qwen_theme_titre_{indice}",
-        )
-        st.text_area(
-            f"Thème {indice} — définition",
-            key=f"qwen_theme_definition_{indice}",
-            height=80,
-        )
         themes_modifiables.append({
             "titre": st.session_state[f"qwen_theme_titre_{indice}"],
             "definition": st.session_state[f"qwen_theme_definition_{indice}"],
@@ -808,32 +819,44 @@ except requests.RequestException as erreur:
 
 st.subheader("Lancer l'analyse")
 st.caption(
-    "Le bouton de test analyse un seul commentaire et affiche immédiatement "
-    "sa réponse. Le bouton principal analyse ensuite automatiquement "
-    "tous les commentaires restants, sans intervention par lots."
+    "Le bouton de test traite un seul commentaire. Le bouton principal "
+    "analyse ensuite les commentaires restants sans lots manuels."
 )
+etat_commandes = evaluer_commandes_analyse(
+    nombre_restants=len(reste),
+    nombre_erreurs=len(erreurs),
+    prompt=prompt,
+    mode_analyse=mode_analyse,
+    grille_valide=(mode_analyse != "theses" or theses_validees is not None),
+    service_disponible=service_disponible,
+)
+for cause_blocage in etat_commandes["causes"]:
+    st.warning(cause_blocage)
+if etat_commandes["avertissement_service"]:
+    st.warning(
+        f"La disponibilité du modèle {MODELE} n'a pas été confirmée "
+        "par la vérification d'Ollama. Vous pouvez néanmoins essayer "
+        "une inférence ; le résultat ou l'erreur sera affiché explicitement. "
+        "Cette vérification n'est pas une exécution du modèle."
+    )
+if etat_commandes["lancer"]:
+    st.success(
+        f"{len(reste)} commentaire(s) prêt(s) pour l'analyse avec {MODELE}. "
+        "La grille et le prompt sont renseignés."
+    )
 colonne_test, colonne_analyser, colonne_erreurs = st.columns([1, 2, 1])
 tester = colonne_test.button(
     "Tester sur un commentaire",
-    disabled=(
-        not reste or not prompt.strip() or not service_disponible
-        or (mode_analyse == "theses" and theses_validees is None)
-    ),
+    disabled=not etat_commandes["tester"],
 )
 lancer = colonne_analyser.button(
     "Analyser tous les commentaires restants",
     type="primary",
-    disabled=(
-        not reste or not prompt.strip() or not service_disponible
-        or (mode_analyse == "theses" and theses_validees is None)
-    ),
+    disabled=not etat_commandes["lancer"],
 )
 relancer = colonne_erreurs.button(
     "Réessayer les commentaires en erreur",
-    disabled=(
-        not erreurs or not prompt.strip() or not service_disponible
-        or (mode_analyse == "theses" and theses_validees is None)
-    ),
+    disabled=not etat_commandes["relancer"],
 )
 if tester or lancer or relancer:
     indices = reste[:1] if tester else (reste if lancer else erreurs)

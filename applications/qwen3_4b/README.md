@@ -46,6 +46,14 @@ L'interface indique toujours le modèle transmis à l'API Ollama et la fenêtre 
 
 Cette modification répond au manque de diagnostic mais **ne supprime pas l'arrêt du processus Ollama**. Le journal du service Ollama et les compteurs mémoire restent nécessaires pour établir la cause de la panne.
 
+## Déblocage des boutons après import CSV (16 novembre 2026)
+
+Après importation des commentaires, l'application présente un diagnostic de préparation explicite : nombre de textes restants, validité du prompt et des trois thèmes, et état de l'inventaire Ollama. Le panneau d'édition des six champs de la grille est désormais replié par défaut pour rendre les commandes d'analyse plus rapidement accessibles. Les trois titres restent visibles et tous les champs demeurent éditables.
+
+La vérification de l'inventaire Ollama `/api/tags` n'interdit plus automatiquement les commandes d'analyse. Cette vérification ne prouve pas qu'une inférence aboutira et peut temporairement échouer même si le moteur fonctionne. Le bouton **Tester sur un commentaire** permet d'envoyer une véritable requête, puis d'afficher le résultat ou une erreur technique. Les boutons restent désactivés si le prompt est vide, la grille invalide ou qu'aucun document pertinent n'est en attente ; chaque blocage est signalé immédiatement au-dessus des commandes.
+
+Les modes historiques, les sélecteurs CSV, les dix lignes d'aperçu, les analyses par commentaire, le CSV de reprise et le ZIP unique ne sont pas supprimés.
+
 ## Classification des discours sur la violence en trois thèmes (16 novembre 2026)
 
 Le mode **Classification en trois thèmes : discours sur la violence** est sélectionné par défaut. Les modes **Analyse libre avec mon prompt** et **Codage structuré sur la violence** restent disponibles sans changement de leur fonctionnement.
