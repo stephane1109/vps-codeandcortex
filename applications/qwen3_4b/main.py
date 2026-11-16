@@ -402,7 +402,7 @@ def lancer_analyse(
                 )
             barre.progress(
                 round(position * 100 / max(1, nombre_total)),
-                text=f"Commentaires examinés : {position} / {nombre_total}",
+                text=f"Textes examinés : {position} / {nombre_total}",
             )
             information.caption(
                 f"Analyses abouties : {termines} ; erreurs : {erreurs}. "
@@ -783,7 +783,7 @@ signature = (
 )
 st.write(
     f"Documents importés : **{len(documents)}** ; "
-    f"commentaires non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**."
+    f"textes non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**."
 )
 with st.expander("Aperçu des textes et variables", expanded=False):
     st.dataframe(tableau.head(30), use_container_width=True, hide_index=True)
@@ -1031,8 +1031,8 @@ except requests.RequestException as erreur:
 
 st.subheader("Lancer l'analyse")
 st.caption(
-    "Le bouton de test traite un seul commentaire. Le bouton principal "
-    "analyse ensuite les commentaires restants sans lots manuels."
+    "Le bouton de test traite un seul texte ou commentaire. Le bouton principal "
+    "analyse ensuite les textes restants sans lots manuels."
 )
 etat_commandes = evaluer_commandes_analyse(
     nombre_restants=len(reste),
@@ -1053,23 +1053,23 @@ if etat_commandes["avertissement_service"]:
     )
 if etat_commandes["lancer"]:
     st.success(
-        f"{len(reste)} commentaire(s) prêt(s) pour l'analyse avec {MODELE}. "
+        f"{len(reste)} texte(s) prêt(s) pour l'analyse avec {MODELE}. "
         "La grille et le prompt sont renseignés."
     )
 colonne_test, colonne_analyser, colonne_erreurs, colonne_arret = st.columns(
     [1, 2, 1, 1]
 )
 tester = colonne_test.button(
-    "Tester sur un commentaire",
+    "Tester sur un texte",
     disabled=not etat_commandes["tester"],
 )
 lancer = colonne_analyser.button(
-    "Analyser tous les commentaires restants",
+    "Analyser tous les textes restants",
     type="primary",
     disabled=not etat_commandes["lancer"],
 )
 relancer = colonne_erreurs.button(
-    "Réessayer les commentaires en erreur",
+    "Réessayer les textes en erreur",
     disabled=not etat_commandes["relancer"],
 )
 colonne_arret.button(
@@ -1151,7 +1151,7 @@ if reponses_valides.empty:
         st.info(
             f"Aucune réponse Qwen pour le moment. "
             f"{nombre_a_traiter} commentaire(s) attendent une analyse. "
-            "Utilisez « Tester sur un commentaire » pour vérifier "
+            "Utilisez « Tester sur un texte » pour vérifier "
             "le fonctionnement du modèle avant l'analyse du corpus entier."
         )
     else:

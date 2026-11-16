@@ -26,7 +26,7 @@ def evaluer_commandes_analyse(
         )
     if nombre_restants <= 0 and nombre_erreurs <= 0:
         causes.append(
-            "Aucun commentaire en attente. Vérifiez la colonne choisie "
+            "Aucun texte en attente. Vérifiez la colonne choisie "
             "et le nombre de textes non vides."
         )
 
