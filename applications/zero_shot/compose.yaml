@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD:?Renseigner APP_PASSWORD dans Coolify}
+      ZERO_SHOT_BASE: /data/resultats_zero_shot.sqlite3
+      HF_HOME: /modeles
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "2"
+    volumes:
+      - zero_shot_modeles:/modeles
+      - zero_shot_resultats:/data
+    expose:
+      - "8501"
+    restart: unless-stopped
+    mem_limit: ${ZERO_SHOT_MEMORY_LIMIT:-4g}
+volumes:
+  zero_shot_modeles:
+  zero_shot_resultats:

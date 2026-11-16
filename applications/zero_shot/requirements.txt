@@ -1,0 +1,7 @@
+streamlit==1.51.0
+pandas>=2.2,<3
+transformers==4.57.1
+numpy>=1.26,<3
+huggingface-hub>=0.34,<1
+safetensors>=0.5,<1
+lingua-language-detector==2.1.1
