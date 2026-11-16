@@ -34,6 +34,19 @@ from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
 
 st.set_page_config(page_title=f"Qwen {MODELE} — analyse de corpus", layout="wide")
 
+# Harmoniser en rouge tous les titres de section de niveau 3.
+# Les autres niveaux de titre et le contenu des tableaux restent inchangés.
+st.markdown(
+    """
+    <style>
+        .stApp h3 {
+            color: #C62828 !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def authentifier() -> None:
     """Empêcher l'accès non autorisé à l'inférence sur le VPS."""
