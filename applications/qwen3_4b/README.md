@@ -24,6 +24,16 @@ L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la géné
 
 Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
 
+## Choix des colonnes CSV et erreur Ollama « unexpected EOF » (16 novembre 2026)
+
+L'interface permet maintenant de **sélectionner explicitement pour chaque fichier CSV** la colonne qui contient le commentaire et, facultativement, celle qui contient le nom de l'auteur. Les colonnes ne sont plus obligatoirement appelées `texte` et `nom_affiche` : des noms comme `commentaire`, `message`, `content` ou tout autre intitulé sont acceptés. Chaque CSV possède ses propres sélecteurs. L'import historique avec `nom_affiche` et `texte` fonctionne toujours sans modification des données.
+
+La colonne choisie pour le commentaire devient `texte` dans la table interne, afin que le prompt libre, la grille de violence, le TXT IRaMuTeQ, la restauration, les statistiques et les exports fonctionnent comme avant. Les autres colonnes CSV sont conservées dans le fichier `codage_commentaires.csv` sous leurs noms préfixés par `csv_`. Les champs `colonne_texte_source` et `colonne_auteur_source` documentent la correspondance. La configuration et la signature du corpus tiennent compte des colonnes sélectionnées : changer le choix n'entraîne pas la réutilisation de réponses produites sur une autre colonne. Les signatures historiques restent reconnues lorsque les colonnes par défaut sont utilisées.
+
+L'erreur `HTTP 500: an error was encountered while running the model: unexpected EOF` signifie que le serveur Ollama a perdu la connexion avec son moteur d'inférence avant la fin de la réponse. Elle ne permet pas, à elle seule, d'attribuer la panne à la RAM : il faut vérifier les journaux du conteneur Ollama autour de l'heure du test. Les causes possibles comprennent une saturation mémoire, un arrêt du moteur, une incompatibilité de l'image Ollama ou une erreur interne. L'application s'arrête désormais immédiatement après cette erreur, pour ne pas répéter inutilement des requêtes vouées à échouer. Cette modification de l'interface **ne répare pas un moteur Ollama instable**.
+
+Dans Coolify, consulter le service `ollama` → `Logs` et rechercher les lignes `error`, `panic`, `OOM`, `killed`, `segmentation fault`, `runner` ou `llama-server`. Pour le système Docker, utiliser `docker logs --tail 100 NOM_DU_CONTENEUR_OLLAMA`. La version réelle du modèle configuré est désormais affichée dans le titre de la page, ce qui permet de vérifier l'utilisation de Qwen3-1.7B ou 4B.
+
 ## Import de commentaire.csv
 
 Qwen accepte désormais un ou plusieurs fichiers \`commentaire.csv\` (ou d'autres CSV) contenant les colonnes obligatoires \`nom_affiche\` et \`texte\`. Le séparateur peut être le point-virgule, la virgule ou la tabulation ; les caractères accentués, les emojis et les retours à la ligne contenus dans les champs entre guillemets sont pris en charge. Le CSV peut être encodé en UTF-8, UTF-8 avec BOM ou Windows-1252. Par exemple :
