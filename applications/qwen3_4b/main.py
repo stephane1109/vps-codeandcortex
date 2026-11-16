@@ -30,7 +30,9 @@ from matrice_thematique import (
     construire_bilan_sources, comparer_sources_par_video,
     exporter_iramuteq_matrice,
 )
-from analyse_specialisee import interroger_encodeur_specialise
+from analyse_specialisee import (
+    interroger_encodeur_specialise, interroger_classification_zero_shot,
+)
 from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
@@ -197,6 +199,8 @@ def restaurer_checkpoint(
     champs_texte = [
         "statut_codage", "erreur_codage", "reponse_qwen", "mode_analyse",
         *("indice_" + code for code in codes),
+        *("nli_relation_" + code for code in codes),
+        *("nli_hypothese_" + code for code in codes),
         "justification", "validation_humaine", "note_humaine",
     ]
     restauration = donnees.copy()
@@ -241,6 +245,18 @@ def restaurer_checkpoint(
             restauration[champ] = pd.Series(
                 valeurs.to_numpy(), index=restauration.index, dtype="Float64"
             )
+    # Les scores NLI sont conservés séparément des scores des encodeurs.
+    for code in codes:
+        for nature in ("implication", "neutralite", "contradiction"):
+            champ = "nli_" + nature + "_" + code
+            if champ in anciens.columns:
+                valeurs = pd.to_numeric(anciens[champ], errors="coerce")
+                if valeurs.dropna().lt(0).any() or valeurs.dropna().gt(1).any():
+                    raise ValueError(f"Score NLI hors de [0, 1] : {champ}.")
+                restauration[champ] = pd.Series(
+                    valeurs.to_numpy(),
+                    index=restauration.index, dtype="Float64",
+                )
     return restauration
 
 
@@ -414,11 +430,33 @@ MODELE_EST_SPECIALISE = MODELE in MODELES_SPECIALISES
 moteur = "Transformers" if MODELE_EST_SPECIALISE else "Ollama"
 mention_version.caption(f"version 16-11-2026 - modèle : {MODELE} — {moteur}")
 if MODELE_EST_SPECIALISE:
-    st.caption(
-        "JuriBERT et BERTweetFR produisent des similarités cosinus avec "
-        "les définitions thématiques. Ces scores ne sont pas des "
-        "probabilités de présence et ne remplacent pas une annotation humaine."
+    approche_specialisee = st.radio(
+        "Méthode d'analyse du modèle spécialisé",
+        options=("nli", "similarite"),
+        index=0,
+        format_func=lambda valeur: (
+            "Classification zero-shot NLI (recommandée)"
+            if valeur == "nli"
+            else "Similarité cosinus exploratoire (modèle sélectionné)"
+        ),
+        key="qwen_approche_specialisee",
+        horizontal=True,
+        help=(
+            "La classification NLI utilise un modèle indépendant de JuriBERT "
+            "et BERTweetFR. Les cosinus proviennent du modèle sélectionné."
+        ),
     )
+    MODE_NLI = approche_specialisee == "nli"
+    st.caption(
+        "Les scores NLI distinguent implication, neutralité et contradiction ; "
+        "ils ne sont pas calibrés. JuriBERT et BERTweetFR ne sont pas eux-mêmes "
+        "entraînés à la NLI."
+        if MODE_NLI
+        else "Les cosinus de JuriBERT et BERTweetFR sont exploratoires "
+        "et ne constituent pas une classification thématique."
+    )
+else:
+    MODE_NLI = False
 if not fichiers:
     st.stop()
 
@@ -905,6 +943,10 @@ else:
 
 configuration = {
     "modele": MODELE,
+    "approche_specialisee": (
+        "nli_zero_shot" if MODE_NLI
+        else ("similarite" if MODELE_EST_SPECIALISE else "")
+    ),
     "mode_analyse": "matrice",
     "prompt": prompt,
     "themes": themes_valides,
@@ -959,11 +1001,35 @@ donnees = st.session_state["qwen_donnees"]
 if MODELE_EST_SPECIALISE:
     st.subheader("Analyse textuelle avec le modèle spécialisé")
     st.caption(
-        f"Modèle : {LIBELLES_MODELES[MODELE]}. "
-        "Chaque valeur représente une similarité cosinus entre un texte "
-        "et la définition d'un thème, pas une probabilité de présence. "
-        "Les modèles ne produisent ni justification générée ni codage binaire."
+        (
+            f"Modèle sélectionné : {LIBELLES_MODELES[MODELE]}. "
+            "Classification zero-shot exécutée par MiniLM NLI multilingue, "
+            "avec scores d'implication, neutralité et contradiction par thème. "
+            "Ces scores ne sont pas des probabilités calibrées."
+        )
+        if MODE_NLI
+        else (
+            f"Modèle : {LIBELLES_MODELES[MODELE]}. "
+            "Cosinus de similarité exploratoires seulement : ils ne "
+            "constituent pas une classification."
+        )
     )
+
+    def analyser_texte_specialise(
+        texte: str,
+        session: requests.Session | None = None,
+        delai_lecture: int = 180,
+    ) -> dict[str, object]:
+        """Appeler le moteur réel de la méthode sélectionnée."""
+        if MODE_NLI:
+            return interroger_classification_zero_shot(
+                texte, themes_valides,
+                session=session, delai_lecture=delai_lecture,
+            )
+        return interroger_encodeur_specialise(
+            texte, themes_valides, MODELE,
+            session=session, delai_lecture=delai_lecture,
+        )
     etat_encodeurs = False
     try:
         adresse_encodeurs = os.getenv(
@@ -973,7 +1039,8 @@ if MODELE_EST_SPECIALISE:
             adresse_encodeurs + "/modeles", timeout=10
         )
         inventaire.raise_for_status()
-        etat_encodeurs = MODELE in inventaire.json().get("modeles", {})
+        modele_a_verifier = "nli_multilingue" if MODE_NLI else MODELE
+        etat_encodeurs = modele_a_verifier in inventaire.json().get("modeles", {})
         if not etat_encodeurs:
             st.warning("Le modèle sélectionné n'est pas déclaré par le service.")
     except (requests.RequestException, ValueError) as erreur:
@@ -988,11 +1055,12 @@ if MODELE_EST_SPECIALISE:
     lignes_erreur = donnees.index[
         donnees["statut_codage"].isin(["erreur_service", "sortie_invalide"])
     ].tolist()
+    statut_reussite = "nli_zero_shot" if MODE_NLI else "similarite"
     lignes_traitees = donnees.index[
-        donnees["statut_codage"].eq("similarite")
+        donnees["statut_codage"].eq(statut_reussite)
     ].tolist()
     st.write(
-        f"Textes avec similarités : **{len(lignes_traitees)}** ; "
+        f"Textes analysés : **{len(lignes_traitees)}** ; "
         f"restants : **{len(lignes_restantes)}** ; "
         f"erreurs : **{len(lignes_erreur)}**."
     )
@@ -1017,7 +1085,7 @@ if MODELE_EST_SPECIALISE:
     col_stop.button(
         "Arrêter l'analyse",
         on_click=demander_arret_analyse,
-        help="Arrêt entre deux textes, sans effacer les similarités calculées.",
+        help="Arrêt entre deux textes, sans effacer les résultats calculés.",
     )
     if test_encodeur:
         indice = min(
@@ -1027,8 +1095,8 @@ if MODELE_EST_SPECIALISE:
         texte_test = str(donnees.at[indice, "texte"])
         debut = time.perf_counter()
         try:
-            resultat_test = interroger_encodeur_specialise(
-                texte_test, themes_valides, MODELE, delai_lecture=60,
+            resultat_test = analyser_texte_specialise(
+                texte_test, delai_lecture=60,
             )
             st.session_state["qwen_test_rapide"] = {
                 "reussi": True,
@@ -1038,7 +1106,7 @@ if MODELE_EST_SPECIALISE:
             }
             for champ, valeur in resultat_test.items():
                 donnees.at[indice, champ] = valeur
-            donnees.at[indice, "statut_codage"] = "similarite"
+            donnees.at[indice, "statut_codage"] = statut_reussite
             donnees.at[indice, "erreur_codage"] = ""
             st.session_state["qwen_donnees"] = donnees
         except (requests.RequestException, ValueError, KeyError) as erreur:
@@ -1052,7 +1120,9 @@ if MODELE_EST_SPECIALISE:
     if tous_encodeur or relancer_encodeur:
         indices = lignes_restantes if tous_encodeur else lignes_erreur
         st.session_state["qwen_arret_demande"] = False
-        avancement = st.progress(0, text="Calcul des similarités")
+        avancement = st.progress(
+            0, text="Classification NLI" if MODE_NLI else "Similarités"
+        )
         nombre_reussites = 0
         nombre_erreurs = 0
         with requests.Session() as session:
@@ -1060,13 +1130,12 @@ if MODELE_EST_SPECIALISE:
                 if st.session_state.get("qwen_arret_demande", False):
                     break
                 try:
-                    resultat = interroger_encodeur_specialise(
-                        str(donnees.at[indice, "texte"]), themes_valides,
-                        MODELE, session=session,
+                    resultat = analyser_texte_specialise(
+                        str(donnees.at[indice, "texte"]), session=session,
                     )
                     for champ, valeur in resultat.items():
                         donnees.at[indice, champ] = valeur
-                    donnees.at[indice, "statut_codage"] = "similarite"
+                    donnees.at[indice, "statut_codage"] = statut_reussite
                     donnees.at[indice, "erreur_codage"] = ""
                     nombre_reussites += 1
                 except (requests.RequestException, ValueError, KeyError) as erreur:
@@ -1089,7 +1158,7 @@ if MODELE_EST_SPECIALISE:
                     break
         avancement.empty()
         st.session_state["qwen_message"] = (
-            f"Similarités obtenues : {nombre_reussites} ; "
+            f"Analyses abouties : {nombre_reussites} ; "
             f"erreurs : {nombre_erreurs}. "
             "Les textes non traités peuvent être repris."
         )
