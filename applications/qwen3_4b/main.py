@@ -1172,13 +1172,32 @@ if MODELE_EST_SPECIALISE:
                 f"en {retour_encodeur['duree_secondes']} s."
             )
             resultat = retour_encodeur["resultat"]
+            if MODE_NLI:
+                tableau_test = pd.DataFrame([
+                    {
+                        "thème": theme["titre"],
+                        "hypothèse": resultat["nli_hypothese_" + code],
+                        "implication": resultat["nli_implication_" + code],
+                        "neutralité": resultat["nli_neutralite_" + code],
+                        "contradiction": resultat["nli_contradiction_" + code],
+                        "relation prédite": resultat["nli_relation_" + code],
+                    }
+                    for code, theme in zip(
+                        codes_themes(themes_valides), themes_valides
+                    )
+                ])
+            else:
+                tableau_test = pd.DataFrame([
+                    {
+                        "thème": theme["titre"],
+                        "similarité cosinus": resultat["similarite_" + code],
+                    }
+                    for code, theme in zip(
+                        codes_themes(themes_valides), themes_valides
+                    )
+                ])
             st.dataframe(
-                pd.DataFrame([
-                    {"theme": theme["titre"],
-                     "similarite_cosinus": resultat["similarite_" + code]}
-                    for code, theme in zip(codes_themes(themes_valides), themes_valides)
-                ]),
-                use_container_width=True, hide_index=True,
+                tableau_test, use_container_width=True, hide_index=True,
             )
         else:
             st.error(
@@ -1187,25 +1206,55 @@ if MODELE_EST_SPECIALISE:
             )
 
     if lignes_traitees:
-        st.subheader("Similarités par texte et par thème")
+        st.subheader(
+            "Classification NLI par texte et par thème"
+            if MODE_NLI else "Similarités par texte et par thème"
+        )
         codes = codes_themes(themes_valides)
-        colonnes = [
-            "numero_document", "id_video", "source_texte", "texte",
-            *("similarite_" + code for code in codes), "texte_tronque",
-        ]
+        colonnes = ["numero_document", "id_video", "source_texte", "texte"]
+        if MODE_NLI:
+            colonnes += [
+                prefixe + code
+                for code in codes
+                for prefixe in (
+                    "nli_implication_", "nli_neutralite_", "nli_contradiction_",
+                    "nli_relation_", "nli_hypothese_",
+                )
+            ]
+            presentation_colonnes = {
+                prefixe + code: st.column_config.NumberColumn(
+                    nature + " — " + theme["titre"], format="%.4f",
+                )
+                for code, theme in zip(codes, themes_valides)
+                for prefixe, nature in (
+                    ("nli_implication_", "Implication"),
+                    ("nli_neutralite_", "Neutralité"),
+                    ("nli_contradiction_", "Contradiction"),
+                )
+            }
+        else:
+            colonnes += ["similarite_" + code for code in codes]
+            presentation_colonnes = {
+                "similarite_" + code: st.column_config.NumberColumn(
+                    theme["titre"], format="%.4f",
+                )
+                for code, theme in zip(codes, themes_valides)
+            }
+        colonnes.append("texte_tronque")
         st.dataframe(
             donnees.loc[lignes_traitees].reindex(columns=colonnes).head(1000),
             hide_index=True, use_container_width=True,
-            column_config={
-                "similarite_" + code: st.column_config.NumberColumn(
-                    theme["titre"], format="%.4f"
-                )
-                for code, theme in zip(codes, themes_valides)
-            },
+            column_config=presentation_colonnes,
         )
         st.caption(
-            "Le texte peut être tronqué à 256 tokens par l'encodeur. "
-            "Ces valeurs exploratoires ne sont pas calibrées."
+            (
+                "Un résultat neutre ne démontre pas la présence du thème. "
+                "Les scores NLI ne sont pas calibrés. L'hypothèse et le texte "
+                "sont limités ensemble à 320 tokens."
+                if MODE_NLI
+                else "Cosinus exploratoires, pas de classification. "
+                "Le texte peut être tronqué à 256 tokens."
+            )
         )
     if lignes_erreur:
         st.subheader("Erreurs du modèle spécialisé")
@@ -1217,15 +1266,23 @@ if MODELE_EST_SPECIALISE:
         )
 
     def generer_csv_specialise() -> bytes:
-        """Exporter la totalité des lignes sans colonnes internes masquées."""
-        colonnes = [
-            "numero_document", "id_video", "source_texte", "texte",
-            *(
-                "similarite_" + code
-                for code in (codes_themes(themes_valides) if themes_valides else [])
-            ),
-            "texte_tronque",
-        ]
+        """Exporter les résultats propres à la méthode sans variables internes."""
+        colonnes = ["numero_document", "id_video", "source_texte", "texte"]
+        codes_export = (
+            codes_themes(themes_valides) if themes_valides else []
+        )
+        if MODE_NLI:
+            colonnes += [
+                prefixe + code
+                for code in codes_export
+                for prefixe in (
+                    "nli_implication_", "nli_neutralite_", "nli_contradiction_",
+                    "nli_relation_", "nli_hypothese_",
+                )
+            ]
+        else:
+            colonnes += ["similarite_" + code for code in codes_export]
+        colonnes.append("texte_tronque")
         return exporter_csv(donnees.reindex(columns=colonnes))
 
     def generer_checkpoint_specialise() -> bytes:
@@ -1239,7 +1296,10 @@ if MODELE_EST_SPECIALISE:
         memoire = io.BytesIO()
         with zipfile.ZipFile(memoire, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(
-                "similarites_modeles_specialises.csv",
+                (
+                    "classification_zero_shot_nli.csv"
+                    if MODE_NLI else "similarites_modeles_specialises.csv"
+                ),
                 generer_csv_specialise(),
             )
             archive.writestr(
@@ -1263,7 +1323,10 @@ if MODELE_EST_SPECIALISE:
     st.download_button(
         "Télécharger tous les résultats, même partiels (ZIP)",
         data=generer_archive_specialisee,
-        file_name="resultats_" + MODELE + "_similarites.zip",
+        file_name=(
+            "resultats_" + MODELE
+            + ("_nli.zip" if MODE_NLI else "_similarites.zip")
+        ),
         mime="application/zip",
         on_click="ignore",
     )
