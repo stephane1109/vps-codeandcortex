@@ -414,7 +414,8 @@ st.write(
 st.caption(
     "Ce nom provient de la configuration effective du conteneur Streamlit. "
     "Il est transmis à Ollama lors de chaque demande d'analyse. "
-    "Le modèle traite chaque commentaire séparément et conserve le texte original."
+    "Chaque texte ou commentaire est analysé séparément. "
+    "Les documents longs sont segmentés et leur texte original est conservé."
 )
 # Un seul parcours : le même prompt et la même matrice pour les commentaires
 # courts et pour les documents longs. Aucun choix de méthode n'est nécessaire.
@@ -748,10 +749,16 @@ else:
     st.session_state["qwen_tableau_importe"] = tableau
     st.session_state["qwen_cle_importation"] = cle_importation
 # Les importations historiques conservent leur signature pour les reprises.
-selection_personnalisee = any(
-    choix["colonne_texte"] != "texte"
-    or choix["colonne_auteur"] != "nom_affiche"
-    for choix in correspondances_csv
+# Inclure la provenance et l'appariement vidéo dans la signature.
+# Deux configurations de colonnes différentes ne doivent jamais
+# réutiliser les réponses d'une autre analyse.
+selection_personnalisee = (
+    bool(correspondances_csv) if mode_analyse == "matrice"
+    else any(
+        choix["colonne_texte"] != "texte"
+        or choix["colonne_auteur"] != "nom_affiche"
+        for choix in correspondances_csv
+    )
 )
 signature = (
     hashlib.sha256(
