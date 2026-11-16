@@ -206,9 +206,14 @@ def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
                 valeurs = [ligne["final_" + theme] for ligne in lignes]
                 if not lignes:
                     code = "non_disponible"
-                elif any(valeur is True for valeur in valeurs):
+                elif any(
+                    pd.notna(valeur) and bool(valeur) for valeur in valeurs
+                ):
                     code = "oui"
-                elif all(valeur is False for valeur in valeurs):
+                elif all(
+                    pd.notna(valeur) and not bool(valeur)
+                    for valeur in valeurs
+                ):
                     code = "non"
                 else:
                     code = "indetermine"
@@ -253,7 +258,10 @@ def exporter_iramuteq_matrice(
                         "*" + theme + "_" + ("oui" if bool(valeur) else "non")
                     )
             source = str(ligne.get("source_texte") or "")
-            if source in SOURCES_TEXTE:
+            if (
+                source in SOURCES_TEXTE
+                and "source_texte_" + source not in document.variables
+            ):
                 suffixes.append("*source_texte_" + source)
         texte = document.entete + (
             " " + " ".join(suffixes) if suffixes else ""

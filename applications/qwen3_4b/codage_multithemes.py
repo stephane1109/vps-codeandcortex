@@ -165,11 +165,16 @@ def coder_multithemes(
     contexte: str = "",
     temperature: float = 0.1,
     session: requests.Session | None = None,
-    longueur_segment: int = 1000,
+    longueur_segment: int = 850,
 ) -> dict[str, object]:
     """Annoter tout le texte, éventuellement segmenté, sans troncature muette."""
     if not consigne.strip():
         raise ValueError("Le prompt multithématique est vide.")
+    if len(consigne.strip()) > 1700:
+        raise ValueError(
+            "Le prompt dépasse 1700 caractères pour le contexte local "
+            "de Qwen. Raccourcissez la consigne avant de relancer."
+        )
     if not texte.strip():
         raise ValueError("Impossible d'annoter un texte vide.")
     if longueur_segment > 1600:
@@ -179,7 +184,7 @@ def coder_multithemes(
     annotations: list[dict[str, object]] = []
     systeme = (
         SYSTEME_COMMUN + "\n\nConsigne du chercheur :\n"
-        + consigne.strip()[:2200]
+        + consigne.strip()
         + "\nRespecte strictement le schéma JSON. "
         "Les trois dimensions sont indépendantes. "
         "Ne transforme jamais une attribution de responsabilité en fait établi."
@@ -205,7 +210,7 @@ def coder_multithemes(
                 "options": {
                     "temperature": float(temperature),
                     "num_ctx": CONTEXTE_MAXIMUM,
-                    "num_predict": 320,
+                    "num_predict": 260,
                 },
                 "keep_alive": "5m",
             },
