@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock
 
 from codage_multithemes import (
+    PROMPT_MATRICE_DEFAUT,
     coder_multithemes, codes_themes, proposer_themes_depuis_prompt,
     schema_annotation, segmenter_texte, valider_annotation, valider_themes,
 )
@@ -34,6 +35,12 @@ class TestCodageMultithemes(unittest.TestCase):
             "incertitude_interpretation": False,
             "justification": "Critique et émotion exprimées.",
         }
+
+    def test_prompt_par_defaut_court_pour_contexte_1024(self):
+        self.assertLess(len(PROMPT_MATRICE_DEFAUT), 700)
+        self.assertIn("Dénonciation de la violence", PROMPT_MATRICE_DEFAUT)
+        self.assertIn("Indignation face à la violence", PROMPT_MATRICE_DEFAUT)
+        self.assertIn("persécuteur", PROMPT_MATRICE_DEFAUT)
 
     def test_themes_determines_par_prompt(self):
         grille = valider_themes([

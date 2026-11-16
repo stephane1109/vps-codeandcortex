@@ -10,25 +10,11 @@ from configuration_qwen import (
     CONTEXTE_MAXIMUM, MODELE, SYSTEME_COMMUN, URL_OLLAMA,
 )
 
-PROMPT_MATRICE_DEFAUT = """Analyse les textes et commentaires de ce corpus de sciences humaines et sociales sous l'angle des discours sur la violence.
+PROMPT_MATRICE_DEFAUT = """Analyse les textes et commentaires selon trois thèmes : "Dénonciation de la violence", "Indignation face à la violence" et "Détermination d'un persécuteur face à la violence".
 
-Construis une grille de codage comportant exactement trois thèmes.
+Classe chaque texte ou commentaire dans ces trois thèmes, qui ne sont pas exclusifs. Un même texte peut appartenir à plusieurs thèmes.
 
-Dénonciation de la violence : le texte condamne ou critique explicitement des actes de violence, leurs auteurs ou leurs conséquences.
-
-Indignation face à la violence : le texte manifeste explicitement une réaction de colère, de révolte, de consternation ou un sentiment d'injustice devant des violences.
-
-Détermination d'un persécuteur face à la violence : le texte désigne explicitement une personne, un groupe ou une institution comme responsable de violences, de persécutions ou d'oppression envers une cible. Cette désignation constitue une attribution de responsabilité dans le discours, et non une culpabilité établie.
-
-Annote chaque unité textuelle selon ces trois thèmes non exclusifs. Un même texte peut relever simultanément de plusieurs thèmes. Ne force pas l'attribution d'une catégorie lorsque les indices textuels sont insuffisants.
-
-Pour chaque thème présent, relève un extrait littéral du texte et justifie brièvement l'annotation. Signale les interprétations incertaines. N'invente aucun fait, aucune citation, aucune émotion ni aucune intention qui ne soit exprimée dans le texte.
-
-Applique les mêmes critères aux commentaires courts, aux formulations SMS, aux publications des auteurs, aux transcriptions vocales, aux textes descriptifs longs et aux textes générés par l'IA.
-
-Conserve les formulations originales. Les textes longs peuvent être segmentés, mais leurs annotations doivent être regroupées au niveau du document initial.
-
-Présente les résultats dans une matrice comportant une ligne par texte, une colonne binaire pour chacun des trois thèmes, les indices textuels justificatifs et une indication d'incertitude. Cette matrice doit permettre une validation ou une correction manuelle ultérieure."""
+Pour chaque thème, indique sa présence ou son absence et relève un indice textuel justificatif. Ne force pas la classification lorsque les éléments sont insuffisants."""
 
 NOMBRE_THEMES_MAXIMUM = 8
 

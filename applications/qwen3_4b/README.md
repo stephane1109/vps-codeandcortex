@@ -4,7 +4,7 @@ L'application annote des corpus textuels pour les sciences humaines et sociales.
 
 ## Prompt initial sur la violence (16 novembre 2026)
 
-L'interface affiche maintenant, par défaut, le prompt sur les trois thèmes demandés : dénonciation de la violence, indignation face à la violence et détermination d'un persécuteur face à la violence. Ce prompt sert de **point de départ modifiable** et ne réintroduit pas un menu de codage structuré. Le bouton de proposition des thèmes reconstruit une grille à partir de la consigne et d'extraits du corpus, qui reste éditable avant l'annotation. La limite du champ de consigne est passée de 1 600 à 2 200 caractères pour accepter intégralement ce prompt. Lors du redéploiement, seule une session contenant l'ancien texte générique strictement inchangé est migrée ; un prompt personnalisé est préservé.
+L'interface affiche maintenant, par défaut, la consigne courte demandée pour les trois thèmes : dénonciation de la violence, indignation face à la violence et détermination d'un persécuteur face à la violence. La version longue précédente a été remplacée afin de ne pas répéter inutilement les instructions dans une fenêtre Ollama limitée à 1 024 tokens. Ce prompt sert de **point de départ modifiable** et ne réintroduit pas un menu de codage structuré. Le bouton de proposition des thèmes reconstruit une grille à partir de la consigne et d'extraits du corpus, qui reste éditable avant l'annotation. La limite du champ de consigne est passée de 1 600 à 2 200 caractères pour accepter intégralement ce prompt. Lors du redéploiement, seule une session contenant l'ancien texte générique strictement inchangé est migrée ; un prompt personnalisé est préservé.
 
 ## Utilisation
 
