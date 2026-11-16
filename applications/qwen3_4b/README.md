@@ -6,6 +6,10 @@ L'application annote des corpus textuels pour les sciences humaines et sociales.
 
 L'interface affiche maintenant, par défaut, la consigne courte demandée pour les trois thèmes : dénonciation de la violence, indignation face à la violence et détermination d'un persécuteur face à la violence. La version longue précédente a été remplacée afin de ne pas répéter inutilement les instructions dans une fenêtre Ollama limitée à 1 024 tokens. Ce prompt sert de **point de départ modifiable** et ne réintroduit pas un menu de codage structuré. Le bouton de proposition des thèmes reconstruit une grille à partir de la consigne et d'extraits du corpus, qui reste éditable avant l'annotation. La limite du champ de consigne est passée de 1 600 à 2 200 caractères pour accepter intégralement ce prompt. Lors du redéploiement, seule une session contenant l'ancien texte générique strictement inchangé est migrée ; un prompt personnalisé est préservé.
 
+## Éviter les erreurs HTTP 500 lors de la proposition (16 novembre 2026)
+
+Lorsque le prompt contient explicitement des intitulés de thèmes entre guillemets à la suite de « thèmes : » ou « catégories : », l'application construit la grille directement, sans solliciter Ollama. Les intitulés sont restitués tels quels, les définitions provisoires peuvent être modifiées avant l'analyse et aucune grille propre à la violence n'est imposée par le code. Pour les demandes ouvertes qui nécessitent effectivement une génération, le message détaillé renvoyé par Ollama est affiché en cas d'erreur HTTP, au lieu du seul « 500 Internal Server Error ». Ce changement ne modifie ni le modèle sélectionné dans Coolify ni les paramètres mémoire du VPS. Une erreur interne d'Ollama sur une véritable inférence doit toujours être examinée dans ses journaux.
+
 ## Utilisation
 
 L'interface propose un seul parcours pour des commentaires courts (y compris des formulations SMS), des publications et des descriptions longues. Les textes longs sont segmentés automatiquement, puis les annotations sont réunies sans changer de grille.

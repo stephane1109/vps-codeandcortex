@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any
 
 import requests
@@ -75,6 +76,37 @@ def codes_themes(themes: list[dict[str, str]]) -> list[str]:
     ]
 
 
+def extraire_themes_explicites(consigne: str) -> list[dict[str, str]]:
+    """Lire les thèmes expressément nommés sans solliciter inutilement Ollama.
+
+    Cette lecture reste générale : aucun domaine ni nombre de thèmes
+    n'est imposé. Les définitions provisoires sont modifiables dans Streamlit.
+    """
+    correspondance = re.search(
+        r"\b(?:thèmes|themes|catégories|categories)\s*:\s*([^\n]{1,800})",
+        consigne, flags=re.IGNORECASE,
+    )
+    if not correspondance:
+        return []
+    titres = re.findall(
+        r'"([^"\n]{2,100})"|«([^»\n]{2,100})»',
+        correspondance.group(1),
+    )
+    if not titres:
+        return []
+    grille = []
+    for double, francais in titres:
+        titre = (double or francais).strip()
+        grille.append({
+            "titre": titre,
+            "definition": (
+                f"Le texte comporte un indice explicite relevant du thème "
+                f"« {titre} ». Ne rien inférer au-delà du discours observé."
+            ),
+        })
+    return valider_themes(grille)
+
+
 def proposer_themes_depuis_prompt(
     consigne: str,
     textes: list[str],
@@ -88,6 +120,11 @@ def proposer_themes_depuis_prompt(
     non_vides = [str(texte).strip() for texte in textes if str(texte).strip()]
     if not non_vides:
         raise ValueError("Aucun texte non vide pour la proposition de thèmes.")
+    # Un prompt qui fournit les intitulés de thèmes n'a pas besoin
+    # d'une deuxième inférence pour produire exactement la même grille.
+    themes_explicites = extraire_themes_explicites(consigne)
+    if themes_explicites:
+        return themes_explicites
     nombre = min(3, len(non_vides))
     fragments = "\n".join(
         f"Extrait {indice + 1} : {non_vides[(indice * len(non_vides)) // nombre][:130]}"
@@ -125,7 +162,18 @@ def proposer_themes_depuis_prompt(
         },
         timeout=(10, 240),
     )
-    reponse.raise_for_status()
+    try:
+        reponse.raise_for_status()
+    except requests.HTTPError as erreur:
+        # L'erreur générique HTTP 500 cachait jusque-là le vrai diagnostic
+        # renvoyé par Ollama (mémoire, chargement du modèle, processus arrêté).
+        details = reponse.text[:1400].strip() or "Aucun détail renvoyé par Ollama."
+        raise requests.HTTPError(
+            f"Échec Ollama lors de la proposition de thèmes : "
+            f"modèle {MODELE}, HTTP {reponse.status_code}. "
+            f"Diagnostic du serveur : {details}",
+            response=reponse,
+        ) from erreur
     contenu = reponse.json().get("message", {}).get("content", "")
     if not isinstance(contenu, str) or not contenu.strip():
         raise ValueError("Aucune grille thématique retournée par Qwen.")

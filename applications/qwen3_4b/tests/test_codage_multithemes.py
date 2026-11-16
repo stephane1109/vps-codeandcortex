@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 import unittest
+
+import requests
 from unittest.mock import Mock
 
 from codage_multithemes import (
     PROMPT_MATRICE_DEFAUT,
-    coder_multithemes, codes_themes, proposer_themes_depuis_prompt,
-    schema_annotation, segmenter_texte, valider_annotation, valider_themes,
+    coder_multithemes, codes_themes, extraire_themes_explicites,
+    proposer_themes_depuis_prompt, schema_annotation, segmenter_texte,
+    valider_annotation, valider_themes,
 )
 
 
@@ -123,6 +126,44 @@ class TestCodageMultithemes(unittest.TestCase):
         annotation["probabilite_theme_1"] = 1.7
         with self.assertRaisesRegex(ValueError, "Score hors"):
             valider_annotation(annotation, "C nul jss deg", THEMES)
+
+    def test_prompt_violence_explicitement_nomme_sans_requete(self):
+        session = Mock()
+        themes = proposer_themes_depuis_prompt(
+            PROMPT_MATRICE_DEFAUT,
+            ["Un commentaire sur la manifestation."],
+            session=session,
+        )
+        self.assertEqual(len(themes), 3)
+        self.assertEqual(themes[0]["titre"], "Dénonciation de la violence")
+        self.assertEqual(themes[1]["titre"], "Indignation face à la violence")
+        self.assertIn("persécuteur", themes[2]["titre"])
+        self.assertTrue(all(theme["definition"] for theme in themes))
+        session.post.assert_not_called()
+
+    def test_extraction_ne_force_aucun_theme_si_prompt_imprecis(self):
+        self.assertEqual(
+            extraire_themes_explicites("Repérer des catégories dans ce corpus."),
+            [],
+        )
+
+    def test_erreur_ollama_500_affiche_le_diagnostic(self):
+        session = Mock()
+        response = Mock()
+        response.status_code = 500
+        response.text = '{"error":"mémoire insuffisante pour charger le modèle"}'
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "500 Server Error"
+        )
+        session.post.return_value = response
+        with self.assertRaisesRegex(
+            requests.HTTPError, "mémoire insuffisante"
+        ):
+            proposer_themes_depuis_prompt(
+                "Repérer les enjeux du tourisme.",
+                ["Tourisme littoral."],
+                session=session,
+            )
 
     def test_proposition_avec_theme_du_chercheur(self):
         session = self.simulation({
