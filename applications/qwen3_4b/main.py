@@ -1151,7 +1151,10 @@ if MODELE_EST_SPECIALISE:
         """Exporter la totalité des lignes sans colonnes internes masquées."""
         colonnes = [
             "numero_document", "id_video", "source_texte", "texte",
-            *("similarite_" + code for code in codes_themes(themes_valides or [])),
+            *(
+                "similarite_" + code
+                for code in (codes_themes(themes_valides) if themes_valides else [])
+            ),
             "texte_tronque",
         ]
         return exporter_csv(donnees.reindex(columns=colonnes))
