@@ -156,8 +156,11 @@ def valider_classement_theses(
         if categorie != "indetermine" else "Indéterminé / hors des trois thèmes"
     )
     return {
+        # Les anciens noms sont conservés comme alias de compatibilité.
         "these_retenue": categorie,
         "these_intitule": titre,
+        "theme_retenu": categorie.replace("these_", "theme_"),
+        "theme_intitule": titre,
         "indice_textuel": indice.strip(),
         "justification": justification.strip(),
     }

@@ -69,8 +69,10 @@ def categorie_document(ligne, mode_analyse: str) -> str:
         return "analyse_libre"
     if mode_analyse == "theses":
         # Conserver un code IRaMuTeQ stable malgré l'édition des intitulés.
-        resultat = str(getattr(ligne, "these_retenue", "indetermine"))
-        return resultat.removeprefix("these_") if resultat else "indetermine"
+        resultat = str(getattr(ligne, "theme_retenu", "")) or str(
+            getattr(ligne, "these_retenue", "indetermine")
+        ).replace("these_", "theme_")
+        return resultat.removeprefix("theme_") if resultat else "indetermine"
     if est_vrai(ligne.interpretation_indeterminee):
         return "indetermine"
     if est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
@@ -104,7 +106,8 @@ def archive_resultats(
         "numero_document", "nom_affiche", "texte", "fichier_source",
         "ligne_csv", "colonne_texte_source", "colonne_auteur_source",
         "reponse_qwen", "statut_codage", "erreur_codage", "mode_analyse",
-        "these_retenue", "these_intitule", "indice_textuel", "justification",
+        "theme_retenu", "theme_intitule", "indice_textuel", "justification",
+        "these_retenue", "these_intitule",
     ]
     reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
     tampon = io.BytesIO()
@@ -121,7 +124,7 @@ def archive_resultats(
                     "definition": theme["definition"],
                     "nombre_commentaires": int(
                         (
-                            tableau["these_retenue"].eq(f"these_{indice}")
+                            tableau["theme_retenu"].eq(f"theme_{indice}")
                             & tableau["statut_codage"].eq("ok")
                         ).sum()
                     ),
@@ -133,7 +136,7 @@ def archive_resultats(
                 "theme": "Indéterminé / hors des trois thèmes",
                 "definition": "Aucun thème n'est suffisamment étayé",
                 "nombre_commentaires": int((
-                    tableau["these_retenue"].eq("indetermine")
+                    tableau["theme_retenu"].eq("indetermine")
                     & tableau["statut_codage"].eq("ok")
                 ).sum()),
             }
@@ -170,6 +173,7 @@ def initialiser_tableau(
         "acteur_cible", "indice_textuel", "justification",
         "erreur_codage", "reponse_qwen", "mode_analyse",
         "these_retenue", "these_intitule",
+        "theme_retenu", "theme_intitule",
     ):
         donnees[champ] = ""
     for champ in ("texte_tronque", "contexte_tronque"):
@@ -226,6 +230,7 @@ def restaurer_checkpoint(
         "erreur_codage", "texte_tronque", "contexte_tronque",
         "reponse_qwen", "mode_analyse",
         "these_retenue", "these_intitule",
+        "theme_retenu", "theme_intitule",
     )
     for champ in champs_restaurables:
         if champ in anciens.columns:
@@ -242,6 +247,7 @@ def restaurer_checkpoint(
                 "acteur_cible", "indice_textuel", "justification",
                 "erreur_codage", "reponse_qwen", "mode_analyse",
                 "these_retenue", "these_intitule",
+                "theme_retenu", "theme_intitule",
             ):
                 restauration[champ] = valeurs.fillna("").astype(str)
             else:
@@ -900,7 +906,7 @@ else:
         colonnes_principales += list(CHAMPS_BOOLEENS) + ["acteur_cible"]
     elif mode_analyse == "theses":
         colonnes_principales += [
-            "these_retenue", "these_intitule", "indice_textuel", "justification"
+            "theme_retenu", "theme_intitule", "indice_textuel", "justification"
         ]
     st.dataframe(
         reponses_valides[
@@ -912,8 +918,8 @@ else:
         column_config={
             "texte": st.column_config.TextColumn("Commentaire", width="large"),
             "nom_affiche": st.column_config.TextColumn("Auteur"),
-            "these_retenue": st.column_config.TextColumn("Code du thème"),
-            "these_intitule": st.column_config.TextColumn("Thème retenu"),
+            "theme_retenu": st.column_config.TextColumn("Code du thème"),
+            "theme_intitule": st.column_config.TextColumn("Thème retenu"),
             "reponse_qwen": st.column_config.TextColumn(
                 "Analyse produite par Qwen", width="large"
             ),
@@ -994,12 +1000,12 @@ with st.expander("Tableau complet, métadonnées et variables du corpus", expand
 avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
 if mode_analyse == "theses" and theses_validees is not None:
     st.subheader("Répartition des commentaires dans les trois thèmes")
-    frequences_themes = avec_resultat["these_retenue"].value_counts()
+    frequences_themes = avec_resultat["theme_retenu"].value_counts()
     repartition = pd.DataFrame([
         {
             "Thème": theme["titre"],
-            "Code": f"these_{indice}",
-            "Commentaires": int(frequences_themes.get(f"these_{indice}", 0)),
+            "Code": f"theme_{indice}",
+            "Commentaires": int(frequences_themes.get(f"theme_{indice}", 0)),
             "Définition": theme["definition"],
         }
         for indice, theme in enumerate(theses_validees, start=1)

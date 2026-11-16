@@ -110,6 +110,8 @@ class TestAnalyseQwen(unittest.TestCase):
             contenu, list(THESES_INITIALES)
         )
         self.assertEqual(resultat["these_retenue"], "these_3")
+        self.assertEqual(resultat["theme_retenu"], "theme_3")
+        self.assertEqual(resultat["theme_intitule"], THESES_INITIALES[2]["titre"])
         self.assertEqual(
             resultat["these_intitule"], THESES_INITIALES[2]["titre"]
         )
@@ -163,6 +165,7 @@ class TestAnalyseQwen(unittest.TestCase):
             session=session,
         )
         self.assertEqual(resultat["mode_analyse"], "theses")
+        self.assertEqual(resultat["theme_retenu"], "theme_3")
         self.assertEqual(resultat["these_retenue"], "these_3")
         self.assertIn("autocensure", resultat["these_intitule"].lower())
         charge = session.post.call_args.kwargs["json"]
