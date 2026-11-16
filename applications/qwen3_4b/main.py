@@ -30,7 +30,7 @@ from lecture_iramuteq import (
     tableau_documents,
 )
 
-st.set_page_config(page_title="Qwen3-4B — analyse de corpus", layout="wide")
+st.set_page_config(page_title=f"Qwen {MODELE} — analyse de corpus", layout="wide")
 
 
 def authentifier() -> None:
@@ -283,7 +283,7 @@ def lancer_analyse(
 
 authentifier()
 
-st.title("Qwen3-4B — analyser un corpus avec votre prompt")
+st.title(f"Qwen — {MODELE} : analyser un corpus avec votre prompt")
 st.caption(
     "Qwen fonctionne avec vos consignes. Le modèle traite chaque commentaire "
     "séparément et conserve le texte original."
