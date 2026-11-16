@@ -11,8 +11,8 @@ from configuration_qwen import (
 )
 
 PROMPT_MATRICE_DEFAUT = """Analyse un corpus de sciences humaines et sociales.
-Propose une grille de thèmes à partir des questions de recherche et du corpus.
-Annote chaque unité textuelle selon la grille, sans forcer les catégories.
+Repère les thèmes pertinents pour la question de recherche formulée ici.
+Pour chaque texte, applique la grille validée sans créer de nouvelles catégories.
 Plusieurs thèmes peuvent être présents dans un même texte.
 Distingue les indices textuels explicites des interprétations incertaines.
 Respecte les formulations SMS, les commentaires courts et les textes longs.
