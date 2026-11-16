@@ -308,6 +308,15 @@ def restaurer_checkpoint(
     return restauration
 
 
+def demander_arret_analyse() -> None:
+    """Demander l'arrêt sans effacer les annotations déjà enregistrées."""
+    st.session_state["qwen_arret_demande"] = True
+    st.session_state["qwen_message"] = (
+        "Arrêt demandé. Les annotations déjà produites sont conservées. "
+        "Les textes restants pourront être analysés ultérieurement."
+    )
+
+
 def lancer_analyse(
     donnees: pd.DataFrame,
     indices: list[int],
@@ -329,6 +338,10 @@ def lancer_analyse(
 
     with requests.Session() as session:
         for position, indice in enumerate(indices, start=1):
+            # Une demande d'arrêt n'efface aucun résultat.
+            # L'arrêt est vérifié entre deux requêtes vers Ollama.
+            if st.session_state.get("qwen_arret_demande", False):
+                break
             ligne = donnees.loc[indice]
             details = "\n".join(
                 f"{colonne}: {ligne[colonne]}"
@@ -1043,7 +1056,9 @@ if etat_commandes["lancer"]:
         f"{len(reste)} commentaire(s) prêt(s) pour l'analyse avec {MODELE}. "
         "La grille et le prompt sont renseignés."
     )
-colonne_test, colonne_analyser, colonne_erreurs = st.columns([1, 2, 1])
+colonne_test, colonne_analyser, colonne_erreurs, colonne_arret = st.columns(
+    [1, 2, 1, 1]
+)
 tester = colonne_test.button(
     "Tester sur un commentaire",
     disabled=not etat_commandes["tester"],
@@ -1057,7 +1072,16 @@ relancer = colonne_erreurs.button(
     "Réessayer les commentaires en erreur",
     disabled=not etat_commandes["relancer"],
 )
+colonne_arret.button(
+    "Arrêter l'analyse",
+    on_click=demander_arret_analyse,
+    help=(
+        "Interrompt le traitement entre deux requêtes Qwen. "
+        "La requête déjà envoyée peut devoir se terminer avant l'arrêt."
+    ),
+)
 if tester or lancer or relancer:
+    st.session_state["qwen_arret_demande"] = False
     indices = reste[:1] if tester else (reste if lancer else erreurs)
     termines, nombre_erreurs, interrompu = lancer_analyse(
         donnees, indices, mode_analyse, prompt,
@@ -1065,7 +1089,13 @@ if tester or lancer or relancer:
         theses=theses_validees,
     )
     st.session_state["qwen_donnees"] = donnees
-    if interrompu:
+    if st.session_state.get("qwen_arret_demande", False):
+        st.session_state["qwen_message"] = (
+            f"Analyse arrêtée à la demande : {termines} annotation(s) "
+            f"supplémentaire(s) conservée(s), {nombre_erreurs} erreur(s). "
+            "Les textes non traités restent disponibles pour la reprise."
+        )
+    elif interrompu:
         indice_derniere_erreur = indices[min(
             len(indices) - 1, termines + nombre_erreurs - 1
         )]
