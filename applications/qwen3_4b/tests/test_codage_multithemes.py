@@ -48,6 +48,24 @@ class TestCodageMultithemes(unittest.TestCase):
             ],
         )
 
+    def test_lecture_rapide_avec_delai_reduit(self):
+        texte = "C nul jss deg"
+        session = self.simulation(self.annotation())
+        resultat = coder_multithemes(
+            texte, themes=THEMES, session=session, timeout_lecture=60,
+        )
+        self.assertEqual(session.post.call_count, 1)
+        self.assertEqual(
+            session.post.call_args.kwargs["timeout"], (10, 60)
+        )
+        self.assertTrue(resultat["theme_1"])
+
+    def test_delai_hors_limites_refuse(self):
+        with self.assertRaisesRegex(ValueError, "délai"):
+            coder_multithemes(
+                "Texte", themes=THEMES, timeout_lecture=1,
+            )
+
     def test_commentaire_sms_plusieurs_themes(self):
         texte = "C nul jss deg"
         session = self.simulation(self.annotation())

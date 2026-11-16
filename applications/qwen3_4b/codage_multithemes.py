@@ -271,6 +271,7 @@ def coder_multithemes(
     temperature: float = 0.1,
     session: requests.Session | None = None,
     longueur_segment: int = 650,
+    timeout_lecture: int = 240,
 ) -> dict[str, object]:
     """Appliquer la même grille à tout texte, quelle que soit sa longueur."""
     grille = valider_themes(themes)
@@ -282,6 +283,8 @@ def coder_multithemes(
         raise ValueError("Impossible d'annoter un texte vide.")
     if longueur_segment > 1200:
         raise ValueError("Segments trop longs pour la fenêtre de contexte.")
+    if not 10 <= timeout_lecture <= 600:
+        raise ValueError("Le délai de réponse Ollama doit être compris entre 10 et 600 secondes.")
     segments = segmenter_texte(texte, longueur_max=longueur_segment)
     definitions = "\n".join(
         f"{code}: {theme['titre']} — {theme['definition']}"
@@ -325,7 +328,7 @@ def coder_multithemes(
                 },
                 "keep_alive": "5m",
             },
-            timeout=(10, 240),
+            timeout=(10, timeout_lecture),
         )
         try:
             reponse.raise_for_status()

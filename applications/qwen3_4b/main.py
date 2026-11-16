@@ -6,6 +6,7 @@ import hmac
 import io
 import json
 import os
+import time
 import zipfile
 from dataclasses import replace
 
@@ -820,6 +821,7 @@ if st.session_state.get("qwen_cle") != cle:
         )
     st.session_state["qwen_donnees"] = tableau_initial
     st.session_state["qwen_message"] = ""
+    st.session_state.pop("qwen_test_rapide", None)
 
 
 checkpoint = st.file_uploader(
@@ -929,8 +931,10 @@ except requests.RequestException as erreur:
 
 st.subheader("Lancer l'analyse")
 st.caption(
-    "Le bouton de test traite un seul texte ou commentaire. Le bouton principal "
-    "analyse ensuite les textes restants sans lots manuels."
+    "Le test vérifie l'inférence sur un texte court en un seul appel Ollama "
+    "(au maximum 350 caractères, avec un délai de lecture limité à 60 secondes). "
+    "Si le texte original est plus long, le test porte sur son début et "
+    "ne valide pas l'ensemble du document. L'analyse complète reste inchangée."
 )
 etat_commandes = evaluer_commandes_analyse(
     nombre_restants=len(reste),
@@ -978,9 +982,67 @@ colonne_arret.button(
         "La requête déjà envoyée peut devoir se terminer avant l'arrêt."
     ),
 )
-if tester or lancer or relancer:
+if tester:
+    # Le bouton de test ne doit jamais parcourir un texte long segment après
+    # segment. Retenir un texte court, ou seulement le début d'un texte long.
+    indice_test = min(
+        reste[:200],
+        key=lambda indice: len(str(donnees.at[indice, "texte"])),
+    )
+    texte_original = str(donnees.at[indice_test, "texte"])
+    texte_essai = texte_original[:350]
+    extrait_uniquement = len(texte_original) > len(texte_essai)
+    ligne_essai = donnees.loc[indice_test]
+    details_essai = "\n".join(
+        f"{colonne}: {ligne_essai[colonne]}"
+        for colonne in contexte_variables
+        if pd.notna(ligne_essai.get(colonne))
+    )
+    contexte_essai = (contexte_general + "\n" + details_essai).strip()
+    debut_test = time.perf_counter()
+    resultat_test = None
+    erreur_test = ""
+    with st.spinner(
+        f"Test réel avec {MODELE} : une seule requête Ollama..."
+    ):
+        try:
+            with requests.Session() as session:
+                resultat_test = coder_multithemes(
+                    texte=texte_essai,
+                    themes=themes_valides,
+                    contexte=contexte_essai,
+                    temperature=float(temperature),
+                    session=session,
+                    consigne=prompt,
+                    timeout_lecture=60,
+                )
+        except (requests.RequestException, json.JSONDecodeError, ValueError, KeyError) as erreur:
+            erreur_test = f"{type(erreur).__name__} : {erreur}"
+    duree_test = round(time.perf_counter() - debut_test, 2)
+    st.session_state["qwen_test_rapide"] = {
+        "reussi": resultat_test is not None,
+        "numero_document": int(ligne_essai["numero_document"]),
+        "duree_secondes": duree_test,
+        "nombre_caracteres": len(texte_essai),
+        "extrait_uniquement": extrait_uniquement,
+        "modele": MODELE,
+        "contexte_tokens": CONTEXTE_MAXIMUM,
+        "erreur": erreur_test,
+        "resultat": resultat_test,
+    }
+    if resultat_test is not None and not extrait_uniquement:
+        # Un document intégralement testé est conservé comme auparavant.
+        for champ, valeur in resultat_test.items():
+            donnees.at[indice_test, champ] = valeur
+        donnees.at[indice_test, "statut_codage"] = "ok"
+        donnees.at[indice_test, "erreur_codage"] = ""
+        st.session_state["qwen_donnees"] = donnees
+    # Si un extrait a été testé, le document original reste non traité.
+    st.rerun()
+
+if lancer or relancer:
     st.session_state["qwen_arret_demande"] = False
-    indices = reste[:1] if tester else (reste if lancer else erreurs)
+    indices = reste if lancer else erreurs
     termines, nombre_erreurs, interrompu = lancer_analyse(
         donnees, indices, prompt, themes_valides,
         contexte_general, contexte_variables, float(temperature),
@@ -1026,6 +1088,31 @@ if tester or lancer or relancer:
             "Les réponses sont affichées ci-dessous."
         )
     st.rerun()
+
+retour_test = st.session_state.get("qwen_test_rapide")
+if retour_test:
+    if retour_test["reussi"]:
+        portee = (
+            "Extrait uniquement : le document complet reste à analyser."
+            if retour_test["extrait_uniquement"]
+            else "Document court intégralement analysé et enregistré."
+        )
+        st.success(
+            f"Test Ollama réussi avec {retour_test['modele']} : "
+            f"{retour_test['duree_secondes']} s, "
+            f"{retour_test['nombre_caracteres']} caractères, un appel. "
+            + portee
+        )
+        with st.expander("Consulter les annotations obtenues lors du test"):
+            st.json(retour_test["resultat"])
+    else:
+        st.error(
+            f"Test Ollama échoué avec {retour_test['modele']} "
+            f"(contexte {retour_test['contexte_tokens']} tokens, "
+            f"{retour_test['duree_secondes']} s). "
+            f"Cause : {retour_test['erreur']}. "
+            "Le document reste disponible : aucun résultat n'a été inventé."
+        )
 
 st.subheader("Réponses produites par Qwen")
 reponses_valides = donnees.loc[

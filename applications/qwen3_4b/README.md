@@ -16,6 +16,10 @@ Dans « Définir les thèmes à partir de votre prompt », cliquer sur « Constr
 
 Les boutons « Tester sur un texte », « Analyser tous les textes restants », « Réessayer les textes en erreur » et « Arrêter l'analyse » sont conservés. L'arrêt est vérifié entre les requêtes : une requête Ollama déjà engagée peut devoir se terminer. Les annotations déjà abouties sont conservées et peuvent être exportées.
 
+## Test Ollama sur un texte court (16 novembre 2026)
+
+Le bouton « Tester sur un texte » exécute désormais un seul appel réel au modèle Ollama configuré, avec un maximum de 350 caractères et un délai de lecture de 60 secondes. Il choisit un texte court parmi les 200 premiers documents en attente, affiche la durée, le modèle utilisé et la sortie ou l'erreur. Si le texte tient intégralement dans le test, son annotation est conservée comme auparavant. Si le texte est plus long, l'essai sur un extrait ne valide pas l'ensemble du document, qui reste en attente. L'analyse complète et le traitement de ses segments sont conservés avec leur délai de lecture historique.
+
 ## Noms de colonnes CSV et provenance (16 novembre 2026)
 
 Dans la matrice, **source_texte** affiche à l'identique le nom de la colonne CSV sélectionnée, et non une étiquette comme « commentaire ». **type_source** conserve séparément la provenance facultative (commentaire, texte IA, texte auteur, voice-to-text ou texte libre). La comparaison des sources d'une même vidéo continue à utiliser cette catégorie. Le bilan présente les deux champs, et les exports conservent les noms d'origine.
