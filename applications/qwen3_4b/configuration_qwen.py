@@ -15,10 +15,12 @@ MODELES_PROPOSES = (
     "qwen3:4b-q4_K_M",
     "juribert",
     "bertweetfr",
+    "nli_multilingue",
 )
 MODELES_SPECIALISES = {
     "juribert": "dascim/juribert-base",
     "bertweetfr": "Yanzhu/bertweetfr-base",
+    "nli_multilingue": "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
 }
 LIBELLES_MODELES = {
     "qwen3:0.6b-q4_K_M": "Qwen3 0.6B — très léger",
@@ -27,6 +29,7 @@ LIBELLES_MODELES = {
     "qwen3:4b-q4_K_M": "Qwen3 4B — analyse approfondie",
     "juribert": "JuriBERT — textes juridiques français (Transformers)",
     "bertweetfr": "BERTweetFR — réseaux sociaux français (Transformers)",
+    "nli_multilingue": "mDeBERTa NLI — classification zero-shot en français",
 }
 CONTEXTE_MAXIMUM = max(1024, min(4096, int(os.getenv("QWEN_NUM_CTX", "2048"))))
 
