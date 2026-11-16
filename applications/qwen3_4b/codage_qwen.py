@@ -336,10 +336,15 @@ def coder_commentaire(
         f"<commentaire>\n{texte_analyse}\n</commentaire>\n"
         "Applique la consigne du chercheur au commentaire seulement. /no_think"
     )
-    systeme = (
-        SYSTEME_COMMUN + "\n\n"
-        + "Consigne définie par le chercheur :\n" + consigne.strip()
-    )
+    # Le prompt de découverte sert à produire la grille, pas à reclasser
+    # les documents. Répéter « propose trois thèmes » lors du codage
+    # risquerait de provoquer des réponses hors du schéma de classement.
+    systeme = SYSTEME_COMMUN
+    if mode_analyse != "theses":
+        systeme += (
+            "\n\nConsigne définie par le chercheur :\n"
+            + consigne.strip()
+        )
     if mode_analyse == "structure":
         systeme += "\n\n" + SYSTEME_STRUCTURE
     elif mode_analyse == "theses":
