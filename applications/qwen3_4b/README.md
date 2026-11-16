@@ -12,13 +12,7 @@ Lorsque le prompt contient explicitement des intitulés de thèmes entre guillem
 
 ## Modèles proposés et moteurs (16 novembre 2026)
 
-Le sélecteur unique sous l'import propose sept modèles : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B pour la génération via Ollama, ainsi que JuriBERT et BERTweetFR pour les encodages spécialisés et mDeBERTa-v3 NLI pour une classification exploratoire zero-shot en français, tous via Transformers. La variable Coolify `OLLAMA_MODEL` définit le choix initial. Les quatre modèles génératifs sont envoyés à Ollama ; les deux modèles spécialisés passent par le service Transformers indépendant. Le conteneur `charger_modele` télécharge les quatre modèles Ollama, avec un seul modèle chargé simultanément.
-
-## Classification zero-shot par inférence NLI
-
-Le modèle `MoritzLaurer/mDeBERTa-v3-base-mnli-xnli` est proposé séparément dans le sélecteur principal et téléchargé dans le même service Transformers. Il a été entraîné sur des relations d'implication, de neutralité et de contradiction ; il n'utilise donc pas les cosinus des encodeurs de base. Pour chaque thème, une hypothèse française explicite est comparée au texte. Les trois scores NLI sont exportés séparément, sans les présenter comme des probabilités calibrées ni imposer de seuil arbitraire. La correspondance avec les annotations humaines doit être évaluée.
-
-Les modèles JuriBERT et BERTweetFR restent disponibles pour l'exploration, mais leur score cosinus brut ne doit pas être utilisé pour coder un thème : un score de 0,9 peut apparaître sur un texte politique sans aucune dénonciation de violence.
+Le sélecteur unique sous l'import propose six modèles : Qwen3 0.6B, Gemma 3 1B, Llama 3.2 3B et Qwen3 4B pour la génération via Ollama, ainsi que JuriBERT et BERTweetFR pour les encodages spécialisés via Transformers. La variable Coolify `OLLAMA_MODEL` définit le choix initial. Les quatre modèles génératifs sont envoyés à Ollama ; les deux modèles spécialisés passent par le service Transformers indépendant. Le conteneur `charger_modele` télécharge les quatre modèles Ollama, avec un seul modèle chargé simultanément.
 
 ## Modèles français spécialisés JuriBERT et BERTweetFR
 
