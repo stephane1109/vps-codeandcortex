@@ -311,16 +311,7 @@ def lancer_analyse(
 authentifier()
 
 st.title("Qwen — analyser un corpus avec votre prompt")
-st.write(
-    f"**Modèle sollicité par l'application : `{MODELE}`** "
-    f"(contexte : {CONTEXTE_MAXIMUM} tokens)."
-)
-st.caption(
-    "Ce nom provient de la configuration effective du conteneur Streamlit. "
-    "Il est transmis à Ollama lors de chaque demande d'analyse. "
-    "Chaque texte ou commentaire est analysé séparément. "
-    "Les documents longs sont segmentés et leur texte original est conservé."
-)
+st.caption("version 16-11-2026 - modèle : qwen3:1.7b-q4_K_M — Ollama")
 # Un seul parcours : le même prompt et la même matrice pour les commentaires
 # courts et pour les documents longs. Aucun choix de méthode n'est nécessaire.
 mode_analyse = "matrice"
