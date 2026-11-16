@@ -8,13 +8,13 @@ Le modèle utilisé est `qwen3:4b-q4_K_M` via [Ollama](https://ollama.com/librar
 
 Importer un ou plusieurs corpus texte IRaMuTeQ : `**** *source_original *id_123 *profil_exemple *texte_commentaire` puis commentaire sur les lignes suivantes. L'ensemble des métadonnées étoilées et du texte est conservé. Option de contexte commun (description de vidéo saisie par le chercheur) et inclusion de métadonnées. Sans contexte ajouté, le modèle n'accède à **aucune image, aucun son, aucune vidéo**. Le modèle analyse au maximum 3 000 caractères de texte et 1 200 caractères de contexte par ligne ; toute troncature est signalée.
 
-L'interface propose désormais deux modes d'analyse. Le mode **Analyse libre avec mon prompt** est affiché par défaut : le chercheur rédige ou modifie une consigne et obtient une réponse par commentaire dans la colonne \`reponse_qwen\`. Le mode **Codage structuré sur la violence** est conservé pour reproduire la grille initiale, avec ses colonnes binaires, sa validation JSON et ses croisements statistiques. Dans les deux modes, le prompt complet est enregistré dans \`parametres.json\`.
+L'interface propose un parcours unique : écrire un prompt, importer des commentaires ou des textes longs, annoter chaque texte dans trois thèmes indépendants, comparer les sources et corriger les annotations. Le prompt est conservé dans `parametres.json`.
 
 L'interface ne demande plus le nombre de commentaires par lot. Le bouton **Analyser tous les commentaires restants** parcourt automatiquement les unités non traitées, dans leur ordre d'origine, et affiche un indicateur de progression. Une autre commande permet de réessayer les commentaires en erreur. Le traitement s'arrête après trois erreurs consécutives de communication ou de décodage, afin d'éviter de multiplier des requêtes inutiles. Les commentaires vides restent identifiés et les résultats partiels restent accessibles dans la session Streamlit. **La progression ne s'exécute pas en arrière-plan** : en cas de redémarrage du conteneur ou de perte de session, importer un CSV précédemment téléchargé pour reprendre.
 
 Le ZIP unique regroupe le fichier historique \`codage_commentaires.csv\`, le nouveau \`reponses_qwen.csv\`, le TXT IRaMuTeQ enrichi et les paramètres, dont la consigne. Le CSV de reprise inclut une signature du corpus et une empreinte des paramètres, afin de ne pas mélanger des analyses fondées sur des prompts différents. Les anciens CSV sans empreinte de prompt ne sont admis en reprise qu'en mode structuré historique, avec un avertissement sur l'impossibilité de vérifier la consigne exacte.
 
-Un prompt libre n'impose pas les catégories liées à la violence. Seul le mode structuré conserve volontairement cette grille ; pour une autre problématique, choisir le mode libre. Le modèle ne reçoit pas le corpus entier dans une seule requête : chaque commentaire est envoyé séparément, conformément à la consigne affichée dans l'interface.
+Le même prompt sert à analyser les commentaires courts et les textes descriptifs longs. Le moteur segmente automatiquement les textes longs sans modifier la grille des trois thèmes.
 
 ## Affichage des réponses et diagnostic du modèle (15 novembre 2026)
 
@@ -22,19 +22,7 @@ L'interface donne maintenant la priorité aux **réponses réellement générée
 
 L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la génération d'une réponse avant d'exécuter **Analyser tous les commentaires restants**. Le bouton principal conserve l'analyse automatique sans lots. En l'absence de résultat, une explication indique si les commentaires attendent encore l'analyse, si Ollama est indisponible, si le modèle manque ou si les requêtes ont échoué. Une section distincte **Erreurs de Qwen** présente `statut_codage` et `erreur_codage` pour les commentaires concernés. Les boutons d'analyse sont désactivés lorsque l'API Ollama ne répond pas ou que le modèle n'est pas téléchargé.
 
-Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
-
-## Classification en trois thèmes : violence et autocensure (16 novembre 2026)
-
-Un troisième mode est désormais disponible : **Classification en trois thèmes : violence et autocensure**. Il complète sans les remplacer les modes « Analyse libre avec mon prompt » et « Codage structuré sur la violence ».
-
-Dans ce mode, le prompt est entièrement modifiable. Après l'importation, le bouton **Proposer trois thèmes avec Qwen** soumet au modèle au plus cinq extraits de commentaires répartis sur le corpus. Qwen retourne exactement trois intitulés avec leurs définitions opérationnelles. Cette proposition n'est pas une classification réalisée sur le corpus entier : l'échantillon de travail est limité et n'est pas nécessairement représentatif.
-
-Le chercheur peut ensuite corriger les trois titres et définitions. Le prompt de découverte n'est pas répété lors du classement : Qwen reçoit la grille validée et une consigne de classification distincte pour ne pas proposer de nouveaux thèmes à chaque commentaire. Une grille initiale de travail est proposée tant que Qwen n'a pas été sollicité ; elle est explicitement signalée comme telle et non présentée comme une génération automatique. Une fois la grille validée, la commande habituelle **Tester sur un commentaire** puis **Analyser tous les commentaires restants** envoie chaque texte individuellement à Qwen, toujours avec les mêmes trois définitions. Le modèle doit attribuer au commentaire une seule catégorie parmi les trois ou **indéterminé** lorsqu'aucune catégorie n'est démontrable. Les instructions interdisent d'inférer l'autocensure d'un simple silence ou d'une absence de position explicite.
-
-Le tableau des réponses indique la catégorie attribuée, l'intitulé et la justification textuelle. Un bilan affiche les effectifs de chaque thème, y compris les indéterminés. Le ZIP unique contient désormais, dans ce mode, `bilan_themes_qwen.csv` et `grille_themes_qwen.json`, en plus des fichiers existants. Le corpus IRaMuTeQ enrichi contient `*qwen_theme_1`, `*qwen_theme_2`, `*qwen_theme_3` ou `*qwen_theme_indetermine` et conserve toutes les variables initiales. Les colonnes `theme_retenu` et `theme_intitule` identifient explicitement les thèmes ; les anciens alias `these_retenue` et `these_intitule` restent disponibles dans les CSV, ainsi que le prompt et les définitions dans `parametres.json`. Une modification des thèmes fait évoluer l'empreinte de configuration pour empêcher le mélange entre codages fondés sur différentes grilles.
-
-Ces classifications restent des propositions algorithmiques nécessitant une validation humaine avant toute conclusion scientifique.
+Le contenu brut importé n'est jamais présenté comme une annotation générée par Qwen. Les exports CSV et IRaMuTeQ, le ZIP unique et la reprise restent disponibles.
 
 ## Aperçu des dix premières lignes du CSV (16 novembre 2026)
 
@@ -62,7 +50,7 @@ Après importation des commentaires, l'application présente un diagnostic de pr
 
 La vérification de l'inventaire Ollama `/api/tags` n'interdit plus automatiquement les commandes d'analyse. Cette vérification ne prouve pas qu'une inférence aboutira et peut temporairement échouer même si le moteur fonctionne. Le bouton **Tester sur un commentaire** permet d'envoyer une véritable requête, puis d'afficher le résultat ou une erreur technique. Les boutons restent désactivés si le prompt est vide, la grille invalide ou qu'aucun document pertinent n'est en attente ; chaque blocage est signalé immédiatement au-dessus des commandes.
 
-Les modes historiques, les sélecteurs CSV, les dix lignes d'aperçu, les analyses par commentaire, le CSV de reprise et le ZIP unique ne sont pas supprimés.
+Les sélecteurs CSV, l'aperçu des dix lignes, les analyses, le CSV de reprise et le ZIP unique restent disponibles.
 
 ## Parcours unique d'annotation des textes et commentaires (16 novembre 2026)
 
@@ -74,7 +62,7 @@ Le ZIP continue de contenir la matrice complète, les sous-corpus par thème, le
 
 ## Classification des discours sur la violence en trois thèmes (16 novembre 2026)
 
-Le mode **Classification en trois thèmes : discours sur la violence** est sélectionné par défaut. Les modes **Analyse libre avec mon prompt** et **Codage structuré sur la violence** restent disponibles sans changement de leur fonctionnement.
+L'analyse utilise une matrice unique de trois thèmes indépendants, sans choix de méthode.
 
 La grille initiale distingue les catégories suivantes : **Dénonciation de la violence**, définie comme une condamnation ou une critique normative explicite de violences ; **Indignation face à la violence**, définie comme une réaction affective explicite de colère, de révolte, de consternation ou d'injustice ; **Détermination d'un persécuteur face à la violence**, définie comme la désignation explicite d'un acteur supposé responsable d'une violence, d'une persécution ou d'une oppression. Cette dernière catégorie décrit une attribution de responsabilité dans le discours et ne constitue pas une preuve de responsabilité objective.
 
