@@ -28,6 +28,16 @@ from codage_qwen import (
     verifier_service,
 )
 from lecture_commentaires import analyser_commentaires_csv, obtenir_apercu_csv
+from codage_multithemes import (
+    CHAMPS_THEMES, PROMPT_MATRICE_DEFAUT, coder_multithemes,
+)
+from matrice_violence import (
+    SOURCES_TEXTE, LIBELLES_SOURCES, LIBELLES_THEMES,
+    analyser_sources_csv, extraire_source_iramuteq,
+    initialiser_annotations_matrice, construire_matrice,
+    construire_bilan_sources, comparer_sources_par_video,
+    exporter_iramuteq_matrice,
+)
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import (
     analyser_corpus,
@@ -97,18 +107,26 @@ def archive_resultats(
 ) -> bytes:
     """Créer une archive ZIP unique incluant toutes les lignes et le prompt."""
     mode_analyse = str(parametres["mode_analyse"])
-    categories = {
-        int(ligne.numero_document): categorie_document(ligne, mode_analyse)
-        for ligne in tableau.itertuples(index=False)
-    }
-    nom_variable = "qwen_theme" if mode_analyse == "theses" else "qwen_position"
-    texte = exporter_iramuteq(documents, categories, nom_variable)
+    if mode_analyse == "matrice":
+        matrice = construire_matrice(tableau)
+        texte = exporter_iramuteq_matrice(documents, matrice)
+    else:
+        categories = {
+            int(ligne.numero_document): categorie_document(ligne, mode_analyse)
+            for ligne in tableau.itertuples(index=False)
+        }
+        nom_variable = "qwen_theme" if mode_analyse == "theses" else "qwen_position"
+        texte = exporter_iramuteq(documents, categories, nom_variable)
     colonnes_reponses = [
         "numero_document", "nom_affiche", "texte", "fichier_source",
         "ligne_csv", "colonne_texte_source", "colonne_auteur_source",
         "reponse_qwen", "statut_codage", "erreur_codage", "mode_analyse",
         "theme_retenu", "theme_intitule", "indice_textuel", "justification",
         "these_retenue", "these_intitule",
+        "id_video", "source_texte", *CHAMPS_THEMES,
+        "indice_denonciation", "indice_indignation", "indice_persecuteur",
+        "acteur_designe", "incertitude_interpretation",
+        "validation_humaine", "note_humaine",
     ]
     reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
     tampon = io.BytesIO()
@@ -116,6 +134,16 @@ def archive_resultats(
         archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
         archive.writestr("corpus_qwen_iramuteq.txt", texte)
+        if mode_analyse == "matrice":
+            archive.writestr("matrice_annotations_qwen.csv", exporter_csv(matrice))
+            archive.writestr(
+                "comparaison_videos_qwen.csv",
+                exporter_csv(comparer_sources_par_video(matrice)),
+            )
+            archive.writestr(
+                "bilan_sources_themes_qwen.csv",
+                exporter_csv(construire_bilan_sources(matrice)),
+            )
         if mode_analyse == "theses" and parametres.get("theses") is not None:
             grille = valider_theses(parametres.get("theses"))
             bilans = pd.DataFrame([
@@ -228,7 +256,12 @@ def restaurer_checkpoint(
 
     restauration = donnees.copy()
     champs_restaurables = (
-        "statut_codage", *CHAMPS_BOOLEENS,
+        "statut_codage", *CHAMPS_BOOLEENS, *CHAMPS_THEMES,
+        *("manuel_" + theme for theme in CHAMPS_THEMES),
+        "indice_denonciation", "indice_indignation", "indice_persecuteur",
+        "acteur_designe", "incertitude_interpretation",
+        "validation_humaine", "note_humaine",
+        "nombre_segments", "segments_traites",
         "acteur_cible", "indice_textuel", "justification",
         "erreur_codage", "texte_tronque", "contexte_tronque",
         "reponse_qwen", "mode_analyse",
@@ -238,7 +271,12 @@ def restaurer_checkpoint(
     for champ in champs_restaurables:
         if champ in anciens.columns:
             valeurs = anciens[champ].reset_index(drop=True)
-            if champ in (*CHAMPS_BOOLEENS, "texte_tronque", "contexte_tronque"):
+            if champ in (
+                *CHAMPS_BOOLEENS, *CHAMPS_THEMES,
+                *("manuel_" + theme for theme in CHAMPS_THEMES),
+                "incertitude_interpretation",
+                "texte_tronque", "contexte_tronque",
+            ):
                 def convertir_booleen(valeur):
                     if pd.isna(valeur) or str(valeur).strip() == "":
                         return pd.NA
@@ -251,6 +289,8 @@ def restaurer_checkpoint(
                 "erreur_codage", "reponse_qwen", "mode_analyse",
                 "these_retenue", "these_intitule",
                 "theme_retenu", "theme_intitule",
+                "indice_denonciation", "indice_indignation", "indice_persecuteur",
+                "acteur_designe", "validation_humaine", "note_humaine",
             ):
                 restauration[champ] = valeurs.fillna("").astype(str)
             else:
@@ -287,15 +327,24 @@ def lancer_analyse(
             )
             contexte = (contexte_general + "\n" + details).strip()
             try:
-                resultat = coder_commentaire(
-                    texte=str(ligne["texte"]),
-                    contexte=contexte,
-                    temperature=temperature,
-                    session=session,
-                    consigne=prompt,
-                    mode_analyse=mode_analyse,
-                    theses=theses,
-                )
+                if mode_analyse == "matrice":
+                    resultat = coder_multithemes(
+                        texte=str(ligne["texte"]),
+                        contexte=contexte,
+                        temperature=temperature,
+                        session=session,
+                        consigne=prompt,
+                    )
+                else:
+                    resultat = coder_commentaire(
+                        texte=str(ligne["texte"]),
+                        contexte=contexte,
+                        temperature=temperature,
+                        session=session,
+                        consigne=prompt,
+                        mode_analyse=mode_analyse,
+                        theses=theses,
+                    )
                 for champ, valeur in resultat.items():
                     donnees.at[indice, champ] = valeur
                 donnees.at[indice, "statut_codage"] = "ok"
@@ -363,9 +412,10 @@ mode_affichage = st.radio(
         "Analyse libre avec mon prompt",
         "Codage structuré sur la violence",
         "Classification en trois thèmes : discours sur la violence",
+    "Matrice multithématique : comparer les sources textuelles",
     ],
     horizontal=True,
-    index=2,
+    index=3,
     help=(
         "Le mode libre conserve votre prompt. Le mode structuré conserve "
         "les catégories historiques. Le mode trois thèmes propose une grille "
@@ -375,6 +425,7 @@ mode_affichage = st.radio(
 mode_analyse = (
     "libre" if mode_affichage.startswith("Analyse libre")
     else "theses" if mode_affichage.startswith("Classification")
+    else "matrice" if mode_affichage.startswith("Matrice")
     else "structure"
 )
 prompt = st.text_area(
@@ -382,6 +433,7 @@ prompt = st.text_area(
     value=(
         PROMPT_LIBRE_DEFAUT if mode_analyse == "libre"
         else PROMPT_THESES_DEFAUT if mode_analyse == "theses"
+        else PROMPT_MATRICE_DEFAUT if mode_analyse == "matrice"
         else PROMPT_VIOLENCE_DEFAUT
     ),
     key=f"qwen_prompt_{mode_analyse}",
@@ -399,6 +451,15 @@ if mode_analyse == "theses":
         "d'un persécuteur face à la violence. Chaque commentaire reçoit "
         "un thème principal ou « indéterminé ». Les titres et définitions "
         "restent modifiables avant la classification."
+    )
+if mode_analyse == "matrice":
+    st.info(
+        "Codage non exclusif : chaque texte peut relever de la dénonciation, "
+        "de l'indignation et de la désignation d'un persécuteur. "
+        "Associez les colonnes IA TikTok, publication, voice-to-text et "
+        "commentaires à leur source ; la comparaison se fait par ID vidéo. "
+        "Les textes longs sont analysés par segments sans être éliminés. "
+        "Les annotations peuvent être validées ou corrigées manuellement."
     )
 if mode_analyse == "structure":
     st.info(
@@ -434,9 +495,10 @@ def proposer_colonne(colonnes: list[str], suggestions: tuple[str, ...]) -> str |
 
 st.subheader("Choix des colonnes CSV")
 st.caption(
-    "Pour chaque fichier CSV, sélectionnez la colonne contenant les "
-    "commentaires à analyser. La colonne auteur est facultative. "
-    "Les autres colonnes restent disponibles dans le CSV complet exporté."
+    "Dans les modes historiques, sélectionnez la colonne de commentaires. "
+    "Dans la matrice, associez les colonnes de textes à leur provenance ; "
+    "une ligne CSV peut produire plusieurs unités textuelles distinctes. "
+    "La colonne auteur reste facultative."
 )
 correspondances_csv: list[dict[str, object]] = []
 try:
@@ -468,40 +530,141 @@ try:
             f"{numero_fichier}:{fichier.name}:".encode("utf-8")
             + fichier.getvalue()
         ).hexdigest()[:16]
-        colonne_gauche, colonne_droite = st.columns(2)
-        with colonne_gauche:
-            texte_choisi = st.selectbox(
-                f"Colonne contenant les commentaires — {fichier.name}",
-                options=colonnes_csv,
-                index=colonnes_csv.index(defaut_texte),
-                key=f"qwen_texte_csv_{cle_fichier}",
-            )
-        with colonne_droite:
-            choix_auteurs = [None] + [
-                nom for nom in colonnes_csv if nom != texte_choisi
-            ]
-            auteur_propose = proposer_colonne(
-                colonnes_csv,
-                ("nom_affiche", "display_name", "auteur", "author",
-                 "utilisateur", "username", "profil"),
-            )
-            if auteur_propose not in choix_auteurs:
-                auteur_propose = None
-            auteur_choisi = st.selectbox(
-                f"Colonne auteur (facultative) — {fichier.name}",
-                options=choix_auteurs,
-                index=choix_auteurs.index(auteur_propose),
-                format_func=lambda valeur: (
-                    "Aucune colonne auteur" if valeur is None else valeur
+        if mode_analyse == "matrice":
+            noms_suggeres = {
+                "texte_ia": (
+                    "texte_ia", "texte_genere_ia", "statut_resume_ia",
+                    "resume_ia", "description_ia", "ai_generated_text",
                 ),
-                key=f"qwen_auteur_csv_{cle_fichier}",
+                "texte_auteur": (
+                    "texte_auteur", "texte_original", "caption", "legende",
+                    "description", "post", "texte_post",
+                ),
+                "voice_to_text": (
+                    "voice_to_text", "texte_voicetotext", "voicetotext",
+                    "transcription", "transcript", "sous_titres",
+                ),
+                "commentaire": (
+                    "commentaire", "commentaires", "texte_commentaire",
+                    "texte", "comment", "message", "content",
+                ),
+            }
+            st.caption(
+                f"Sources textuelles et identifiant vidéo — {fichier.name}. "
+                "Choisissez « Aucune colonne » pour une source absente."
             )
-        correspondances_csv.append({
-            "numero_fichier": numero_fichier,
-            "nom_fichier": fichier.name,
-            "colonne_texte": texte_choisi,
-            "colonne_auteur": auteur_choisi,
-        })
+            colonnes_sources = {}
+            colonnes_g = st.columns(2)
+            for i_source, source in enumerate(SOURCES_TEXTE):
+                with colonnes_g[i_source % 2]:
+                    defaut = proposer_colonne(
+                        colonnes_csv, noms_suggeres[source]
+                    )
+                    choix_colonne = st.selectbox(
+                        LIBELLES_SOURCES[source] + f" — {fichier.name}",
+                        options=[None] + colonnes_csv,
+                        index=(
+                            0 if defaut is None
+                            else colonnes_csv.index(defaut) + 1
+                        ),
+                        format_func=lambda valeur: (
+                            "Aucune colonne" if valeur is None else valeur
+                        ),
+                        key=f"qwen_source_{source}_{cle_fichier}",
+                    )
+                    if choix_colonne is not None:
+                        colonnes_sources[source] = choix_colonne
+            if not colonnes_sources:
+                st.warning(
+                    "Sélectionnez au moins une colonne textuelle pour la matrice."
+                )
+                st.stop()
+            if len(set(colonnes_sources.values())) != len(colonnes_sources):
+                st.error(
+                    "La même colonne ne peut pas être affectée à deux sources."
+                )
+                st.stop()
+            colonnes_gauche, colonnes_droite = st.columns(2)
+            with colonnes_gauche:
+                identifiant_propose = proposer_colonne(
+                    colonnes_csv,
+                    ("id_video", "video_id", "idvideo", "videoid",
+                     "aweme_id", "id_publication", "id"),
+                )
+                colonne_id_video = st.selectbox(
+                    f"Identifiant vidéo pour l'appariement — {fichier.name}",
+                    options=[None] + colonnes_csv,
+                    index=(
+                        0 if identifiant_propose is None else
+                        colonnes_csv.index(identifiant_propose) + 1
+                    ),
+                    format_func=lambda valeur: (
+                        "Aucune colonne : pas de comparaison par vidéo"
+                        if valeur is None else valeur
+                    ),
+                    key=f"qwen_id_video_{cle_fichier}",
+                )
+            with colonnes_droite:
+                auteur_propose = proposer_colonne(
+                    colonnes_csv,
+                    ("nom_affiche", "display_name", "auteur", "author",
+                     "utilisateur", "username", "profil"),
+                )
+                auteur_choisi = st.selectbox(
+                    f"Colonne auteur (facultative) — {fichier.name}",
+                    options=[None] + colonnes_csv,
+                    index=(
+                        0 if auteur_propose is None else
+                        colonnes_csv.index(auteur_propose) + 1
+                    ),
+                    format_func=lambda valeur: (
+                        "Aucune colonne auteur" if valeur is None else valeur
+                    ),
+                    key=f"qwen_auteur_csv_{cle_fichier}",
+                )
+            correspondances_csv.append({
+                "numero_fichier": numero_fichier,
+                "nom_fichier": fichier.name,
+                "colonne_texte": None,
+                "colonne_auteur": auteur_choisi,
+                "colonne_id_video": colonne_id_video,
+                "colonnes_sources": colonnes_sources,
+            })
+        else:
+            colonne_gauche, colonne_droite = st.columns(2)
+            with colonne_gauche:
+                texte_choisi = st.selectbox(
+                    f"Colonne contenant les commentaires — {fichier.name}",
+                    options=colonnes_csv,
+                    index=colonnes_csv.index(defaut_texte),
+                    key=f"qwen_texte_csv_{cle_fichier}",
+                )
+            with colonne_droite:
+                choix_auteurs = [None] + [
+                    nom for nom in colonnes_csv if nom != texte_choisi
+                ]
+                auteur_propose = proposer_colonne(
+                    colonnes_csv,
+                    ("nom_affiche", "display_name", "auteur", "author",
+                     "utilisateur", "username", "profil"),
+                )
+                if auteur_propose not in choix_auteurs:
+                    auteur_propose = None
+                auteur_choisi = st.selectbox(
+                    f"Colonne auteur (facultative) — {fichier.name}",
+                    options=choix_auteurs,
+                    index=choix_auteurs.index(auteur_propose),
+                    format_func=lambda valeur: (
+                        "Aucune colonne auteur" if valeur is None else valeur
+                    ),
+                    key=f"qwen_auteur_csv_{cle_fichier}",
+                )
+            correspondances_csv.append({
+                "numero_fichier": numero_fichier,
+                "nom_fichier": fichier.name,
+                "colonne_texte": texte_choisi,
+                "colonne_auteur": auteur_choisi,
+            })
         st.caption(
             f"Aperçu du CSV — {fichier.name} : "
             f"{len(lignes_apercu)} ligne(s) affichée(s), 10 au maximum."
@@ -555,12 +718,21 @@ else:
             nom_fichier = fichier.name
             if nom_fichier.lower().endswith(".csv"):
                 choix = choix_par_fichier[numero_fichier]
-                nouveaux, informations = analyser_commentaires_csv(
-                    fichier.getvalue(),
-                    numero_depart=len(documents),
-                    colonne_texte=str(choix["colonne_texte"]),
-                    colonne_auteur=choix["colonne_auteur"],
-                )
+                if mode_analyse == "matrice":
+                    nouveaux, informations = analyser_sources_csv(
+                        fichier.getvalue(),
+                        colonnes_sources=choix["colonnes_sources"],
+                        colonne_id_video=choix["colonne_id_video"],
+                        colonne_auteur=choix["colonne_auteur"],
+                        numero_depart=len(documents),
+                    )
+                else:
+                    nouveaux, informations = analyser_commentaires_csv(
+                        fichier.getvalue(),
+                        numero_depart=len(documents),
+                        colonne_texte=str(choix["colonne_texte"]),
+                        colonne_auteur=choix["colonne_auteur"],
+                    )
                 documents.extend(nouveaux)
                 for informations_document in informations.values():
                     # Éviter une deuxième copie du dictionnaire de chaque ligne.
@@ -575,11 +747,17 @@ else:
                     for numero, doc in enumerate(extraits)
                 )
                 for doc in documents[depart:]:
+                    source_texte, id_video = (
+                        extraire_source_iramuteq(doc)
+                        if mode_analyse == "matrice" else ("", "")
+                    )
                     metadonnees[doc.numero] = {
                         "nom_affiche": "",
                         "ligne_csv": "",
                         "fichier_source": nom_fichier,
                         "format_source": "iramuteq",
+                        "source_texte": source_texte,
+                        "id_video": id_video,
                     }
 
         tableau = tableau_documents(documents)
@@ -751,7 +929,10 @@ cle = hashlib.sha256(
 
 if st.session_state.get("qwen_cle") != cle:
     st.session_state["qwen_cle"] = cle
-    st.session_state["qwen_donnees"] = initialiser_tableau(tableau, signature, cle)
+    donnees_initiales = initialiser_tableau(tableau, signature, cle)
+    if mode_analyse == "matrice":
+        donnees_initiales = initialiser_annotations_matrice(donnees_initiales)
+    st.session_state["qwen_donnees"] = donnees_initiales
     st.session_state["qwen_message"] = ""
 
 checkpoint = st.file_uploader(
@@ -987,6 +1168,12 @@ else:
     ]
     if mode_analyse == "structure":
         colonnes_principales += list(CHAMPS_BOOLEENS) + ["acteur_cible"]
+    elif mode_analyse == "matrice":
+        colonnes_principales = [
+            "numero_document", "id_video", "source_texte", "texte",
+            *CHAMPS_THEMES, "acteur_designe",
+            "incertitude_interpretation", "statut_codage",
+        ]
     elif mode_analyse == "theses":
         colonnes_principales += [
             "theme_retenu", "theme_intitule", "indice_textuel", "justification"
@@ -1079,6 +1266,120 @@ with st.expander("Tableau complet, métadonnées et variables du corpus", expand
             "Aperçu limité à 1 000 lignes. Le ZIP et le CSV "
             "contiennent toutes les lignes."
         )
+
+
+if mode_analyse == "matrice":
+    st.subheader("Matrice des annotations par texte et par thème")
+    matrice_affichage = construire_matrice(donnees)
+    colonnes_matrice = [
+        "numero_document", "id_video", "source_texte", "texte",
+        "statut_codage", *("final_" + theme for theme in CHAMPS_THEMES),
+        "incertitude_interpretation", "acteur_designe",
+        "validation_humaine",
+    ]
+    st.dataframe(
+        matrice_affichage[colonnes_matrice].head(1000),
+        use_container_width=True, hide_index=True,
+    )
+    st.caption(
+        "Une ligne représente un texte ou un commentaire. Les trois colonnes "
+        "thématiques sont indépendantes. Les valeurs manquantes correspondent "
+        "aux textes non analysés, et non à une absence de thème. "
+        "Le ZIP contient la matrice intégrale."
+    )
+
+    st.subheader("Fréquences des thèmes selon la source textuelle")
+    bilan_sources = construire_bilan_sources(matrice_affichage)
+    st.dataframe(
+        bilan_sources, use_container_width=True, hide_index=True,
+    )
+
+    st.subheader("Comparaison des sources appariées par identifiant vidéo")
+    comparaison = comparer_sources_par_video(matrice_affichage)
+    if comparaison.empty:
+        st.info(
+            "Aucune vidéo appariée disponible. Choisissez la colonne ID vidéo "
+            "dans le CSV pour comparer textes IA, auteurs et voix transcrites."
+        )
+    else:
+        st.dataframe(
+            comparaison.head(1000), use_container_width=True, hide_index=True
+        )
+        st.caption(
+            "Une absence de source est notée non_disponible, jamais non. "
+            "Les discordances IA-auteur et IA-voix ne sont calculées que "
+            "lorsque les deux textes ont reçu une annotation exploitable."
+        )
+
+    st.subheader("Validation et correction manuelles des annotations")
+    lignes_verifiables = donnees.loc[donnees["statut_codage"].eq("ok")]
+    if lignes_verifiables.empty:
+        st.info("Analysez au moins un texte pour activer la validation humaine.")
+    else:
+        identifiants_manuels = lignes_verifiables["numero_document"].astype(int).tolist()
+        numero_validation = st.selectbox(
+            "Texte à valider ou corriger",
+            identifiants_manuels,
+            format_func=lambda numero: (
+                f"{numero} — "
+                + str(
+                    donnees.loc[
+                        donnees["numero_document"].eq(numero), "source_texte"
+                    ].iloc[0]
+                )
+            ),
+            key="qwen_numero_validation_matrice",
+        )
+        ligne_validation = donnees.loc[
+            donnees["numero_document"].eq(numero_validation)
+        ].iloc[0]
+        st.text_area(
+            "Texte original pour validation",
+            value=str(ligne_validation["texte"]),
+            height=180, disabled=True,
+        )
+        with st.form(
+            key=f"qwen_form_validation_{numero_validation}",
+            clear_on_submit=False,
+        ):
+            corrections = {}
+            for theme in CHAMPS_THEMES:
+                actuel = ligne_validation["manuel_" + theme]
+                if pd.isna(actuel):
+                    actuel = ligne_validation[theme]
+                corrections[theme] = st.checkbox(
+                    LIBELLES_THEMES[theme],
+                    value=bool(actuel) if pd.notna(actuel) else False,
+                )
+            note_validation = st.text_area(
+                "Observation du chercheur",
+                value=str(ligne_validation["note_humaine"]),
+                height=80,
+            )
+            enregistrer_validation = st.form_submit_button(
+                "Enregistrer la validation ou la correction"
+            )
+        if enregistrer_validation:
+            indice_validation = donnees.index[
+                donnees["numero_document"].eq(numero_validation)
+            ][0]
+            correction_effective = any(
+                bool(corrections[theme]) != bool(
+                    donnees.at[indice_validation, theme]
+                )
+                for theme in CHAMPS_THEMES
+            )
+            for theme in CHAMPS_THEMES:
+                donnees.at[
+                    indice_validation, "manuel_" + theme
+                ] = corrections[theme]
+            donnees.at[indice_validation, "validation_humaine"] = (
+                "corrige" if correction_effective else "valide"
+            )
+            donnees.at[indice_validation, "note_humaine"] = note_validation
+            st.session_state["qwen_donnees"] = donnees
+            st.success("Annotation humaine enregistrée dans la matrice.")
+            st.rerun()
 
 avec_resultat = donnees.loc[donnees["statut_codage"].eq("ok")]
 if mode_analyse == "theses" and theses_validees is not None:
