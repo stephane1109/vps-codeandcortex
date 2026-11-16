@@ -6,7 +6,7 @@ from collections import defaultdict
 
 import pandas as pd
 
-from codage_multithemes import CHAMPS_THEMES
+from codage_multithemes import codes_themes, valider_themes
 from lecture_commentaires import identifiant_auteur, ouvrir_lecteur_csv
 from lecture_iramuteq import Document
 
@@ -120,19 +120,20 @@ def extraire_source_iramuteq(document: Document) -> tuple[str, str]:
     return source, id_video
 
 
-def initialiser_annotations_matrice(tableau: pd.DataFrame) -> pd.DataFrame:
-    """Ajouter les résultats sans remplacer les annotations historiques."""
-    for theme in CHAMPS_THEMES:
-        tableau[theme] = pd.Series(
-            [pd.NA] * len(tableau), index=tableau.index, dtype="boolean",
+def initialiser_annotations_matrice(
+    tableau: pd.DataFrame,
+    themes: list[dict[str, str]],
+) -> pd.DataFrame:
+    """Préparer les colonnes des thèmes du chercheur, sans grille imposée."""
+    for code in codes_themes(themes):
+        tableau[code] = pd.Series(
+            [pd.NA] * len(tableau), index=tableau.index, dtype="boolean"
         )
-        tableau["manuel_" + theme] = pd.Series(
-            [pd.NA] * len(tableau), index=tableau.index, dtype="boolean",
+        tableau["manuel_" + code] = pd.Series(
+            [pd.NA] * len(tableau), index=tableau.index, dtype="boolean"
         )
-    for champ in (
-        "indice_denonciation", "indice_indignation", "indice_persecuteur",
-        "acteur_designe", "validation_humaine", "note_humaine",
-    ):
+        tableau["indice_" + code] = ""
+    for champ in ("validation_humaine", "note_humaine", "justification"):
         tableau[champ] = ""
     tableau["incertitude_interpretation"] = pd.Series(
         [pd.NA] * len(tableau), index=tableau.index, dtype="boolean"
@@ -142,55 +143,64 @@ def initialiser_annotations_matrice(tableau: pd.DataFrame) -> pd.DataFrame:
     return tableau
 
 
-def construire_matrice(tableau: pd.DataFrame) -> pd.DataFrame:
-    """Construire la matrice unitaire, avec valeurs finales corrigées."""
+def construire_matrice(
+    tableau: pd.DataFrame,
+    themes: list[dict[str, str]],
+) -> pd.DataFrame:
+    """Une ligne par unité textuelle et une colonne par thème non exclusif."""
+    codes = codes_themes(themes)
     colonnes = [
         "numero_document", "id_video", "source_texte", "fichier_source",
         "ligne_csv", "nom_affiche", "texte", "statut_codage",
-        *CHAMPS_THEMES,
-        "indice_denonciation", "indice_indignation", "indice_persecuteur",
-        "acteur_designe", "incertitude_interpretation",
+        *codes, *("indice_" + code for code in codes),
+        "incertitude_interpretation", "justification",
         "validation_humaine", "note_humaine",
         "nombre_segments", "segments_traites",
     ]
     donnees = tableau.reindex(columns=colonnes).copy()
-    for theme in CHAMPS_THEMES:
-        manuel = "manuel_" + theme
-        valeurs = tableau[theme].copy()
+    for code in codes:
+        manuel = "manuel_" + code
+        valeurs = tableau[code].copy()
         mask = tableau[manuel].notna()
         valeurs.loc[mask] = tableau.loc[mask, manuel]
-        donnees["final_" + theme] = valeurs.astype("boolean")
+        donnees["final_" + code] = valeurs.astype("boolean")
         donnees[manuel] = tableau[manuel].copy()
     return donnees
 
 
-def construire_bilan_sources(tableau: pd.DataFrame) -> pd.DataFrame:
-    """Compter les annotations positives et négatives par provenance."""
-    valide = tableau.loc[tableau["statut_codage"].eq("ok")]
+def construire_bilan_sources(
+    matrice: pd.DataFrame,
+    themes: list[dict[str, str]],
+) -> pd.DataFrame:
+    """Établir les fréquences des thèmes dans chaque source textuelle."""
+    colonnes = [
+        "source_texte", "code_theme", "theme", "effectif_textes",
+        "presence", "absence", "indetermine",
+    ]
+    valides = matrice.loc[matrice["statut_codage"].eq("ok")]
     lignes: list[dict[str, object]] = []
-    for source, groupe in valide.groupby("source_texte", dropna=False):
-        for theme in CHAMPS_THEMES:
-            valeurs = groupe["final_" + theme]
+    for source, groupe in valides.groupby("source_texte", dropna=False):
+        for code, theme in zip(codes_themes(themes), valider_themes(themes)):
+            valeurs = groupe["final_" + code]
             lignes.append({
                 "source_texte": source,
-                "theme": LIBELLES_THEMES[theme],
+                "code_theme": code,
+                "theme": theme["titre"],
                 "effectif_textes": len(groupe),
                 "presence": int(valeurs.eq(True).sum()),
                 "absence": int(valeurs.eq(False).sum()),
                 "indetermine": int(valeurs.isna().sum()),
             })
-    return pd.DataFrame(lignes, columns=[
-        "source_texte", "theme", "effectif_textes",
-        "presence", "absence", "indetermine",
-    ])
+    return pd.DataFrame(lignes, columns=colonnes)
 
 
-def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
-    """Comparer les sources appariées par vidéo sans confondre absence et manque."""
-    # Inclure les unités non traitées pour ne pas les confondre avec
-    # une source absente lors des comparaisons asynchrones ou partielles.
-    disponibles = tableau.loc[
-        tableau["id_video"].fillna("").astype(str).str.strip().ne("")
+def comparer_sources_par_video(
+    matrice: pd.DataFrame,
+    themes: list[dict[str, str]],
+) -> pd.DataFrame:
+    """Comparer les sources associées à une même vidéo sans inventer d'absences."""
+    disponibles = matrice.loc[
+        matrice["id_video"].fillna("").astype(str).str.strip().ne("")
     ]
     groupes: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(
         lambda: defaultdict(list)
@@ -199,10 +209,11 @@ def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
         groupes[str(ligne["id_video"])][str(ligne["source_texte"])].append(ligne)
     resultats: list[dict[str, object]] = []
     for id_video, sources in groupes.items():
-        for theme in CHAMPS_THEMES:
+        for code, theme in zip(codes_themes(themes), valider_themes(themes)):
             enregistrement: dict[str, object] = {
                 "id_video": id_video,
-                "theme": LIBELLES_THEMES[theme],
+                "code_theme": code,
+                "theme": theme["titre"],
             }
             for source in SOURCES_TEXTE:
                 lignes = sources.get(source, [])
@@ -210,26 +221,20 @@ def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
                     ligne for ligne in lignes
                     if ligne["statut_codage"] == "ok"
                 ]
-                valeurs = [ligne["final_" + theme] for ligne in annotees]
+                valeurs = [ligne["final_" + code] for ligne in annotees]
                 if not lignes:
-                    code = "non_disponible"
+                    etat = "non_disponible"
                 elif not annotees:
-                    code = "non_traite"
-                elif any(
-                    pd.notna(valeur) and bool(valeur) for valeur in valeurs
+                    etat = "non_traite"
+                elif any(pd.notna(v) and bool(v) for v in valeurs):
+                    etat = "oui"
+                elif len(annotees) == len(lignes) and all(
+                    pd.notna(v) and not bool(v) for v in valeurs
                 ):
-                    code = "oui"
-                elif (
-                    len(annotees) == len(lignes)
-                    and all(
-                        pd.notna(valeur) and not bool(valeur)
-                        for valeur in valeurs
-                    )
-                ):
-                    code = "non"
+                    etat = "non"
                 else:
-                    code = "partiel"
-                enregistrement[source] = code
+                    etat = "partiel"
+                enregistrement[source] = etat
             enregistrement["discordance_ia_auteur"] = (
                 enregistrement["texte_ia"] != enregistrement["texte_auteur"]
                 if enregistrement["texte_ia"] in ("oui", "non")
@@ -244,39 +249,40 @@ def comparer_sources_par_video(tableau: pd.DataFrame) -> pd.DataFrame:
             )
             resultats.append(enregistrement)
     return pd.DataFrame(resultats, columns=[
-        "id_video", "theme", *SOURCES_TEXTE,
+        "id_video", "code_theme", "theme", *SOURCES_TEXTE,
         "discordance_ia_auteur", "discordance_ia_voix",
     ])
 
 
 def exporter_iramuteq_matrice(
-    documents: list[Document], tableau: pd.DataFrame
+    documents: list[Document],
+    matrice: pd.DataFrame,
+    themes: list[dict[str, str]],
 ) -> bytes:
-    """Ajouter les indicateurs multiples à chaque en-tête sans toucher au texte."""
+    """Conserver les en-têtes et enrichir les textes de variables thématiques."""
     annotations = {
         int(ligne["numero_document"]): ligne
-        for ligne in tableau.to_dict("records")
+        for ligne in matrice.to_dict("records")
     }
-    textes = []
+    contenus: list[str] = []
     for document in documents:
         ligne = annotations.get(document.numero)
-        suffixes: list[str] = []
+        variables: list[str] = []
         if ligne and ligne.get("statut_codage") == "ok":
-            for theme in CHAMPS_THEMES:
-                champ = "final_" + theme
-                valeur = ligne.get(champ, pd.NA)
+            for code in codes_themes(themes):
+                valeur = ligne.get("final_" + code, pd.NA)
                 if pd.notna(valeur):
-                    suffixes.append(
-                        "*" + theme + "_" + ("oui" if bool(valeur) else "non")
+                    variables.append(
+                        f"*{code}_{'oui' if bool(valeur) else 'non'}"
                     )
             source = str(ligne.get("source_texte") or "")
             if (
-                source in SOURCES_TEXTE
+                source in SOURCES_IMPORT
                 and "source_texte_" + source not in document.variables
             ):
-                suffixes.append("*source_texte_" + source)
-        texte = document.entete + (
-            " " + " ".join(suffixes) if suffixes else ""
-        ) + "\n" + document.texte
-        textes.append(texte)
-    return ("\n\n".join(textes) + "\n").encode("utf-8")
+                variables.append("*source_texte_" + source)
+        entete = document.entete + (
+            " " + " ".join(variables) if variables else ""
+        )
+        contenus.append(entete + "\n" + document.texte)
+    return ("\n\n".join(contenus) + "\n").encode("utf-8")
