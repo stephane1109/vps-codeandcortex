@@ -46,6 +46,18 @@ L'interface indique toujours le modèle transmis à l'API Ollama et la fenêtre 
 
 Cette modification répond au manque de diagnostic mais **ne supprime pas l'arrêt du processus Ollama**. Le journal du service Ollama et les compteurs mémoire restent nécessaires pour établir la cause de la panne.
 
+## Classification des discours sur la violence en trois thèmes (16 novembre 2026)
+
+Le mode **Classification en trois thèmes : discours sur la violence** est sélectionné par défaut. Les modes **Analyse libre avec mon prompt** et **Codage structuré sur la violence** restent disponibles sans changement de leur fonctionnement.
+
+La grille initiale distingue les catégories suivantes : **Dénonciation de la violence**, définie comme une condamnation ou une critique normative explicite de violences ; **Indignation face à la violence**, définie comme une réaction affective explicite de colère, de révolte, de consternation ou d'injustice ; **Détermination d'un persécuteur face à la violence**, définie comme la désignation explicite d'un acteur supposé responsable d'une violence, d'une persécution ou d'une oppression. Cette dernière catégorie décrit une attribution de responsabilité dans le discours et ne constitue pas une preuve de responsabilité objective.
+
+Le classement conserve le mode exclusif préexistant : Qwen détermine **un thème principal** par commentaire, parmi `theme_1`, `theme_2`, `theme_3`, ou `indetermine` si les indices explicites sont insuffisants ou qu'aucune dominante ne se distingue. Ces catégories peuvent se chevaucher dans les discours, mais le résultat actuel représente exclusivement la catégorie dominante. Il faut conserver cette limite méthodologique dans l'interprétation du corpus.
+
+L'utilisateur peut toujours modifier librement les titres et les définitions de la grille. Le bouton **Affiner les définitions avec Qwen** remplace la proposition entièrement libre : les nouvelles définitions sont proposées à partir de l'échantillon sans changer les trois intitulés de la grille courante. Aucun résultat n'est présenté comme une annotation humaine validée.
+
+L'export ZIP conserve les fichiers historiques et les variables `theme_retenu`, `theme_intitule`, `these_retenue`, `these_intitule`, `indice_textuel` et `justification`, ainsi que le bilan des thèmes, la grille JSON, le corpus IRaMuTeQ et le prompt dans les paramètres. Les sélecteurs CSV, l'aperçu des dix premières lignes, la reprise CSV et les autres outils ne sont pas supprimés.
+
 ## Choix des colonnes CSV et erreur Ollama « unexpected EOF » (16 novembre 2026)
 
 L'interface permet maintenant de **sélectionner explicitement pour chaque fichier CSV** la colonne qui contient le commentaire et, facultativement, celle qui contient le nom de l'auteur. Les colonnes ne sont plus obligatoirement appelées `texte` et `nom_affiche` : des noms comme `commentaire`, `message`, `content` ou tout autre intitulé sont acceptés. Chaque CSV possède ses propres sélecteurs. L'import historique avec `nom_affiche` et `texte` fonctionne toujours sans modification des données.
