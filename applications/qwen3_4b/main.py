@@ -13,38 +13,24 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from codage_qwen import (
-    CHAMPS_BOOLEENS,
-    MODELE,
-    PROMPT_LIBRE_DEFAUT,
-    PROMPT_VIOLENCE_DEFAUT,
-    PROMPT_THESES_DEFAUT,
-    THESES_INITIALES,
-    proposer_trois_theses,
-    valider_theses,
-    CONTEXTE_MAXIMUM,
-    URL_OLLAMA,
-    coder_commentaire,
-    verifier_service,
+from configuration_qwen import (
+    MODELE, CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
 )
-from lecture_commentaires import analyser_commentaires_csv, obtenir_apercu_csv
 from codage_multithemes import (
-    CHAMPS_THEMES, PROMPT_MATRICE_DEFAUT, coder_multithemes,
+    PROMPT_MATRICE_DEFAUT, NOMBRE_THEMES_MAXIMUM,
+    proposer_themes_depuis_prompt, valider_themes, codes_themes,
+    coder_multithemes,
 )
 from matrice_violence import (
-    SOURCES_TEXTE, LIBELLES_SOURCES, LIBELLES_THEMES,
+    SOURCES_TEXTE, LIBELLES_SOURCES,
     analyser_sources_csv, extraire_source_iramuteq,
     initialiser_annotations_matrice, construire_matrice,
     construire_bilan_sources, comparer_sources_par_video,
     exporter_iramuteq_matrice,
 )
+from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
-from lecture_iramuteq import (
-    analyser_corpus,
-    exporter_csv,
-    exporter_iramuteq,
-    tableau_documents,
-)
+from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
 
 st.set_page_config(page_title=f"Qwen {MODELE} — analyse de corpus", layout="wide")
 
@@ -72,117 +58,50 @@ def est_vrai(valeur: object) -> bool:
     return bool(valeur)
 
 
-def categorie_document(ligne, mode_analyse: str) -> str:
-    """Conserver les anciennes catégories, ou signaler une analyse libre."""
-    if ligne.statut_codage != "ok":
-        return "indetermine"
-    if mode_analyse == "libre":
-        return "analyse_libre"
-    if mode_analyse == "theses":
-        # Conserver un code IRaMuTeQ stable malgré l'édition des intitulés.
-        resultat = str(getattr(ligne, "theme_retenu", "")) or str(
-            getattr(ligne, "these_retenue", "indetermine")
-        ).replace("these_", "theme_")
-        return resultat.removeprefix("theme_") if resultat else "indetermine"
-    if est_vrai(ligne.interpretation_indeterminee):
-        return "indetermine"
-    if est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
-        return "ambivalent"
-    if est_vrai(ligne.violence_justifiee):
-        return "justification"
-    if est_vrai(ligne.violence_denoncee):
-        return "denonciation"
-    if est_vrai(ligne.violence_minimisee):
-        return "minimisation"
-    if est_vrai(ligne.violence_evoquee):
-        return "evocation"
-    return "hors_violence"
-
-
 def archive_resultats(
     tableau: pd.DataFrame,
     documents,
     signature: str,
     parametres: dict[str, object],
 ) -> bytes:
-    """Créer une archive ZIP unique incluant toutes les lignes et le prompt."""
-    mode_analyse = str(parametres["mode_analyse"])
-    if mode_analyse == "matrice":
-        matrice = construire_matrice(tableau)
-        texte = exporter_iramuteq_matrice(documents, matrice)
-    else:
-        categories = {
-            int(ligne.numero_document): categorie_document(ligne, mode_analyse)
-            for ligne in tableau.itertuples(index=False)
-        }
-        nom_variable = "qwen_theme" if mode_analyse == "theses" else "qwen_position"
-        texte = exporter_iramuteq(documents, categories, nom_variable)
-    colonnes_reponses = [
-        "numero_document", "nom_affiche", "texte", "fichier_source",
-        "ligne_csv", "colonne_texte_source", "colonne_auteur_source",
-        "reponse_qwen", "statut_codage", "erreur_codage", "mode_analyse",
-        "theme_retenu", "theme_intitule", "indice_textuel", "justification",
-        "these_retenue", "these_intitule",
-        "id_video", "source_texte", *CHAMPS_THEMES,
-        "indice_denonciation", "indice_indignation", "indice_persecuteur",
-        "acteur_designe", "incertitude_interpretation",
-        "validation_humaine", "note_humaine",
-    ]
-    reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
+    """Préparer le ZIP unique avec matrice, sous-corpus et métadonnées."""
+    themes = valider_themes(parametres["themes"])
+    codes = codes_themes(themes)
+    matrice = construire_matrice(tableau, themes)
+    iramuteq = exporter_iramuteq_matrice(documents, matrice, themes)
+    reponses = tableau.reindex(columns=[
+        "numero_document", "id_video", "source_texte",
+        "nom_affiche", "texte", "reponse_qwen",
+        "statut_codage", "erreur_codage", *codes,
+        *("indice_" + code for code in codes),
+        "incertitude_interpretation", "justification",
+    ])
     tampon = io.BytesIO()
     with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
-        archive.writestr("corpus_qwen_iramuteq.txt", texte)
-        if mode_analyse == "matrice":
-            archive.writestr("matrice_annotations_qwen.csv", exporter_csv(matrice))
-            for theme in CHAMPS_THEMES:
-                # Une même unité peut figurer dans plusieurs fichiers.
-                extraits_thematiques = matrice.loc[
-                    matrice["statut_codage"].eq("ok")
-                    & matrice["final_" + theme].eq(True).fillna(False)
-                ]
-                archive.writestr(
-                    "textes_" + theme.removeprefix("theme_") + "_qwen.csv",
-                    exporter_csv(extraits_thematiques),
-                )
+        archive.writestr("corpus_qwen_iramuteq.txt", iramuteq)
+        archive.writestr("matrice_annotations_qwen.csv", exporter_csv(matrice))
+        archive.writestr(
+            "comparaison_videos_qwen.csv",
+            exporter_csv(comparer_sources_par_video(matrice, themes)),
+        )
+        archive.writestr(
+            "bilan_sources_themes_qwen.csv",
+            exporter_csv(construire_bilan_sources(matrice, themes)),
+        )
+        archive.writestr(
+            "grille_themes_qwen.json",
+            json.dumps({"themes": themes}, ensure_ascii=False, indent=2),
+        )
+        for code in codes:
+            extraits = matrice.loc[
+                matrice["statut_codage"].eq("ok")
+                & matrice["final_" + code].eq(True).fillna(False)
+            ]
             archive.writestr(
-                "comparaison_videos_qwen.csv",
-                exporter_csv(comparer_sources_par_video(matrice)),
-            )
-            archive.writestr(
-                "bilan_sources_themes_qwen.csv",
-                exporter_csv(construire_bilan_sources(matrice)),
-            )
-        if mode_analyse == "theses" and parametres.get("theses") is not None:
-            grille = valider_theses(parametres.get("theses"))
-            bilans = pd.DataFrame([
-                {
-                    "code": f"theme_{indice}",
-                    "theme": theme["titre"],
-                    "definition": theme["definition"],
-                    "nombre_commentaires": int(
-                        (
-                            tableau["theme_retenu"].eq(f"theme_{indice}")
-                            & tableau["statut_codage"].eq("ok")
-                        ).sum()
-                    ),
-                }
-                for indice, theme in enumerate(grille, start=1)
-            ])
-            bilans.loc[len(bilans)] = {
-                "code": "indetermine",
-                "theme": "Indéterminé / hors des trois thèmes",
-                "definition": "Aucun thème n'est suffisamment étayé",
-                "nombre_commentaires": int((
-                    tableau["theme_retenu"].eq("indetermine")
-                    & tableau["statut_codage"].eq("ok")
-                ).sum()),
-            }
-            archive.writestr("bilan_themes_qwen.csv", exporter_csv(bilans))
-            archive.writestr(
-                "grille_themes_qwen.json",
-                json.dumps({"themes": grille}, ensure_ascii=False, indent=2),
+                f"textes_{code}_qwen.csv",
+                exporter_csv(extraits),
             )
         archive.writestr(
             "parametres.json",
@@ -199,23 +118,12 @@ def initialiser_tableau(
     signature: str,
     cle_configuration: str = "",
 ) -> pd.DataFrame:
-    """Initialiser les résultats en conservant les textes et les métadonnées."""
-    # Réutiliser les colonnes sources sans les dupliquer en mémoire.
-    # Les colonnes produites par Qwen sont créées séparément.
+    """Conserver les textes et métadonnées en initialisant les résultats."""
     donnees = tableau.copy(deep=False).reset_index(drop=True)
     donnees["signature_corpus"] = signature
     donnees["cle_configuration"] = cle_configuration
     donnees["statut_codage"] = "non_traite"
-    for champ in CHAMPS_BOOLEENS:
-        donnees[champ] = pd.Series(
-            [pd.NA] * len(donnees), index=donnees.index, dtype="boolean"
-        )
-    for champ in (
-        "acteur_cible", "indice_textuel", "justification",
-        "erreur_codage", "reponse_qwen", "mode_analyse",
-        "these_retenue", "these_intitule",
-        "theme_retenu", "theme_intitule",
-    ):
+    for champ in ("erreur_codage", "reponse_qwen", "mode_analyse"):
         donnees[champ] = ""
     for champ in ("texte_tronque", "contexte_tronque"):
         donnees[champ] = pd.Series(
@@ -233,78 +141,59 @@ def restaurer_checkpoint(
     anciens: pd.DataFrame,
     signature: str,
     cle_configuration: str,
-    autoriser_ancien_format: bool = False,
+    themes: list[dict[str, str]],
 ) -> pd.DataFrame:
-    """Restaurer sans mélanger les corpus et les prompts différents."""
-    colonnes_indispensables = (
-        "numero_document", "signature_corpus", "texte", "statut_codage"
+    """Restaurer des annotations seulement si corpus et prompt concordent."""
+    indispensables = (
+        "numero_document", "signature_corpus", "texte",
+        "statut_codage", "cle_configuration",
     )
-    if any(col not in anciens.columns for col in colonnes_indispensables):
-        raise ValueError("Colonnes de reprise incomplètes.")
+    if any(champ not in anciens.columns for champ in indispensables):
+        raise ValueError("Le CSV de reprise ne contient pas les champs nécessaires.")
     if (
         len(anciens) != len(donnees)
         or anciens["signature_corpus"].nunique() != 1
         or anciens["signature_corpus"].iloc[0] != signature
+        or anciens["cle_configuration"].nunique() != 1
+        or anciens["cle_configuration"].iloc[0] != cle_configuration
         or not anciens["numero_document"].equals(donnees["numero_document"])
         or not anciens["texte"].fillna("").equals(donnees["texte"].fillna(""))
     ):
-        raise ValueError("Le CSV de reprise ne correspond pas au corpus actuel.")
-
-    if "cle_configuration" in anciens.columns:
-        if (
-            anciens["cle_configuration"].nunique() != 1
-            or anciens["cle_configuration"].iloc[0] != cle_configuration
-        ):
-            raise ValueError(
-                "Le prompt, le mode ou les paramètres diffèrent de ceux de la reprise."
-            )
-    elif not autoriser_ancien_format:
         raise ValueError(
-            "Cet ancien CSV n'enregistre pas le prompt utilisé. "
-            "Reprise autorisée seulement avec la grille structurée historique."
+            "Le corpus, le prompt, les thèmes ou leurs paramètres diffèrent "
+            "du fichier de reprise."
         )
-
+    codes = codes_themes(themes)
+    champs_boolean = [
+        *codes, *("manuel_" + code for code in codes),
+        "incertitude_interpretation", "texte_tronque", "contexte_tronque",
+    ]
+    champs_texte = [
+        "statut_codage", "erreur_codage", "reponse_qwen", "mode_analyse",
+        *("indice_" + code for code in codes),
+        "justification", "validation_humaine", "note_humaine",
+    ]
     restauration = donnees.copy()
-    champs_restaurables = (
-        "statut_codage", *CHAMPS_BOOLEENS, *CHAMPS_THEMES,
-        *("manuel_" + theme for theme in CHAMPS_THEMES),
-        "indice_denonciation", "indice_indignation", "indice_persecuteur",
-        "acteur_designe", "incertitude_interpretation",
-        "validation_humaine", "note_humaine",
-        "nombre_segments", "segments_traites",
-        "acteur_cible", "indice_textuel", "justification",
-        "erreur_codage", "texte_tronque", "contexte_tronque",
-        "reponse_qwen", "mode_analyse",
-        "these_retenue", "these_intitule",
-        "theme_retenu", "theme_intitule",
-    )
-    for champ in champs_restaurables:
+    for champ in champs_boolean:
         if champ in anciens.columns:
-            valeurs = anciens[champ].reset_index(drop=True)
-            if champ in (
-                *CHAMPS_BOOLEENS, *CHAMPS_THEMES,
-                *("manuel_" + theme for theme in CHAMPS_THEMES),
-                "incertitude_interpretation",
-                "texte_tronque", "contexte_tronque",
-            ):
-                def convertir_booleen(valeur):
-                    if pd.isna(valeur) or str(valeur).strip() == "":
-                        return pd.NA
-                    return est_vrai(valeur)
-                restauration[champ] = pd.Series(
-                    [convertir_booleen(v) for v in valeurs], dtype="boolean"
-                )
-            elif champ in (
-                "acteur_cible", "indice_textuel", "justification",
-                "erreur_codage", "reponse_qwen", "mode_analyse",
-                "these_retenue", "these_intitule",
-                "theme_retenu", "theme_intitule",
-                "indice_denonciation", "indice_indignation", "indice_persecuteur",
-                "acteur_designe", "validation_humaine", "note_humaine",
-            ):
-                restauration[champ] = valeurs.fillna("").astype(str)
-            else:
-                restauration[champ] = valeurs
+            restauration[champ] = pd.Series(
+                [
+                    pd.NA if pd.isna(valeur) or str(valeur).strip() == ""
+                    else est_vrai(valeur)
+                    for valeur in anciens[champ]
+                ],
+                index=restauration.index, dtype="boolean",
+            )
+    for champ in champs_texte:
+        if champ in anciens.columns:
+            restauration[champ] = (
+                anciens[champ].fillna("").astype(str).reset_index(drop=True)
+            )
+    for champ in ("nombre_segments", "segments_traites"):
+        if champ in anciens.columns:
+            restauration[champ] = pd.to_numeric(
+                anciens[champ], errors="coerce"
+            ).fillna(0).astype(int).to_numpy()
     return restauration
 
 
@@ -320,12 +209,11 @@ def demander_arret_analyse() -> None:
 def lancer_analyse(
     donnees: pd.DataFrame,
     indices: list[int],
-    mode_analyse: str,
     prompt: str,
+    themes: list[dict[str, str]],
     contexte_general: str,
     contexte_variables: list[str],
     temperature: float,
-    theses: list[dict[str, str]] | None = None,
 ) -> tuple[int, int, bool]:
     """Analyser automatiquement toutes les lignes sélectionnées, sans lots visibles."""
     nombre_total = len(indices)
@@ -350,24 +238,14 @@ def lancer_analyse(
             )
             contexte = (contexte_general + "\n" + details).strip()
             try:
-                if mode_analyse == "matrice":
-                    resultat = coder_multithemes(
-                        texte=str(ligne["texte"]),
-                        contexte=contexte,
-                        temperature=temperature,
-                        session=session,
-                        consigne=prompt,
-                    )
-                else:
-                    resultat = coder_commentaire(
-                        texte=str(ligne["texte"]),
-                        contexte=contexte,
-                        temperature=temperature,
-                        session=session,
-                        consigne=prompt,
-                        mode_analyse=mode_analyse,
-                        theses=theses,
-                    )
+                resultat = coder_multithemes(
+                    texte=str(ligne["texte"]),
+                    themes=themes,
+                    contexte=contexte,
+                    temperature=temperature,
+                    session=session,
+                    consigne=prompt,
+                )
                 for champ, valeur in resultat.items():
                     donnees.at[indice, champ] = valeur
                 donnees.at[indice, "statut_codage"] = "ok"
@@ -807,145 +685,143 @@ with st.expander("Paramètres complémentaires", expanded=False):
         "Afficher uniquement les analyses abouties", value=False
     )
 
-theses_validees: list[dict[str, str]] | None = None
-source_grille = ""
-if mode_analyse == "theses":
-    st.subheader("Définir les trois thèmes")
-    st.caption(
-        "Les trois thèmes demandés sont préremplis. Cliquez sur "
-        "« Affiner les définitions avec Qwen » pour proposer des précisions "
-        "à partir du corpus sans remplacer les intitulés. "
-        "Vous pouvez ensuite modifier les titres et les définitions."
-    )
-    identifiant_grille = hashlib.sha256(
-        (signature + prompt).encode("utf-8")
-    ).hexdigest()
-    if st.session_state.get("qwen_identifiant_grille") != identifiant_grille:
-        st.session_state["qwen_identifiant_grille"] = identifiant_grille
-        st.session_state["qwen_source_grille"] = "Grille initiale modifiable"
-        for indice, these in enumerate(THESES_INITIALES, start=1):
-            st.session_state[f"qwen_theme_titre_{indice}"] = these["titre"]
-            st.session_state[f"qwen_theme_definition_{indice}"] = these["definition"]
-    if st.button("Affiner les définitions avec Qwen"):
-        try:
-            grille_courante = valider_theses([
-                {
-                    "titre": st.session_state[f"qwen_theme_titre_{indice}"],
-                    "definition": st.session_state[f"qwen_theme_definition_{indice}"],
-                }
-                for indice in range(1, 4)
-            ])
-            propositions = proposer_trois_theses(
-                tableau["texte"].fillna("").astype(str).tolist(),
-                consigne=prompt,
-                themes_imposes=grille_courante,
-            )
-            for indice, theme in enumerate(propositions, start=1):
-                st.session_state[f"qwen_theme_titre_{indice}"] = theme["titre"]
-                st.session_state[f"qwen_theme_definition_{indice}"] = theme["definition"]
-            st.session_state["qwen_source_grille"] = (
-                "Définitions affinées par Qwen à partir d'un échantillon"
-            )
-            st.rerun()
-        except (requests.RequestException, ValueError, json.JSONDecodeError) as erreur:
-            st.error(
-                f"Qwen n'a pas pu proposer trois thèmes avec {MODELE} : "
-                f"{type(erreur).__name__} : {erreur}"
-            )
-    themes_modifiables = []
-    st.write(
-        "**Thèmes sélectionnés :** "
-        + " ; ".join(
-            st.session_state[f"qwen_theme_titre_{indice}"]
-            for indice in range(1, 4)
-        )
-    )
-    with st.expander("Modifier les intitulés et les définitions", expanded=False):
-        for indice in range(1, 4):
-            st.text_input(
-                f"Thème {indice} — intitulé",
-                key=f"qwen_theme_titre_{indice}",
-            )
-            st.text_area(
-                f"Thème {indice} — définition",
-                key=f"qwen_theme_definition_{indice}",
-                height=80,
-            )
-    # Toujours recueillir les trois valeurs, même lorsque le panneau est fermé.
-    for indice in range(1, 4):
-        themes_modifiables.append({
-            "titre": st.session_state[f"qwen_theme_titre_{indice}"],
-            "definition": st.session_state[f"qwen_theme_definition_{indice}"],
-        })
-    source_grille = st.session_state.get(
-        "qwen_source_grille", "Grille initiale modifiable"
-    )
-    st.caption(
-        f"Origine de la grille : {source_grille}. "
-        "Les définitions proposées par Qwen ne constituent pas une validation "
-        "scientifique. La classification représente le discours des auteurs, "
-        "sans établir la responsabilité réelle d'un persécuteur."
-    )
+st.subheader("Définir les thèmes à partir de votre prompt")
+st.caption(
+    "Qwen peut proposer une grille à partir de la consigne, sans thème ni "
+    "nombre de catégories imposés. Vous pouvez aussi saisir ou modifier "
+    "manuellement chaque titre et sa définition. Les catégories ne sont pas exclusives."
+)
+identifiant_grille = hashlib.sha256(
+    (signature + prompt).encode("utf-8")
+).hexdigest()
+if st.session_state.get("qwen_id_grille_libre") != identifiant_grille:
+    st.session_state["qwen_id_grille_libre"] = identifiant_grille
+    st.session_state["qwen_themes_proposes"] = []
+    st.session_state["qwen_origine_grille"] = ""
+
+if st.button("Construire les thèmes avec Qwen à partir du prompt"):
     try:
-        theses_validees = valider_theses(themes_modifiables)
+        propositions = proposer_themes_depuis_prompt(
+            prompt, tableau["texte"].fillna("").astype(str).tolist()
+        )
+        st.session_state["qwen_themes_proposes"] = propositions
+        st.session_state["qwen_origine_grille"] = "Proposition de Qwen"
+        for indice, theme in enumerate(propositions, start=1):
+            st.session_state[f"qwen_titre_libre_{indice}"] = theme["titre"]
+            st.session_state[f"qwen_definition_libre_{indice}"] = theme["definition"]
+        st.rerun()
+    except (requests.RequestException, ValueError, json.JSONDecodeError) as erreur:
+        st.error(
+            f"La proposition de thèmes a échoué : "
+            f"{type(erreur).__name__} : {erreur}"
+        )
+
+colonne_ajout, colonne_effacer = st.columns(2)
+with colonne_ajout:
+    if st.button("Ajouter un thème manuellement"):
+        themes_actuels = st.session_state["qwen_themes_proposes"]
+        if len(themes_actuels) < NOMBRE_THEMES_MAXIMUM:
+            themes_actuels.append({"titre": "", "definition": ""})
+            st.session_state["qwen_origine_grille"] = "Grille manuelle"
+            st.rerun()
+        else:
+            st.warning(f"Maximum de {NOMBRE_THEMES_MAXIMUM} thèmes.")
+with colonne_effacer:
+    if st.button("Retirer le dernier thème"):
+        themes_actuels = st.session_state["qwen_themes_proposes"]
+        if themes_actuels:
+            themes_actuels.pop()
+            st.rerun()
+
+themes_courants: list[dict[str, str]] = []
+for indice, theme in enumerate(
+    st.session_state["qwen_themes_proposes"], start=1
+):
+    cle_titre = f"qwen_titre_libre_{indice}"
+    cle_definition = f"qwen_definition_libre_{indice}"
+    if cle_titre not in st.session_state:
+        st.session_state[cle_titre] = theme["titre"]
+    if cle_definition not in st.session_state:
+        st.session_state[cle_definition] = theme["definition"]
+    gauche, droite = st.columns([1, 2])
+    with gauche:
+        titre = st.text_input(
+            f"Thème {indice} — intitulé",
+            key=cle_titre,
+        )
+    with droite:
+        definition = st.text_area(
+            f"Thème {indice} — définition",
+            key=cle_definition,
+            height=75,
+        )
+    themes_courants.append({"titre": titre, "definition": definition})
+
+st.session_state["qwen_themes_proposes"] = themes_courants
+themes_valides: list[dict[str, str]] | None = None
+if not themes_courants:
+    st.info(
+        "La grille n'est pas encore définie. Cliquez sur « Construire les "
+        "thèmes avec Qwen à partir du prompt » ou ajoutez vos catégories."
+    )
+else:
+    try:
+        themes_valides = valider_themes(themes_courants)
+        st.success(
+            f"Grille valide : {len(themes_valides)} thème(s) indépendant(s). "
+            "Vous pouvez commencer à annoter les textes."
+        )
     except ValueError as erreur:
-        st.error(f"Grille invalide : {erreur}")
+        st.error(f"Grille incomplète : {erreur}")
 
 configuration = {
     "modele": MODELE,
-    "mode_analyse": mode_analyse,
+    "mode_analyse": "matrice",
     "prompt": prompt,
+    "themes": themes_valides,
     "temperature": float(temperature),
     "contexte_general": contexte_general,
     "contexte_variables": contexte_variables,
     "signature_corpus": signature,
+    "correspondances_csv": correspondances_csv,
 }
-if selection_personnalisee:
-    configuration["correspondances_csv"] = correspondances_csv
-if mode_analyse == "theses":
-    configuration["theses"] = theses_validees
-    configuration["source_grille"] = source_grille
-
 cle = hashlib.sha256(
     json.dumps(configuration, sort_keys=True, ensure_ascii=False)
     .encode("utf-8")
 ).hexdigest()
-
 if st.session_state.get("qwen_cle") != cle:
     st.session_state["qwen_cle"] = cle
-    donnees_initiales = initialiser_tableau(tableau, signature, cle)
-    if mode_analyse == "matrice":
-        donnees_initiales = initialiser_annotations_matrice(donnees_initiales)
-    st.session_state["qwen_donnees"] = donnees_initiales
+    tableau_initial = initialiser_tableau(tableau, signature, cle)
+    if themes_valides is not None:
+        tableau_initial = initialiser_annotations_matrice(
+            tableau_initial, themes_valides
+        )
+    st.session_state["qwen_donnees"] = tableau_initial
     st.session_state["qwen_message"] = ""
+
 
 checkpoint = st.file_uploader(
     "Reprendre une analyse : importer le CSV de résultats précédent (facultatif)",
     type=["csv"], key="checkpoint",
 )
-if checkpoint is not None and st.button("Restaurer les résultats enregistrés"):
+if checkpoint is not None and st.button(
+    "Restaurer les résultats enregistrés",
+    disabled=themes_valides is None,
+):
     try:
         anciens = pd.read_csv(
             io.BytesIO(checkpoint.getvalue()),
             sep=";", encoding="utf-8-sig",
-            dtype={"signature_corpus": str, "cle_configuration": str, "texte": str},
-        )
-        compatible_ancien = (
-            mode_analyse == "structure" and prompt == PROMPT_VIOLENCE_DEFAUT
+            dtype={
+                "signature_corpus": str, "cle_configuration": str,
+                "texte": str,
+            },
         )
         st.session_state["qwen_donnees"] = restaurer_checkpoint(
             st.session_state["qwen_donnees"],
-            anciens,
-            signature,
-            cle,
-            autoriser_ancien_format=compatible_ancien,
+            anciens, signature, cle, themes_valides,
         )
-        st.success("Résultats restaurés. Vous pouvez poursuivre les analyses restantes.")
-        if "cle_configuration" not in anciens.columns:
-            st.warning(
-                "Cet ancien CSV ne contenait pas la consigne du modèle. "
-                "La compatibilité exacte du prompt historique ne peut pas être vérifiée."
-            )
+        st.success("Résultats restaurés. Vous pouvez poursuivre les analyses.")
     except (ValueError, pd.errors.ParserError) as erreur:
         st.error(f"Reprise impossible : {erreur}")
 
@@ -1039,7 +915,7 @@ etat_commandes = evaluer_commandes_analyse(
     nombre_erreurs=len(erreurs),
     prompt=prompt,
     mode_analyse=mode_analyse,
-    grille_valide=(mode_analyse != "theses" or theses_validees is not None),
+    grille_valide=themes_valides is not None,
     service_disponible=service_disponible,
 )
 for cause_blocage in etat_commandes["causes"]:
@@ -1084,9 +960,8 @@ if tester or lancer or relancer:
     st.session_state["qwen_arret_demande"] = False
     indices = reste[:1] if tester else (reste if lancer else erreurs)
     termines, nombre_erreurs, interrompu = lancer_analyse(
-        donnees, indices, mode_analyse, prompt,
+        donnees, indices, prompt, themes_valides,
         contexte_general, contexte_variables, float(temperature),
-        theses=theses_validees,
     )
     st.session_state["qwen_donnees"] = donnees
     if st.session_state.get("qwen_arret_demande", False):
