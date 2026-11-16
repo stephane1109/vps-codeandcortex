@@ -64,6 +64,14 @@ La vérification de l'inventaire Ollama `/api/tags` n'interdit plus automatiquem
 
 Les modes historiques, les sélecteurs CSV, les dix lignes d'aperçu, les analyses par commentaire, le CSV de reprise et le ZIP unique ne sont pas supprimés.
 
+## Parcours unique d'annotation des textes et commentaires (16 novembre 2026)
+
+L'interface ne présente plus la sélection de modes « Codage structuré sur la violence », « Analyse libre » ou « Classification en trois thèmes ». Elle propose directement **un seul prompt d'annotation** et la **matrice de trois thèmes non exclusifs**. La même grille s'applique aussi bien aux commentaires très courts de type SMS qu'aux descriptions longues. Les textes longs sont découpés en segments automatiquement puis leurs annotations réunies ; la longueur n'entraîne pas un changement de méthode.
+
+Dans « Choix des colonnes CSV », la colonne principale du texte est toujours choisie directement. La provenance textuelle et la comparaison de plusieurs colonnes au sein d'une vidéo sont des paramètres facultatifs dans un panneau replié. Un CSV avec une seule colonne de commentaires ne nécessite donc aucun paramétrage de sources supplémentaires. La distinction des sources textuelles sert uniquement aux regroupements, au bilan et aux comparaisons, et non au choix de l'algorithme.
+
+Le ZIP continue de contenir la matrice complète, les sous-corpus par thème, le bilan par source, la comparaison entre sources lorsqu'un identifiant vidéo est renseigné, les variables d'analyse et le texte original. Le mécanisme de reprise et la validation manuelle sont conservés.
+
 ## Classification des discours sur la violence en trois thèmes (16 novembre 2026)
 
 Le mode **Classification en trois thèmes : discours sur la violence** est sélectionné par défaut. Les modes **Analyse libre avec mon prompt** et **Codage structuré sur la violence** restent disponibles sans changement de leur fonctionnement.

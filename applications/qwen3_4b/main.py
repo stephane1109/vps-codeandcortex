@@ -416,68 +416,26 @@ st.caption(
     "Il est transmis à Ollama lors de chaque demande d'analyse. "
     "Le modèle traite chaque commentaire séparément et conserve le texte original."
 )
-mode_affichage = st.radio(
-    "Type d'analyse",
-    [
-        "Analyse libre avec mon prompt",
-        "Codage structuré sur la violence",
-        "Classification en trois thèmes : discours sur la violence",
-    "Matrice multithématique : comparer les sources textuelles",
-    ],
-    horizontal=True,
-    index=3,
-    help=(
-        "Le mode libre conserve votre prompt. Le mode structuré conserve "
-        "les catégories historiques. Le mode trois thèmes propose une grille "
-        "commune à tout le corpus avant le classement des commentaires."
-    ),
-)
-mode_analyse = (
-    "libre" if mode_affichage.startswith("Analyse libre")
-    else "theses" if mode_affichage.startswith("Classification")
-    else "matrice" if mode_affichage.startswith("Matrice")
-    else "structure"
-)
+# Un seul parcours : le même prompt et la même matrice pour les commentaires
+# courts et pour les documents longs. Aucun choix de méthode n'est nécessaire.
+mode_analyse = "matrice"
 prompt = st.text_area(
-    "Prompt à transmettre à Qwen pour chaque commentaire",
-    value=(
-        PROMPT_LIBRE_DEFAUT if mode_analyse == "libre"
-        else PROMPT_THESES_DEFAUT if mode_analyse == "theses"
-        else PROMPT_MATRICE_DEFAUT if mode_analyse == "matrice"
-        else PROMPT_VIOLENCE_DEFAUT
-    ),
-    key=f"qwen_prompt_{mode_analyse}",
-    height=230,
+    "Prompt d'annotation des textes et commentaires",
+    value=PROMPT_MATRICE_DEFAUT,
+    key="qwen_prompt_matrice",
+    height=260,
     help=(
-        "Modifiez librement les instructions. Dans le mode trois thèmes, "
-        "le prompt sert à proposer la grille ; les trois définitions " 
-        "validées servent ensuite au classement des commentaires. "
-        "Les deux autres modes conservent leur fonctionnement."
+        "Définissez les critères des trois thèmes. Qwen les applique à "
+        "chaque texte ; les textes longs sont segmentés automatiquement. "
+        "Les trois thèmes sont indépendants et leurs résultats sont exportés "
+        "dans une matrice que vous pouvez corriger manuellement."
     ),
 )
-if mode_analyse == "theses":
-    st.info(
-        "La grille distingue la dénonciation, l'indignation et la désignation "
-        "d'un persécuteur face à la violence. Chaque commentaire reçoit "
-        "un thème principal ou « indéterminé ». Les titres et définitions "
-        "restent modifiables avant la classification."
-    )
-if mode_analyse == "matrice":
-    st.info(
-        "Codage non exclusif : chaque texte peut relever de la dénonciation, "
-        "de l'indignation et de la désignation d'un persécuteur. "
-        "Associez les colonnes IA TikTok, publication, voice-to-text et "
-        "commentaires à leur source ; la comparaison se fait par ID vidéo. "
-        "Les textes longs sont analysés par segments sans être éliminés. "
-        "Les annotations peuvent être validées ou corrigées manuellement."
-    )
-if mode_analyse == "structure":
-    st.info(
-        "Le mode structuré conserve les colonnes historiques "
-        "violence_evoquee, violence_denoncee, violence_justifiee, "
-        "violence_minimisee et interpretation_indeterminee. "
-        "Pour toute autre grille de lecture, choisissez Analyse libre."
-    )
+st.caption(
+    "Même analyse pour les commentaires courts, les textes IA, "
+    "les publications et les transcriptions longues. "
+    "La segmentation automatique ne change ni le prompt ni les thèmes."
+)
 if not prompt.strip():
     st.error("Vous devez saisir un prompt avant de lancer l'analyse.")
 
@@ -505,10 +463,10 @@ def proposer_colonne(colonnes: list[str], suggestions: tuple[str, ...]) -> str |
 
 st.subheader("Choix des colonnes CSV")
 st.caption(
-    "Dans les modes historiques, sélectionnez la colonne de commentaires. "
-    "Dans la matrice, associez les colonnes de textes à leur provenance ; "
-    "une ligne CSV peut produire plusieurs unités textuelles distinctes. "
-    "La colonne auteur reste facultative."
+    "Sélectionnez la colonne des textes à annoter, quelle que soit leur "
+    "longueur. Vous pouvez aussi associer plusieurs sources textuelles "
+    "à une même vidéo pour les comparer (facultatif). " 
+    "Les dix premières lignes du CSV restent visibles."
 )
 correspondances_csv: list[dict[str, object]] = []
 try:
@@ -540,141 +498,137 @@ try:
             f"{numero_fichier}:{fichier.name}:".encode("utf-8")
             + fichier.getvalue()
         ).hexdigest()[:16]
-        if mode_analyse == "matrice":
-            noms_suggeres = {
-                "texte_ia": (
-                    "texte_ia", "texte_genere_ia", "statut_resume_ia",
-                    "resume_ia", "description_ia", "ai_generated_text",
-                ),
-                "texte_auteur": (
-                    "texte_auteur", "texte_original", "caption", "legende",
-                    "description", "post", "texte_post",
-                ),
-                "voice_to_text": (
-                    "voice_to_text", "texte_voicetotext", "voicetotext",
-                    "transcription", "transcript", "sous_titres",
-                ),
-                "commentaire": (
-                    "commentaire", "commentaires", "texte_commentaire",
-                    "texte", "comment", "message", "content",
-                ),
-            }
-            st.caption(
-                f"Sources textuelles et identifiant vidéo — {fichier.name}. "
-                "Choisissez « Aucune colonne » pour une source absente."
+        noms_suggeres = {
+            "texte_ia": (
+                "texte_ia", "texte_genere_ia", "statut_resume_ia",
+                "resume_ia", "description_ia", "ai_generated_text",
+            ),
+            "texte_auteur": (
+                "texte_auteur", "texte_original", "caption", "legende",
+                "description", "post", "texte_post",
+            ),
+            "voice_to_text": (
+                "voice_to_text", "texte_voicetotext", "voicetotext",
+                "transcription", "transcript", "sous_titres",
+            ),
+            "commentaire": (
+                "commentaire", "commentaires", "texte_commentaire",
+                "texte", "comment", "message", "content",
+            ),
+        }
+        suggestions_tous_textes = (
+            "texte", "commentaire", "commentaires", "message", "content",
+            "texte_ia", "texte_auteur", "voice_to_text", "texte_voicetotext",
+            "transcription", "description", "post", "avis", "texte_post",
+        )
+        defaut_texte = (
+            proposer_colonne(colonnes_csv, suggestions_tous_textes)
+            or colonnes_csv[0]
+        )
+        colonne_gauche, colonne_droite = st.columns(2)
+        with colonne_gauche:
+            texte_choisi = st.selectbox(
+                f"Colonne contenant les textes ou commentaires — {fichier.name}",
+                options=colonnes_csv,
+                index=colonnes_csv.index(defaut_texte),
+                key=f"qwen_texte_csv_{cle_fichier}",
             )
-            colonnes_sources = {}
-            colonnes_g = st.columns(2)
-            for i_source, source in enumerate(SOURCES_TEXTE):
-                with colonnes_g[i_source % 2]:
-                    defaut = proposer_colonne(
-                        colonnes_csv, noms_suggeres[source]
-                    )
+        with colonne_droite:
+            auteur_propose = proposer_colonne(
+                colonnes_csv,
+                ("nom_affiche", "display_name", "auteur", "author",
+                 "utilisateur", "username", "profil"),
+            )
+            auteurs_possibles = [None] + [
+                colonne for colonne in colonnes_csv if colonne != texte_choisi
+            ]
+            auteur_choisi = st.selectbox(
+                f"Colonne auteur (facultative) — {fichier.name}",
+                options=auteurs_possibles,
+                index=(
+                    auteurs_possibles.index(auteur_propose)
+                    if auteur_propose in auteurs_possibles else 0
+                ),
+                format_func=lambda valeur: (
+                    "Aucune colonne auteur" if valeur is None else valeur
+                ),
+                key=f"qwen_auteur_csv_{cle_fichier}",
+            )
+        source_suggeree = next(
+            (
+                source for source, noms in noms_suggeres.items()
+                if texte_choisi.casefold() in noms
+            ),
+            "texte_libre",
+        )
+        with st.expander(
+            f"Sources et comparaison entre vidéos — {fichier.name} (facultatif)",
+            expanded=False,
+        ):
+            st.caption(
+                "Ces réglages décrivent la provenance des textes ; "
+                "ils ne modifient ni le prompt ni le modèle d'analyse."
+            )
+            source_principale = st.selectbox(
+                "Provenance du texte principal",
+                options=["texte_libre", *SOURCES_TEXTE],
+                index=["texte_libre", *SOURCES_TEXTE].index(source_suggeree),
+                format_func=lambda source: LIBELLES_SOURCES[source],
+                key=f"qwen_type_source_{cle_fichier}",
+            )
+            identifiant_propose = proposer_colonne(
+                colonnes_csv,
+                ("id_video", "video_id", "idvideo", "videoid",
+                 "aweme_id", "id_publication", "id"),
+            )
+            colonne_id_video = st.selectbox(
+                "Colonne identifiant vidéo (facultative)",
+                options=[None] + colonnes_csv,
+                index=(
+                    0 if identifiant_propose is None else
+                    colonnes_csv.index(identifiant_propose) + 1
+                ),
+                format_func=lambda valeur: (
+                    "Aucune colonne" if valeur is None else valeur
+                ),
+                key=f"qwen_id_video_{cle_fichier}",
+            )
+            autres_sources = st.checkbox(
+                "Comparer plusieurs colonnes textuelles de ce CSV",
+                key=f"qwen_comparer_sources_{cle_fichier}",
+                value=False,
+            )
+            colonnes_sources = {source_principale: texte_choisi}
+            if autres_sources:
+                for source in SOURCES_TEXTE:
+                    if source == source_principale:
+                        continue
+                    colonnes_disponibles = [
+                        col for col in colonnes_csv
+                        if col != texte_choisi
+                    ]
                     choix_colonne = st.selectbox(
-                        LIBELLES_SOURCES[source] + f" — {fichier.name}",
-                        options=[None] + colonnes_csv,
-                        index=(
-                            0 if defaut is None
-                            else colonnes_csv.index(defaut) + 1
-                        ),
+                        LIBELLES_SOURCES[source],
+                        options=[None] + colonnes_disponibles,
+                        index=0,
                         format_func=lambda valeur: (
                             "Aucune colonne" if valeur is None else valeur
                         ),
-                        key=f"qwen_source_{source}_{cle_fichier}",
+                        key=f"qwen_autre_source_{source}_{cle_fichier}",
                     )
                     if choix_colonne is not None:
                         colonnes_sources[source] = choix_colonne
-            if not colonnes_sources:
-                st.warning(
-                    "Sélectionnez au moins une colonne textuelle pour la matrice."
-                )
-                st.stop()
-            if len(set(colonnes_sources.values())) != len(colonnes_sources):
-                st.error(
-                    "La même colonne ne peut pas être affectée à deux sources."
-                )
-                st.stop()
-            colonnes_gauche, colonnes_droite = st.columns(2)
-            with colonnes_gauche:
-                identifiant_propose = proposer_colonne(
-                    colonnes_csv,
-                    ("id_video", "video_id", "idvideo", "videoid",
-                     "aweme_id", "id_publication", "id"),
-                )
-                colonne_id_video = st.selectbox(
-                    f"Identifiant vidéo pour l'appariement — {fichier.name}",
-                    options=[None] + colonnes_csv,
-                    index=(
-                        0 if identifiant_propose is None else
-                        colonnes_csv.index(identifiant_propose) + 1
-                    ),
-                    format_func=lambda valeur: (
-                        "Aucune colonne : pas de comparaison par vidéo"
-                        if valeur is None else valeur
-                    ),
-                    key=f"qwen_id_video_{cle_fichier}",
-                )
-            with colonnes_droite:
-                auteur_propose = proposer_colonne(
-                    colonnes_csv,
-                    ("nom_affiche", "display_name", "auteur", "author",
-                     "utilisateur", "username", "profil"),
-                )
-                auteur_choisi = st.selectbox(
-                    f"Colonne auteur (facultative) — {fichier.name}",
-                    options=[None] + colonnes_csv,
-                    index=(
-                        0 if auteur_propose is None else
-                        colonnes_csv.index(auteur_propose) + 1
-                    ),
-                    format_func=lambda valeur: (
-                        "Aucune colonne auteur" if valeur is None else valeur
-                    ),
-                    key=f"qwen_auteur_csv_{cle_fichier}",
-                )
-            correspondances_csv.append({
-                "numero_fichier": numero_fichier,
-                "nom_fichier": fichier.name,
-                "colonne_texte": None,
-                "colonne_auteur": auteur_choisi,
-                "colonne_id_video": colonne_id_video,
-                "colonnes_sources": colonnes_sources,
-            })
-        else:
-            colonne_gauche, colonne_droite = st.columns(2)
-            with colonne_gauche:
-                texte_choisi = st.selectbox(
-                    f"Colonne contenant les commentaires — {fichier.name}",
-                    options=colonnes_csv,
-                    index=colonnes_csv.index(defaut_texte),
-                    key=f"qwen_texte_csv_{cle_fichier}",
-                )
-            with colonne_droite:
-                choix_auteurs = [None] + [
-                    nom for nom in colonnes_csv if nom != texte_choisi
-                ]
-                auteur_propose = proposer_colonne(
-                    colonnes_csv,
-                    ("nom_affiche", "display_name", "auteur", "author",
-                     "utilisateur", "username", "profil"),
-                )
-                if auteur_propose not in choix_auteurs:
-                    auteur_propose = None
-                auteur_choisi = st.selectbox(
-                    f"Colonne auteur (facultative) — {fichier.name}",
-                    options=choix_auteurs,
-                    index=choix_auteurs.index(auteur_propose),
-                    format_func=lambda valeur: (
-                        "Aucune colonne auteur" if valeur is None else valeur
-                    ),
-                    key=f"qwen_auteur_csv_{cle_fichier}",
-                )
-            correspondances_csv.append({
-                "numero_fichier": numero_fichier,
-                "nom_fichier": fichier.name,
-                "colonne_texte": texte_choisi,
-                "colonne_auteur": auteur_choisi,
-            })
+        if len(set(colonnes_sources.values())) != len(colonnes_sources):
+            st.error("Une même colonne ne peut pas être affectée à deux sources.")
+            st.stop()
+        correspondances_csv.append({
+            "numero_fichier": numero_fichier,
+            "nom_fichier": fichier.name,
+            "colonne_texte": texte_choisi,
+            "colonne_auteur": auteur_choisi,
+            "colonne_id_video": colonne_id_video,
+            "colonnes_sources": colonnes_sources,
+        })
         st.caption(
             f"Aperçu du CSV — {fichier.name} : "
             f"{len(lignes_apercu)} ligne(s) affichée(s), 10 au maximum."

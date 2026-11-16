@@ -13,6 +13,7 @@ from lecture_iramuteq import Document
 SOURCES_TEXTE = (
     "texte_ia", "texte_auteur", "voice_to_text", "commentaire",
 )
+SOURCES_IMPORT = (*SOURCES_TEXTE, "texte_libre")
 
 LIBELLES_SOURCES = {
     "texte_ia": "Texte généré par TikTok",
@@ -20,6 +21,7 @@ LIBELLES_SOURCES = {
     "voice_to_text": "Parole transcrite de la vidéo",
     "commentaire": "Commentaire",
     "source_inconnue": "Source non renseignée",
+    "texte_libre": "Texte ou commentaire (source libre)",
 }
 
 LIBELLES_THEMES = {
@@ -39,7 +41,7 @@ def analyser_sources_csv(
     """Créer une unité par source non vide, en conservant la ligne d'origine."""
     lecteur, colonnes = ouvrir_lecteur_csv(contenu)
     if not colonnes_sources or any(
-        source not in SOURCES_TEXTE or col not in colonnes
+        source not in SOURCES_IMPORT or col not in colonnes
         for source, col in colonnes_sources.items()
     ):
         raise ValueError("Sélection des colonnes textuelles invalide.")
