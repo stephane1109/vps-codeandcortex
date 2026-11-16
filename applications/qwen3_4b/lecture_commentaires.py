@@ -7,6 +7,7 @@ import io
 import re
 import unicodedata
 from collections.abc import Iterator
+from itertools import islice
 
 from lecture_iramuteq import Document, decoder_fichier
 
@@ -86,9 +87,7 @@ def obtenir_apercu_csv(
     lecteur, colonnes = ouvrir_lecteur_csv(contenu)
     apercu: list[dict[str, str]] = []
     try:
-        for position, ligne in enumerate(lecteur, start=1):
-            if position > nombre_lignes:
-                break
+        for position, ligne in enumerate(islice(lecteur, nombre_lignes), start=1):
             if None in ligne:
                 raise ValueError(
                     f"Ligne CSV {position + 1} : trop de champs."
