@@ -384,7 +384,8 @@ prompt = st.text_area(
     height=230,
     help=(
         "Modifiez librement les instructions. Dans le mode trois thèmes, "
-        "le prompt sert à proposer une grille puis à classer les commentaires. "
+        "le prompt sert à proposer la grille ; les trois définitions " 
+        "validées servent ensuite au classement des commentaires. "
         "Les deux autres modes conservent leur fonctionnement."
     ),
 )

@@ -170,6 +170,11 @@ class TestAnalyseQwen(unittest.TestCase):
         self.assertIn("autocensure", resultat["these_intitule"].lower())
         charge = session.post.call_args.kwargs["json"]
         self.assertIn("format", charge)
+        self.assertIn("Tâche : CLASSE", charge["messages"][0]["content"])
+        self.assertNotIn(
+            "Consigne définie par le chercheur",
+            charge["messages"][0]["content"],
+        )
 
     def test_schema_rejette_les_chaine_boolean(self):
         valeurs = {champ: "false" for champ in CHAMPS_BOOLEENS}
