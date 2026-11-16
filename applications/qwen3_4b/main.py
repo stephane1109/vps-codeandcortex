@@ -359,9 +359,10 @@ mode_affichage = st.radio(
     [
         "Analyse libre avec mon prompt",
         "Codage structuré sur la violence",
-        "Classification en trois thèmes : violence et autocensure",
+        "Classification en trois thèmes : discours sur la violence",
     ],
     horizontal=True,
+    index=2,
     help=(
         "Le mode libre conserve votre prompt. Le mode structuré conserve "
         "les catégories historiques. Le mode trois thèmes propose une grille "
@@ -391,9 +392,10 @@ prompt = st.text_area(
 )
 if mode_analyse == "theses":
     st.info(
-        "Qwen propose trois thèmes à partir d'un échantillon de commentaires. "
-        "Vous pouvez modifier les titres et les définitions avant la classification. "
-        "Les commentaires ambigus ou hors thème seront classés « indéterminés »."
+        "La grille distingue la dénonciation, l'indignation et la désignation "
+        "d'un persécuteur face à la violence. Chaque commentaire reçoit "
+        "un thème principal ou « indéterminé ». Les titres et définitions "
+        "restent modifiables avant la classification."
     )
 if mode_analyse == "structure":
     st.info(
@@ -600,9 +602,10 @@ source_grille = ""
 if mode_analyse == "theses":
     st.subheader("Définir les trois thèmes")
     st.caption(
-        "La grille initiale est indicative. Cliquez sur « Proposer trois thèmes "
-        "avec Qwen » pour obtenir une nouvelle proposition à partir du corpus. "
-        "Vous pouvez corriger les trois titres et définitions."
+        "Les trois thèmes demandés sont préremplis. Cliquez sur "
+        "« Affiner les définitions avec Qwen » pour proposer des précisions "
+        "à partir du corpus sans remplacer les intitulés. "
+        "Vous pouvez ensuite modifier les titres et les définitions."
     )
     identifiant_grille = hashlib.sha256(
         (signature + prompt).encode("utf-8")
@@ -613,17 +616,25 @@ if mode_analyse == "theses":
         for indice, these in enumerate(THESES_INITIALES, start=1):
             st.session_state[f"qwen_theme_titre_{indice}"] = these["titre"]
             st.session_state[f"qwen_theme_definition_{indice}"] = these["definition"]
-    if st.button("Proposer trois thèmes avec Qwen"):
+    if st.button("Affiner les définitions avec Qwen"):
         try:
+            grille_courante = valider_theses([
+                {
+                    "titre": st.session_state[f"qwen_theme_titre_{indice}"],
+                    "definition": st.session_state[f"qwen_theme_definition_{indice}"],
+                }
+                for indice in range(1, 4)
+            ])
             propositions = proposer_trois_theses(
                 tableau["texte"].fillna("").astype(str).tolist(),
                 consigne=prompt,
+                themes_imposes=grille_courante,
             )
             for indice, theme in enumerate(propositions, start=1):
                 st.session_state[f"qwen_theme_titre_{indice}"] = theme["titre"]
                 st.session_state[f"qwen_theme_definition_{indice}"] = theme["definition"]
             st.session_state["qwen_source_grille"] = (
-                "Proposition de Qwen sur un échantillon du corpus"
+                "Définitions affinées par Qwen à partir d'un échantillon"
             )
             st.rerun()
         except (requests.RequestException, ValueError, json.JSONDecodeError) as erreur:
@@ -651,8 +662,9 @@ if mode_analyse == "theses":
     )
     st.caption(
         f"Origine de la grille : {source_grille}. "
-        "Les thèmes proposés automatiquement ne constituent pas une typologie "
-        "scientifiquement validée. Vérifiez leur pertinence avant le codage."
+        "Les définitions proposées par Qwen ne constituent pas une validation "
+        "scientifique. La classification représente le discours des auteurs, "
+        "sans établir la responsabilité réelle d'un persécuteur."
     )
     try:
         theses_validees = valider_theses(themes_modifiables)
