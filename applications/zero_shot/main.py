@@ -161,6 +161,8 @@ def renseigner_resultat(
             tableau.at[indice, "categories_retenues"] = " | ".join(selection)
         else:
             tableau.at[indice, "categories_retenues"] = str(selection)
+    if resultat.get("statut_analyse") == "ok":
+        tableau.at[indice, "erreur_analyse"] = ""
     scores = resultat.get("scores", {})
     for position, categorie in enumerate(categories, start=1):
         if categorie in scores:
@@ -272,10 +274,10 @@ def analyser_documents(
             else:
                 erreurs += 1
                 consecutives += 1
-            progression = reussites + erreurs
+            progression = debut + groupe.index(indice) + 1
             progres.progress(
-                min(100, round((debut + progression - (reussites + erreurs - len(groupe))) * 100 / max(1, total))),
-                text=f"Commentaires examinés : {min(total, debut + groupe.index(indice) + 1)} / {total}",
+                min(100, round(progression * 100 / max(1, total))),
+                text=f"Commentaires examinés : {progression} / {total}",
             )
             compteurs.caption(
                 f"Réussites : {reussites} ; erreurs : {erreurs}. "
@@ -611,8 +613,13 @@ else:
     colonnes += [
         f"score_{position:02d}" for position in range(1, len(categories) + 1)
     ]
+    libelles_scores = {
+        f"score_{position:02d}": f"Score — {categorie}"
+        for position, categorie in enumerate(categories, start=1)
+    }
     st.dataframe(
-        classements[[col for col in colonnes if col in classements]].head(1000),
+        classements[[col for col in colonnes if col in classements]]
+        .head(1000).rename(columns=libelles_scores),
         hide_index=True, use_container_width=True, height=400,
     )
     if len(classements) > 1000:
