@@ -24,6 +24,10 @@ L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la géné
 
 Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
 
+## Aperçu des dix premières lignes du CSV (16 novembre 2026)
+
+Dans la section **Choix des colonnes CSV**, chaque fichier CSV importé possède désormais un tableau d'aperçu affichant ses dix premières lignes de données, ou toutes ses lignes s'il en comporte moins de dix. Les noms et l'ordre de toutes les colonnes d'origine sont conservés dans cet aperçu, quelle que soit la colonne sélectionnée pour le commentaire et l'auteur. Les cellules multiligne sont lues comme un seul commentaire. Cet affichage n'envoie aucune donnée au modèle et ne limite pas l'importation complète aux dix lignes visibles. Le comportement des corpus IRaMuTeQ TXT, des sélecteurs, des prompts, de la reprise et de tous les exports reste inchangé.
+
 ## Affichage systématique du modèle réellement sollicité (16 novembre 2026)
 
 L'interface indique toujours le modèle transmis à l'API Ollama et la fenêtre de contexte configurée, dès l'ouverture de la page après authentification. Les messages d'erreur, les détails de la ligne `erreur_codage` et le message d'interruption mentionnent également ces informations. Le nom affiché est celui **demandé par l'application** via `OLLAMA_MODEL`, et non une garantie que le processus d'inférence a pu se lancer. Le cas `signal: killed` provoque l'arrêt dès la première occurrence ; le message n'indique plus à tort « trois erreurs consécutives ».

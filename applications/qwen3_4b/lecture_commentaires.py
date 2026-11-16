@@ -71,6 +71,39 @@ def lister_colonnes_csv(contenu: bytes | str) -> list[str]:
     return colonnes
 
 
+def obtenir_apercu_csv(
+    contenu: bytes | str, nombre_lignes: int = 10
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Lire au maximum les premières lignes de données, avec toutes les colonnes.
+
+    La lecture utilise le même détecteur de séparateur et le même décodeur
+    que l'importation complète des commentaires. Une cellule multiligne
+    constitue une seule ligne documentaire.
+    """
+    if nombre_lignes < 1:
+        raise ValueError("Le nombre de lignes d'aperçu doit être positif.")
+
+    lecteur, colonnes = ouvrir_lecteur_csv(contenu)
+    apercu: list[dict[str, str]] = []
+    try:
+        for position, ligne in enumerate(lecteur, start=1):
+            if position > nombre_lignes:
+                break
+            if None in ligne:
+                raise ValueError(
+                    f"Ligne CSV {position + 1} : trop de champs."
+                )
+            apercu.append({
+                colonne: str(ligne.get(colonne) or "")
+                for colonne in colonnes
+            })
+    except csv.Error as erreur:
+        raise ValueError(
+            f"Impossible de lire l'aperçu CSV : {erreur}"
+        ) from erreur
+    return colonnes, apercu
+
+
 def analyser_commentaires_csv(
     contenu: bytes | str,
     numero_depart: int = 0,

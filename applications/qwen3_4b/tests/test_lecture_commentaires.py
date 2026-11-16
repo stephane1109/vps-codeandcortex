@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 
-from lecture_commentaires import analyser_commentaires_csv, lister_colonnes_csv
+from lecture_commentaires import analyser_commentaires_csv, lister_colonnes_csv, obtenir_apercu_csv
 from lecture_iramuteq import analyser_corpus, exporter_iramuteq, tableau_documents
 
 
@@ -114,6 +114,37 @@ class TestImportCommentaires(unittest.TestCase):
         )
         self.assertEqual(documents[0].texte, "C'est intéressant.")
         self.assertEqual(infos[1]["csv_ville"], "Foix")
+
+    def test_apercu_dix_premieres_lignes(self):
+        """L'aperçu conserve exactement dix documents et toutes les colonnes."""
+        fichier = (
+            "auteur;commentaire;nombre_likes\n"
+            + "".join(
+                f"Profil {indice};Message {indice};{indice}\n"
+                for indice in range(1, 13)
+            )
+        )
+        colonnes, lignes = obtenir_apercu_csv(fichier.encode("utf-8-sig"))
+        self.assertEqual(
+            colonnes, ["auteur", "commentaire", "nombre_likes"]
+        )
+        self.assertEqual(len(lignes), 10)
+        self.assertEqual(lignes[0]["commentaire"], "Message 1")
+        self.assertEqual(lignes[9]["commentaire"], "Message 10")
+        self.assertEqual(lignes[9]["nombre_likes"], "10")
+
+    def test_apercu_multiligne_et_fichier_court(self):
+        """Un commentaire contenant un saut de ligne occupe une seule entrée."""
+        fichier = (
+            "auteur,commentaire,ville\n"
+            'Zoé,"Première ligne\nDeuxième ligne",Foix\n'
+            'Paul,Bonjour,Toulouse\n'
+        )
+        colonnes, lignes = obtenir_apercu_csv(fichier)
+        self.assertEqual(len(lignes), 2)
+        self.assertEqual(lignes[0]["commentaire"], "Première ligne\nDeuxième ligne")
+        self.assertEqual(lignes[1]["ville"], "Toulouse")
+        self.assertEqual(colonnes, ["auteur", "commentaire", "ville"])
 
     def test_texte_vide_preserve(self):
         documents, infos = analyser_commentaires_csv("nom_affiche;texte\nBeryl;\n")

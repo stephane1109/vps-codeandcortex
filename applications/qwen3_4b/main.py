@@ -23,7 +23,7 @@ from codage_qwen import (
     coder_commentaire,
     verifier_service,
 )
-from lecture_commentaires import analyser_commentaires_csv, lister_colonnes_csv
+from lecture_commentaires import analyser_commentaires_csv, obtenir_apercu_csv
 from lecture_iramuteq import (
     analyser_corpus,
     exporter_csv,
@@ -370,7 +370,9 @@ try:
     for numero_fichier, fichier in enumerate(fichiers):
         if not fichier.name.lower().endswith(".csv"):
             continue
-        colonnes_csv = lister_colonnes_csv(fichier.getvalue())
+        colonnes_csv, lignes_apercu = obtenir_apercu_csv(
+            fichier.getvalue(), nombre_lignes=10
+        )
         defaut_texte = proposer_colonne(
             colonnes_csv,
             ("texte", "commentaire", "commentaires", "comment", "text",
@@ -414,6 +416,15 @@ try:
             "colonne_texte": texte_choisi,
             "colonne_auteur": auteur_choisi,
         })
+        st.caption(
+            f"Aperçu du CSV — {fichier.name} : "
+            f"{len(lignes_apercu)} ligne(s) affichée(s), 10 au maximum."
+        )
+        st.dataframe(
+            pd.DataFrame(lignes_apercu, columns=colonnes_csv),
+            use_container_width=True,
+            hide_index=True,
+        )
 except (ValueError, UnicodeError) as erreur:
     st.error(f"Impossible de lire les en-têtes CSV : {erreur}")
     st.stop()
