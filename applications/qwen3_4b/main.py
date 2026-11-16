@@ -894,7 +894,7 @@ else:
         themes_valides = valider_themes(themes_courants)
         st.success(
             f"Grille valide : {len(themes_valides)} thème(s) indépendant(s). "
-            (
+            + (
                 "Vous pouvez calculer les similarités."
                 if MODELE_EST_SPECIALISE
                 else "Vous pouvez commencer à annoter les textes."
