@@ -702,13 +702,17 @@ if st.session_state.get("qwen_id_grille_libre") != identifiant_grille:
 if st.button("Construire les thèmes avec Qwen à partir du prompt"):
     try:
         propositions = proposer_themes_depuis_prompt(
-            prompt, tableau["texte"].fillna("").astype(str).tolist()
+            prompt, tableau["texte"].fillna("").astype(str).head(20).tolist()
         )
         st.session_state["qwen_themes_proposes"] = propositions
         st.session_state["qwen_origine_grille"] = "Proposition de Qwen"
         for indice, theme in enumerate(propositions, start=1):
-            st.session_state[f"qwen_titre_libre_{indice}"] = theme["titre"]
-            st.session_state[f"qwen_definition_libre_{indice}"] = theme["definition"]
+            st.session_state[
+                f"qwen_titre_libre_{identifiant_grille[:12]}_{indice}"
+            ] = theme["titre"]
+            st.session_state[
+                f"qwen_definition_libre_{identifiant_grille[:12]}_{indice}"
+            ] = theme["definition"]
         st.rerun()
     except (requests.RequestException, ValueError, json.JSONDecodeError) as erreur:
         st.error(
@@ -730,15 +734,24 @@ with colonne_effacer:
     if st.button("Retirer le dernier thème"):
         themes_actuels = st.session_state["qwen_themes_proposes"]
         if themes_actuels:
+            indice_supprime = len(themes_actuels)
             themes_actuels.pop()
+            st.session_state.pop(
+                f"qwen_titre_libre_{identifiant_grille[:12]}_{indice_supprime}",
+                None,
+            )
+            st.session_state.pop(
+                f"qwen_definition_libre_{identifiant_grille[:12]}_{indice_supprime}",
+                None,
+            )
             st.rerun()
 
 themes_courants: list[dict[str, str]] = []
 for indice, theme in enumerate(
     st.session_state["qwen_themes_proposes"], start=1
 ):
-    cle_titre = f"qwen_titre_libre_{indice}"
-    cle_definition = f"qwen_definition_libre_{indice}"
+    cle_titre = f"qwen_titre_libre_{identifiant_grille[:12]}_{indice}"
+    cle_definition = f"qwen_definition_libre_{identifiant_grille[:12]}_{indice}"
     if cle_titre not in st.session_state:
         st.session_state[cle_titre] = theme["titre"]
     if cle_definition not in st.session_state:

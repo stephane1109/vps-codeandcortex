@@ -21,8 +21,8 @@ def evaluer_commandes_analyse(
         causes.append("Le prompt est vide.")
     if not grille_valide:
         causes.append(
-            "La grille des trois thèmes est invalide : vérifiez les titres "
-            "et les définitions dans « Définir les trois thèmes »."
+            "La grille thématique est invalide : vérifiez les titres "
+            "et les définitions dans « Définir les thèmes à partir de votre prompt »."
         )
     if nombre_restants <= 0 and nombre_erreurs <= 0:
         causes.append(
@@ -30,9 +30,7 @@ def evaluer_commandes_analyse(
             "et le nombre de textes non vides."
         )
 
-    conditions_valides = bool(prompt.strip()) and (
-        grille_valide
-    )
+    conditions_valides = bool(prompt.strip()) and grille_valide
     return {
         "tester": conditions_valides and nombre_restants > 0,
         "lancer": conditions_valides and nombre_restants > 0,
