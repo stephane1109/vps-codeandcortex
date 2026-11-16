@@ -18,6 +18,10 @@ from codage_qwen import (
     MODELE,
     PROMPT_LIBRE_DEFAUT,
     PROMPT_VIOLENCE_DEFAUT,
+    PROMPT_THESES_DEFAUT,
+    THESES_INITIALES,
+    proposer_trois_theses,
+    valider_theses,
     CONTEXTE_MAXIMUM,
     URL_OLLAMA,
     coder_commentaire,
@@ -63,6 +67,10 @@ def categorie_document(ligne, mode_analyse: str) -> str:
         return "indetermine"
     if mode_analyse == "libre":
         return "analyse_libre"
+    if mode_analyse == "theses":
+        # Conserver un code IRaMuTeQ stable malgré l'édition des intitulés.
+        resultat = str(getattr(ligne, "these_retenue", "indetermine"))
+        return resultat.replace("these_", "theme_") if resultat else "indetermine"
     if est_vrai(ligne.interpretation_indeterminee):
         return "indetermine"
     if est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
@@ -90,11 +98,13 @@ def archive_resultats(
         int(ligne.numero_document): categorie_document(ligne, mode_analyse)
         for ligne in tableau.itertuples(index=False)
     }
-    texte = exporter_iramuteq(documents, categories, "qwen_position")
+    nom_variable = "qwen_theme" if mode_analyse == "theses" else "qwen_position"
+    texte = exporter_iramuteq(documents, categories, nom_variable)
     colonnes_reponses = [
         "numero_document", "nom_affiche", "texte", "fichier_source",
         "ligne_csv", "colonne_texte_source", "colonne_auteur_source",
         "reponse_qwen", "statut_codage", "erreur_codage", "mode_analyse",
+        "these_retenue", "these_intitule", "indice_textuel", "justification",
     ]
     reponses = tableau[[col for col in colonnes_reponses if col in tableau]].copy()
     tampon = io.BytesIO()
@@ -102,6 +112,36 @@ def archive_resultats(
         archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
         archive.writestr("corpus_qwen_iramuteq.txt", texte)
+        if mode_analyse == "theses":
+            grille = valider_theses(parametres.get("theses"))
+            bilans = pd.DataFrame([
+                {
+                    "code": f"theme_{indice}",
+                    "theme": theme["titre"],
+                    "definition": theme["definition"],
+                    "nombre_commentaires": int(
+                        (
+                            tableau["these_retenue"].eq(f"these_{indice}")
+                            & tableau["statut_codage"].eq("ok")
+                        ).sum()
+                    ),
+                }
+                for indice, theme in enumerate(grille, start=1)
+            ])
+            bilans.loc[len(bilans)] = {
+                "code": "indetermine",
+                "theme": "Indéterminé / hors des trois thèmes",
+                "definition": "Aucun thème n'est suffisamment étayé",
+                "nombre_commentaires": int((
+                    tableau["these_retenue"].eq("indetermine")
+                    & tableau["statut_codage"].eq("ok")
+                ).sum()),
+            }
+            archive.writestr("bilan_themes_qwen.csv", exporter_csv(bilans))
+            archive.writestr(
+                "grille_themes_qwen.json",
+                json.dumps({"themes": grille}, ensure_ascii=False, indent=2),
+            )
         archive.writestr(
             "parametres.json",
             json.dumps(
@@ -129,6 +169,7 @@ def initialiser_tableau(
     for champ in (
         "acteur_cible", "indice_textuel", "justification",
         "erreur_codage", "reponse_qwen", "mode_analyse",
+        "these_retenue", "these_intitule",
     ):
         donnees[champ] = ""
     for champ in ("texte_tronque", "contexte_tronque"):
@@ -184,6 +225,7 @@ def restaurer_checkpoint(
         "acteur_cible", "indice_textuel", "justification",
         "erreur_codage", "texte_tronque", "contexte_tronque",
         "reponse_qwen", "mode_analyse",
+        "these_retenue", "these_intitule",
     )
     for champ in champs_restaurables:
         if champ in anciens.columns:
@@ -199,6 +241,7 @@ def restaurer_checkpoint(
             elif champ in (
                 "acteur_cible", "indice_textuel", "justification",
                 "erreur_codage", "reponse_qwen", "mode_analyse",
+                "these_retenue", "these_intitule",
             ):
                 restauration[champ] = valeurs.fillna("").astype(str)
             else:
@@ -214,6 +257,7 @@ def lancer_analyse(
     contexte_general: str,
     contexte_variables: list[str],
     temperature: float,
+    theses: list[dict[str, str]] | None = None,
 ) -> tuple[int, int, bool]:
     """Analyser automatiquement toutes les lignes sélectionnées, sans lots visibles."""
     nombre_total = len(indices)
@@ -241,6 +285,7 @@ def lancer_analyse(
                     session=session,
                     consigne=prompt,
                     mode_analyse=mode_analyse,
+                    theses=theses,
                 )
                 for champ, valeur in resultat.items():
                     donnees.at[indice, champ] = valeur
@@ -305,28 +350,44 @@ st.caption(
 )
 mode_affichage = st.radio(
     "Type d'analyse",
-    ["Analyse libre avec mon prompt", "Codage structuré sur la violence"],
+    [
+        "Analyse libre avec mon prompt",
+        "Codage structuré sur la violence",
+        "Classification en trois thèmes : violence et autocensure",
+    ],
     horizontal=True,
     help=(
-        "L'analyse libre produit une réponse textuelle pour chaque commentaire. "
-        "Le codage structuré conserve les catégories binaires historiques."
+        "Le mode libre conserve votre prompt. Le mode structuré conserve "
+        "les catégories historiques. Le mode trois thèmes propose une grille "
+        "commune à tout le corpus avant le classement des commentaires."
     ),
 )
-mode_analyse = "libre" if mode_affichage.startswith("Analyse libre") else "structure"
+mode_analyse = (
+    "libre" if mode_affichage.startswith("Analyse libre")
+    else "theses" if mode_affichage.startswith("Classification")
+    else "structure"
+)
 prompt = st.text_area(
     "Prompt à transmettre à Qwen pour chaque commentaire",
     value=(
         PROMPT_LIBRE_DEFAUT if mode_analyse == "libre"
+        else PROMPT_THESES_DEFAUT if mode_analyse == "theses"
         else PROMPT_VIOLENCE_DEFAUT
     ),
     key=f"qwen_prompt_{mode_analyse}",
     height=230,
     help=(
-        "Modifiez librement les instructions. En mode structuré, "
-        "les colonnes de codage restent fixes ; en mode libre, "
-        "la réponse du modèle est conservée dans reponse_qwen."
+        "Modifiez librement les instructions. Dans le mode trois thèmes, "
+        "le prompt sert à proposer une grille puis à classer les commentaires. "
+        "Les deux autres modes conservent leur fonctionnement."
     ),
 )
+if mode_analyse == "theses":
+    st.info(
+        "Qwen propose trois thèmes à partir d'un échantillon de commentaires. "
+        "Vous pouvez modifier les titres et les définitions avant la classification. "
+        "Les commentaires ambigus ou hors thème seront classés « indéterminés »."
+    )
 if mode_analyse == "structure":
     st.info(
         "Le mode structuré conserve les colonnes historiques "
