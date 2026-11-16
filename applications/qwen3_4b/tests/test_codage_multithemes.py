@@ -76,7 +76,7 @@ class TestCodageMultithemes(unittest.TestCase):
         )
         self.assertTrue(resultat["theme_1"])
 
-    def test_quatre_modeles_ollama(self):
+    def test_six_modeles_dont_quatre_modeles_ollama(self):
         self.assertEqual(
             MODELES_PROPOSES,
             (
@@ -84,6 +84,8 @@ class TestCodageMultithemes(unittest.TestCase):
                 "gemma3:1b",
                 "llama3.2:3b",
                 "qwen3:4b-q4_K_M",
+                "juribert",
+                "bertweetfr",
             ),
         )
 
