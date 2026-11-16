@@ -70,7 +70,7 @@ def categorie_document(ligne, mode_analyse: str) -> str:
     if mode_analyse == "theses":
         # Conserver un code IRaMuTeQ stable malgré l'édition des intitulés.
         resultat = str(getattr(ligne, "these_retenue", "indetermine"))
-        return resultat.replace("these_", "theme_") if resultat else "indetermine"
+        return resultat.removeprefix("these_") if resultat else "indetermine"
     if est_vrai(ligne.interpretation_indeterminee):
         return "indetermine"
     if est_vrai(ligne.violence_justifiee) and est_vrai(ligne.violence_denoncee):
@@ -112,7 +112,7 @@ def archive_resultats(
         archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
         archive.writestr("corpus_qwen_iramuteq.txt", texte)
-        if mode_analyse == "theses":
+        if mode_analyse == "theses" and parametres.get("theses") is not None:
             grille = valider_theses(parametres.get("theses"))
             bilans = pd.DataFrame([
                 {

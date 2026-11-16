@@ -89,6 +89,85 @@ class TestAnalyseQwen(unittest.TestCase):
                 session=session,
             )
 
+    def test_grille_trois_themes_valide(self):
+        from codage_qwen import valider_theses, THESES_INITIALES
+        resultat = valider_theses(list(THESES_INITIALES))
+        self.assertEqual(len(resultat), 3)
+        self.assertIn("titre", resultat[0])
+        with self.assertRaisesRegex(ValueError, "trois"):
+            valider_theses(resultat[:2])
+        with self.assertRaisesRegex(ValueError, "distincts"):
+            valider_theses([resultat[0], resultat[0], resultat[2]])
+
+    def test_classement_indetermine_et_theme(self):
+        from codage_qwen import valider_classement_theses, THESES_INITIALES
+        contenu = {
+            "these_retenue": "these_3",
+            "indice_textuel": "Je préfère me taire",
+            "justification": "Le commentaire exprime une retenue de parole.",
+        }
+        resultat = valider_classement_theses(
+            contenu, list(THESES_INITIALES)
+        )
+        self.assertEqual(resultat["these_retenue"], "these_3")
+        self.assertEqual(
+            resultat["these_intitule"], THESES_INITIALES[2]["titre"]
+        )
+        contenu["these_retenue"] = "indetermine"
+        resultat = valider_classement_theses(contenu, list(THESES_INITIALES))
+        self.assertEqual(resultat["these_retenue"], "indetermine")
+        contenu["these_retenue"] = "autre"
+        with self.assertRaisesRegex(ValueError, "trois thèmes"):
+            valider_classement_theses(contenu, list(THESES_INITIALES))
+
+    def test_proposition_trois_themes_avec_reponse_fictive(self):
+        import json
+        from codage_qwen import proposer_trois_theses, THESES_INITIALES
+        reponse = Mock()
+        reponse.json.return_value = {
+            "message": {"content": json.dumps(
+                {"theses": list(THESES_INITIALES)},
+                ensure_ascii=False,
+            )}
+        }
+        session = Mock()
+        session.post.return_value = reponse
+        themes = proposer_trois_theses(
+            ["Il y a eu des violences", "J'évite de parler par peur"],
+            session=session,
+        )
+        self.assertEqual(len(themes), 3)
+        charge = session.post.call_args.kwargs["json"]
+        self.assertEqual(charge["stream"], False)
+        self.assertIn("format", charge)
+        self.assertIn("échantillon", charge["messages"][1]["content"])
+
+    def test_classification_trois_themes_avec_reponse_fictive(self):
+        import json
+        from codage_qwen import THESES_INITIALES
+        reponse = Mock()
+        reponse.json.return_value = {
+            "message": {"content": json.dumps({
+                "these_retenue": "these_3",
+                "indice_textuel": "peur de prendre la parole",
+                "justification": "Une retenue explicite apparaît.",
+            }, ensure_ascii=False)}
+        }
+        session = Mock()
+        session.post.return_value = reponse
+        resultat = coder_commentaire(
+            "J'ai peur de prendre la parole.",
+            consigne="Étudie la violence et l'autocensure.",
+            mode_analyse="theses",
+            theses=list(THESES_INITIALES),
+            session=session,
+        )
+        self.assertEqual(resultat["mode_analyse"], "theses")
+        self.assertEqual(resultat["these_retenue"], "these_3")
+        self.assertIn("autocensure", resultat["these_intitule"].lower())
+        charge = session.post.call_args.kwargs["json"]
+        self.assertIn("format", charge)
+
     def test_schema_rejette_les_chaine_boolean(self):
         valeurs = {champ: "false" for champ in CHAMPS_BOOLEENS}
         valeurs.update({

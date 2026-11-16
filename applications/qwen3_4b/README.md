@@ -24,6 +24,18 @@ L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la géné
 
 Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
 
+## Classification en trois thèmes : violence et autocensure (16 novembre 2026)
+
+Un troisième mode est désormais disponible : **Classification en trois thèmes : violence et autocensure**. Il complète sans les remplacer les modes « Analyse libre avec mon prompt » et « Codage structuré sur la violence ».
+
+Dans ce mode, le prompt est entièrement modifiable. Après l'importation, le bouton **Proposer trois thèmes avec Qwen** soumet au modèle au plus cinq extraits de commentaires répartis sur le corpus. Qwen retourne exactement trois intitulés avec leurs définitions opérationnelles. Cette proposition n'est pas une classification réalisée sur le corpus entier : l'échantillon de travail est limité et n'est pas nécessairement représentatif.
+
+Le chercheur peut ensuite corriger les trois titres et définitions. Une grille initiale de travail est proposée tant que Qwen n'a pas été sollicité ; elle est explicitement signalée comme telle et non présentée comme une génération automatique. Une fois la grille validée, la commande habituelle **Tester sur un commentaire** puis **Analyser tous les commentaires restants** envoie chaque texte individuellement à Qwen, toujours avec les mêmes trois définitions. Le modèle doit attribuer au commentaire une seule catégorie parmi les trois ou **indéterminé** lorsqu'aucune catégorie n'est démontrable. Les instructions interdisent d'inférer l'autocensure d'un simple silence ou d'une absence de position explicite.
+
+Le tableau des réponses indique la catégorie attribuée, l'intitulé et la justification textuelle. Un bilan affiche les effectifs de chaque thème, y compris les indéterminés. Le ZIP unique contient désormais, dans ce mode, `bilan_themes_qwen.csv` et `grille_themes_qwen.json`, en plus des fichiers existants. Le corpus IRaMuTeQ enrichi contient `*qwen_theme_1`, `*qwen_theme_2`, `*qwen_theme_3` ou `*qwen_theme_indetermine` et conserve toutes les variables initiales. Les colonnes `these_retenue` et `these_intitule` sont conservées dans les CSV, ainsi que le prompt et les définitions dans `parametres.json`. Une modification des thèmes fait évoluer l'empreinte de configuration pour empêcher le mélange entre codages fondés sur différentes grilles.
+
+Ces classifications restent des propositions algorithmiques nécessitant une validation humaine avant toute conclusion scientifique.
+
 ## Aperçu des dix premières lignes du CSV (16 novembre 2026)
 
 Dans la section **Choix des colonnes CSV**, chaque fichier CSV importé possède désormais un tableau d'aperçu affichant ses dix premières lignes de données, ou toutes ses lignes s'il en comporte moins de dix. Les noms et l'ordre de toutes les colonnes d'origine sont conservés dans cet aperçu, quelle que soit la colonne sélectionnée pour le commentaire et l'auteur. Les cellules multiligne sont lues comme un seul commentaire. Cet affichage n'envoie aucune donnée au modèle et ne limite pas l'importation complète aux dix lignes visibles. Le comportement des corpus IRaMuTeQ TXT, des sélecteurs, des prompts, de la reprise et de tous les exports reste inchangé.
