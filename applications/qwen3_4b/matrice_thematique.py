@@ -136,6 +136,12 @@ def initialiser_annotations_matrice(
             [pd.NA] * len(tableau), index=tableau.index, dtype="boolean"
         )
         tableau["indice_" + code] = ""
+        tableau["probabilite_" + code] = pd.Series(
+            [pd.NA] * len(tableau), index=tableau.index, dtype="Float64"
+        )
+    tableau["probabilite_incertitude"] = pd.Series(
+        [pd.NA] * len(tableau), index=tableau.index, dtype="Float64"
+    )
     for champ in ("validation_humaine", "note_humaine", "justification"):
         tableau[champ] = ""
     tableau["incertitude_interpretation"] = pd.Series(
@@ -157,7 +163,9 @@ def construire_matrice(
         "colonne_texte_source", "fichier_source", "ligne_csv",
         "nom_affiche", "texte", "statut_codage",
         *codes, *("indice_" + code for code in codes),
-        "incertitude_interpretation", "justification",
+        *("probabilite_" + code for code in codes),
+        "incertitude_interpretation", "probabilite_incertitude",
+        "justification",
         "validation_humaine", "note_humaine",
         "nombre_segments", "segments_traites",
     ]

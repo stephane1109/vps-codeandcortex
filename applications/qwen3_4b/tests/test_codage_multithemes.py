@@ -31,8 +31,11 @@ class TestCodageMultithemes(unittest.TestCase):
     def annotation(self):
         return {
             "theme_1": True, "indice_theme_1": "C nul",
+            "probabilite_theme_1": 0.91,
             "theme_2": True, "indice_theme_2": "jss deg",
+            "probabilite_theme_2": 0.74,
             "incertitude_interpretation": False,
+            "probabilite_incertitude": 0.11,
             "justification": "Critique et émotion exprimées.",
         }
 
@@ -51,7 +54,8 @@ class TestCodageMultithemes(unittest.TestCase):
             list(schema_annotation(grille)["properties"]),
             [
                 "theme_1", "indice_theme_1",
-                "incertitude_interpretation", "justification",
+                "probabilite_theme_1", "incertitude_interpretation",
+                "probabilite_incertitude", "justification",
             ],
         )
 
@@ -81,6 +85,8 @@ class TestCodageMultithemes(unittest.TestCase):
         )
         self.assertTrue(resultat["theme_1"])
         self.assertTrue(resultat["theme_2"])
+        self.assertEqual(resultat["probabilite_theme_1"], 0.91)
+        self.assertEqual(resultat["probabilite_incertitude"], 0.11)
         self.assertEqual(resultat["nombre_segments"], 1)
 
     def test_texte_long_toujours_meme_grille(self):
@@ -91,8 +97,11 @@ class TestCodageMultithemes(unittest.TestCase):
         self.assertEqual(morceaux[-1][-20:], texte[-20:])
         donnees = {
             "theme_1": False, "indice_theme_1": "",
+            "probabilite_theme_1": 0.07,
             "theme_2": False, "indice_theme_2": "",
+            "probabilite_theme_2": 0.04,
             "incertitude_interpretation": False,
+            "probabilite_incertitude": 0.03,
             "justification": "Aucun jugement ni sentiment explicite.",
         }
         session = self.simulation(donnees)
@@ -106,7 +115,14 @@ class TestCodageMultithemes(unittest.TestCase):
             self.annotation(), "Ce texte n'a aucun indice.", THEMES
         )
         self.assertTrue(resultats["incertitude_interpretation"])
+        self.assertEqual(resultats["probabilite_incertitude"], 1.0)
         self.assertEqual(resultats["indice_theme_1"], "")
+
+    def test_score_invalide_refuse(self):
+        annotation = self.annotation()
+        annotation["probabilite_theme_1"] = 1.7
+        with self.assertRaisesRegex(ValueError, "Score hors"):
+            valider_annotation(annotation, "C nul jss deg", THEMES)
 
     def test_proposition_avec_theme_du_chercheur(self):
         session = self.simulation({

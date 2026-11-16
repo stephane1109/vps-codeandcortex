@@ -86,16 +86,20 @@ def archive_resultats(
     reponses = tableau.reindex(columns=[
         "numero_document", "id_video", "source_texte",
         "nom_affiche", "texte", "reponse_qwen",
-        "statut_codage", "erreur_codage", *codes,
+        "erreur_codage", *codes,
         *("indice_" + code for code in codes),
-        "incertitude_interpretation", "justification",
+        *("probabilite_" + code for code in codes),
+        "probabilite_incertitude", "justification",
     ])
     tampon = io.BytesIO()
     with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
         archive.writestr("corpus_qwen_iramuteq.txt", iramuteq)
-        archive.writestr("matrice_annotations_qwen.csv", exporter_csv(matrice))
+        archive.writestr(
+            "matrice_annotations_qwen.csv",
+            exporter_csv(matrice.drop(columns=["statut_codage"])),
+        )
         archive.writestr(
             "comparaison_videos_qwen.csv",
             exporter_csv(comparer_sources_par_video(matrice, themes)),
@@ -115,7 +119,7 @@ def archive_resultats(
             ]
             archive.writestr(
                 f"textes_{code}_qwen.csv",
-                exporter_csv(extraits),
+                exporter_csv(extraits.drop(columns=["statut_codage"])),
             )
         archive.writestr(
             "parametres.json",
@@ -208,6 +212,18 @@ def restaurer_checkpoint(
             restauration[champ] = pd.to_numeric(
                 anciens[champ], errors="coerce"
             ).fillna(0).astype(int).to_numpy()
+    # Les anciens checkpoints ne comportent pas de scores : ils restent vides.
+    for champ in (
+        *("probabilite_" + code for code in codes),
+        "probabilite_incertitude",
+    ):
+        if champ in anciens.columns:
+            valeurs = pd.to_numeric(anciens[champ], errors="coerce")
+            if valeurs.dropna().lt(0).any() or valeurs.dropna().gt(1).any():
+                raise ValueError(f"Score hors de [0, 1] : {champ}.")
+            restauration[champ] = pd.Series(
+                valeurs.to_numpy(), index=restauration.index, dtype="Float64"
+            )
     return restauration
 
 
@@ -1159,7 +1175,11 @@ else:
     colonnes_principales = [
         "numero_document", "id_video", "source_texte", "type_source",
         "texte", *(codes_themes(themes_valides) if themes_valides else []),
-        "incertitude_interpretation", "statut_codage",
+        *(
+            "probabilite_" + code
+            for code in (codes_themes(themes_valides) if themes_valides else [])
+        ),
+        "probabilite_incertitude",
     ]
     st.dataframe(
         reponses_valides[
@@ -1222,7 +1242,7 @@ if not tableau_erreurs.empty:
             [
                 col for col in (
                     "numero_document", "nom_affiche", "texte",
-                    "statut_codage", "erreur_codage",
+                    "erreur_codage",
                 )
                 if col in tableau_erreurs
             ]
@@ -1255,17 +1275,30 @@ if themes_valides is not None:
     codes = codes_themes(themes_valides)
     colonnes_matrice = [
         "numero_document", "id_video", "source_texte", "type_source",
-        "texte", "statut_codage", *("final_" + code for code in codes),
-        "incertitude_interpretation", "validation_humaine",
+        "texte", *("final_" + code for code in codes),
+        *("probabilite_" + code for code in codes),
+        "probabilite_incertitude", "validation_humaine",
     ]
     st.dataframe(
         matrice_affichage[colonnes_matrice].head(1000),
         use_container_width=True, hide_index=True,
+        column_config={
+            **{
+                "probabilite_" + code: st.column_config.NumberColumn(
+                    "Confiance " + theme["titre"], format="%.2f",
+                )
+                for code, theme in zip(codes, themes_valides)
+            },
+            "probabilite_incertitude": st.column_config.NumberColumn(
+                "Incertitude (score)", format="%.2f",
+            ),
+        },
     )
     st.caption(
         "source_texte affiche le nom exact de la colonne CSV sélectionnée ; "
         "type_source conserve séparément la catégorie de provenance. "
-        "Les valeurs manquantes sont distinctes d'un thème absent. "
+        "Les valeurs entre 0 et 1 sont des scores estimés par Qwen "
+        "(non calibrés), distincts des annotations validées. "
         "Les exports conservent l'intégralité du corpus."
     )
     with st.expander("Consulter les textes regroupés par thème", expanded=False):

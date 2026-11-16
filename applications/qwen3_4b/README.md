@@ -24,6 +24,12 @@ Le bouton « Tester sur un texte » exécute désormais un seul appel réel au m
 
 Dans la matrice, **source_texte** affiche à l'identique le nom de la colonne CSV sélectionnée, et non une étiquette comme « commentaire ». **type_source** conserve séparément la provenance facultative (commentaire, texte IA, texte auteur, voice-to-text ou texte libre). La comparaison des sources d'une même vidéo continue à utiliser cette catégorie. Le bilan présente les deux champs, et les exports conservent les noms d'origine.
 
+## Scores thématiques numériques et statut interne (16 novembre 2026)
+
+Pour chaque thème, Qwen renvoie une annotation booléenne, un indice littéral et un score de présence de 0 à 1 dans la colonne probabilite_theme_N. La colonne probabilite_incertitude présente une estimation numérique de l'ambiguïté ; la case booléenne d'incertitude n'apparaît plus dans les tableaux. Les scores ne sont pas calibrés et ne constituent pas des probabilités fréquentistes ou bayésiennes validées. L'agrégation d'un document long retient le maximum des scores des segments, sans prétendre calculer une probabilité de document. Les corrections humaines s'appliquent aux annotations finales, en conservant les scores originaux du modèle.
+
+La colonne statut_codage est masquée dans les tableaux et dans la matrice thématique exportée, mais conservée dans le CSV de reprise codage_commentaires.csv pour permettre l'arrêt, la poursuite des analyses et l'identification des erreurs.
+
 ## Matrice et validation humaine
 
 Les catégories sont numérotées theme_1, theme_2, etc. Leur correspondance avec les titres et définitions du chercheur est conservée dans les fichiers grille_themes_qwen.json et parametres.json.

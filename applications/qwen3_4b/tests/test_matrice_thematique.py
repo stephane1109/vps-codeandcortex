@@ -79,9 +79,13 @@ class TestMatriceThematique(unittest.TestCase):
         tableau.at[1, "theme_1"] = True
         tableau.at[1, "theme_2"] = True
         tableau.at[0, "manuel_theme_1"] = True
+        tableau.at[0, "probabilite_theme_1"] = 0.83
+        tableau.at[0, "probabilite_incertitude"] = 0.12
         matrice = construire_matrice(tableau, THEMES)
         self.assertTrue(matrice.at[0, "final_theme_1"])
         self.assertFalse(matrice.at[0, "theme_1"])
+        self.assertEqual(matrice.at[0, "probabilite_theme_1"], 0.83)
+        self.assertEqual(matrice.at[0, "probabilite_incertitude"], 0.12)
         self.assertEqual(matrice.at[0, "source_texte"], "Texte narration IA")
         self.assertEqual(matrice.at[0, "type_source"], "texte_ia")
         bilan = construire_bilan_sources(matrice, THEMES)
