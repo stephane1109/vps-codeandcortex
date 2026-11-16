@@ -46,6 +46,16 @@ L'interface indique toujours le modèle transmis à l'API Ollama et la fenêtre 
 
 Cette modification répond au manque de diagnostic mais **ne supprime pas l'arrêt du processus Ollama**. Le journal du service Ollama et les compteurs mémoire restent nécessaires pour établir la cause de la panne.
 
+## Import de CSV volumineux et erreur 502 (16 novembre 2026)
+
+L'application utilise désormais une limite mémoire de **1 Gio** par défaut pour le service Streamlit (`QWEN_APP_MEMORY_LIMIT` dans les variables Coolify), au lieu de 768 Mio, afin de disposer d'une marge supérieure pour les importations volumineuses. Cette valeur est un **plafond et non une réservation** ; elle ne doit pas être augmentée sans vérifier la RAM disponible sur le VPS. Le moteur Ollama dispose de sa propre limite, indépendante.
+
+Pour les CSV de plusieurs dizaines de mégaoctets, l'import complet et le tableau des documents sont maintenant conservés dans la session Streamlit : modifier un prompt, un thème ou un filtre ne provoque plus un nouvel import intégral. Changer le CSV ou les colonnes sélectionnées déclenche une nouvelle lecture. L'aperçu des dix premières lignes est également réutilisé. Les colonnes sources sont partagées en lecture seule avec la table d'analyse ; les colonnes de résultats restent indépendantes.
+
+**Le ZIP unique et le CSV de reprise ne sont plus générés automatiquement à chaque réaffichage.** Les deux boutons de téléchargement existants sont conservés ; Streamlit prépare le fichier demandé seulement lorsque l'utilisateur clique dessus. Cette possibilité nécessite Streamlit 1.54 ou plus récent. Les formats d'export, les colonnes, les noms de fichiers et la reprise ne sont pas changés.
+
+Un code HTTP 502 n'est pas une preuve à lui seul d'un dépassement de mémoire : le proxy peut également perdre la connexion pour d'autres raisons. Vérifier la mémoire et les redémarrages du service Streamlit, par exemple avec `docker inspect NOM_APP --format '{{.State.OOMKilled}} {{.State.ExitCode}} {{.RestartCount}}'`, puis consulter `docker logs --tail 100 NOM_APP` et les logs du proxy Coolify. Si la 502 survient pendant le transfert avant l'importation, il faut aussi examiner le proxy et son routage.
+
 ## Déblocage des boutons après import CSV (16 novembre 2026)
 
 Après importation des commentaires, l'application présente un diagnostic de préparation explicite : nombre de textes restants, validité du prompt et des trois thèmes, et état de l'inventaire Ollama. Le panneau d'édition des six champs de la grille est désormais replié par défaut pour rendre les commandes d'analyse plus rapidement accessibles. Les trois titres restent visibles et tous les champs demeurent éditables.

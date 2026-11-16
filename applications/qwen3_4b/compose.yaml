@@ -13,7 +13,7 @@ services:
     expose:
       - "8501"
     restart: unless-stopped
-    mem_limit: 768m
+    mem_limit: ${QWEN_APP_MEMORY_LIMIT:-1g}
   ollama:
     image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
     expose:

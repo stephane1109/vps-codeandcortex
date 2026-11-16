@@ -443,9 +443,22 @@ try:
     for numero_fichier, fichier in enumerate(fichiers):
         if not fichier.name.lower().endswith(".csv"):
             continue
-        colonnes_csv, lignes_apercu = obtenir_apercu_csv(
-            fichier.getvalue(), nombre_lignes=10
-        )
+        # Ne pas redécoder 22 Mo de CSV pour afficher les mêmes 10 lignes
+        # après chaque modification d'un widget.
+        empreinte_apercu = hashlib.sha256(fichier.getvalue()).hexdigest()
+        cle_apercu = f"{numero_fichier}:{fichier.name}:{empreinte_apercu}"
+        if st.session_state.get("qwen_apercu_cle_" + str(numero_fichier)) != cle_apercu:
+            colonnes_csv, lignes_apercu = obtenir_apercu_csv(
+                fichier.getvalue(), nombre_lignes=10
+            )
+            st.session_state["qwen_apercu_cle_" + str(numero_fichier)] = cle_apercu
+            st.session_state["qwen_apercu_donnees_" + str(numero_fichier)] = (
+                colonnes_csv, lignes_apercu
+            )
+        else:
+            colonnes_csv, lignes_apercu = st.session_state[
+                "qwen_apercu_donnees_" + str(numero_fichier)
+            ]
         defaut_texte = proposer_colonne(
             colonnes_csv,
             ("texte", "commentaire", "commentaires", "comment", "text",
@@ -510,7 +523,7 @@ choix_par_fichier = {
 empreinte_fichiers = hashlib.sha256()
 for numero_fichier, fichier in enumerate(fichiers):
     if numero_fichier:
-        empreinte_fichiers.update(b"\\0")
+        empreinte_fichiers.update(b"\0")
     empreinte_fichiers.update(fichier.getvalue())
 signature_fichiers = empreinte_fichiers.hexdigest()
 
@@ -549,12 +562,11 @@ else:
                     colonne_auteur=choix["colonne_auteur"],
                 )
                 documents.extend(nouveaux)
-                for numero_document, informations_document in informations.items():
-                    metadonnees[numero_document] = {
-                        **informations_document,
-                        "fichier_source": nom_fichier,
-                        "format_source": "csv_commentaires",
-                    }
+                for informations_document in informations.values():
+                    # Éviter une deuxième copie du dictionnaire de chaque ligne.
+                    informations_document["fichier_source"] = nom_fichier
+                    informations_document["format_source"] = "csv_commentaires"
+                metadonnees.update(informations)
             else:
                 extraits = analyser_corpus(fichier.getvalue())
                 depart = len(documents)
@@ -586,8 +598,10 @@ else:
         st.error(str(erreur))
         st.stop()
 
-    # Ne pas garder une copie supplémentaire des métadonnées CSV.
+    # Ne pas garder les grands dictionnaires CSV après construction.
     del metadonnees
+    if "informations" in locals():
+        del informations
     st.session_state["qwen_documents_importes"] = documents
     st.session_state["qwen_tableau_importe"] = tableau
     st.session_state["qwen_cle_importation"] = cle_importation
