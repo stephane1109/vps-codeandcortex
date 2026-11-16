@@ -24,6 +24,12 @@ L'utilisateur peut lancer **Tester sur un commentaire** pour vérifier la géné
 
 Le contenu brut importé n'est jamais présenté comme une sortie générée par Qwen. Toutes les fonctions existantes, les deux modes (libre et structuré), les prompts éditables, les CSV, les exports IRaMuTeQ, le ZIP unique et la restauration restent disponibles. Ces corrections d'interface ne résolvent pas à elles seules une erreur HTTP 503 du proxy Coolify ou une panne du conteneur Ollama.
 
+## Affichage systématique du modèle réellement sollicité (16 novembre 2026)
+
+L'interface indique toujours le modèle transmis à l'API Ollama et la fenêtre de contexte configurée, dès l'ouverture de la page après authentification. Les messages d'erreur, les détails de la ligne `erreur_codage` et le message d'interruption mentionnent également ces informations. Le nom affiché est celui **demandé par l'application** via `OLLAMA_MODEL`, et non une garantie que le processus d'inférence a pu se lancer. Le cas `signal: killed` provoque l'arrêt dès la première occurrence ; le message n'indique plus à tort « trois erreurs consécutives ».
+
+Cette modification répond au manque de diagnostic mais **ne supprime pas l'arrêt du processus Ollama**. Le journal du service Ollama et les compteurs mémoire restent nécessaires pour établir la cause de la panne.
+
 ## Choix des colonnes CSV et erreur Ollama « unexpected EOF » (16 novembre 2026)
 
 L'interface permet maintenant de **sélectionner explicitement pour chaque fichier CSV** la colonne qui contient le commentaire et, facultativement, celle qui contient le nom de l'auteur. Les colonnes ne sont plus obligatoirement appelées `texte` et `nom_affiche` : des noms comme `commentaire`, `message`, `content` ou tout autre intitulé sont acceptés. Chaque CSV possède ses propres sélecteurs. L'import historique avec `nom_affiche` et `texte` fonctionne toujours sans modification des données.

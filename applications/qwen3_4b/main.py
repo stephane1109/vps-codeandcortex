@@ -18,6 +18,7 @@ from codage_qwen import (
     MODELE,
     PROMPT_LIBRE_DEFAUT,
     PROMPT_VIOLENCE_DEFAUT,
+    CONTEXTE_MAXIMUM,
     URL_OLLAMA,
     coder_commentaire,
     verifier_service,
@@ -253,8 +254,17 @@ def lancer_analyse(
                     else "sortie_invalide"
                 )
                 donnees.at[indice, "statut_codage"] = type_erreur
+                # Inclure la configuration réellement demandée au serveur
+                # pour que chaque erreur exportée soit interprétable.
+                details_erreur = str(erreur)
+                if "Modèle sollicité :" not in details_erreur:
+                    details_erreur = (
+                        f"Modèle sollicité : {MODELE} ; "
+                        f"Contexte demandé : {CONTEXTE_MAXIMUM} tokens ; "
+                        + details_erreur
+                    )
                 donnees.at[indice, "erreur_codage"] = (
-                    f"{type(erreur).__name__}: {str(erreur)[:300]}"
+                    f"{type(erreur).__name__}: {details_erreur[:900]}"
                 )
                 erreurs += 1
                 # Interrompre immédiatement si le système a tué le moteur d'inférence.
@@ -283,10 +293,15 @@ def lancer_analyse(
 
 authentifier()
 
-st.title(f"Qwen — {MODELE} : analyser un corpus avec votre prompt")
+st.title("Qwen — analyser un corpus avec votre prompt")
+st.write(
+    f"**Modèle sollicité par l'application : `{MODELE}`** "
+    f"(contexte : {CONTEXTE_MAXIMUM} tokens)."
+)
 st.caption(
-    "Qwen fonctionne avec vos consignes. Le modèle traite chaque commentaire "
-    "séparément et conserve le texte original."
+    "Ce nom provient de la configuration effective du conteneur Streamlit. "
+    "Il est transmis à Ollama lors de chaque demande d'analyse. "
+    "Le modèle traite chaque commentaire séparément et conserve le texte original."
 )
 mode_affichage = st.radio(
     "Type d'analyse",
@@ -588,8 +603,9 @@ if erreurs:
         )
     st.error(
         f"Échec de l'inférence Qwen pour {len(erreurs)} commentaire(s). "
-        "Le corpus importé ne constitue pas un résultat du modèle. "
-        "Voici les causes techniques, enregistrées par l'application :"
+        f"Modèle sollicité : {MODELE} ; "
+        f"contexte demandé : {CONTEXTE_MAXIMUM} tokens. "
+        "Voici les causes techniques renvoyées par Ollama :"
     )
     for numero_erreur, (_, ligne_erreur) in enumerate(
         donnees.loc[erreurs].head(3).iterrows(), start=1
@@ -597,6 +613,8 @@ if erreurs:
         st.code(
             f"Commentaire {int(ligne_erreur['numero_document'])} — "
             f"{ligne_erreur['statut_codage']}\n"
+            f"Modèle sollicité : {MODELE}\n"
+            f"Contexte demandé : {CONTEXTE_MAXIMUM} tokens\n"
             f"{ligne_erreur['erreur_codage'] or 'Détail non fourni'}",
             language="text",
         )
@@ -613,7 +631,10 @@ try:
         for nom in modeles_disponibles
     )
     if service_disponible:
-        st.success(f"Qwen est disponible et prêt à analyser les commentaires : {MODELE}.")
+        st.success(
+            f"Modèle sollicité : {MODELE} — disponible dans Ollama. "
+            "Cela confirme sa présence, mais pas sa capacité à terminer une inférence."
+        )
     else:
         st.error(
             f"Ollama répond, mais le modèle {MODELE} est absent. "
@@ -661,10 +682,20 @@ if tester or lancer or relancer:
         detail_derniere_erreur = str(
             donnees.at[indice_derniere_erreur, "erreur_codage"]
         )
+        panne_moteur = (
+            "signal: killed" in detail_derniere_erreur.lower()
+            or "unexpected eof" in detail_derniere_erreur.lower()
+        )
+        motif_arret = (
+            "arrêt du moteur d'inférence Ollama"
+            if panne_moteur else "trois erreurs consécutives"
+        )
         st.session_state["qwen_message"] = (
-            "Analyse interrompue après trois erreurs consécutives : "
+            f"Analyse interrompue ({motif_arret}). "
+            f"Modèle sollicité : {MODELE} ; "
+            f"contexte demandé : {CONTEXTE_MAXIMUM} tokens ; "
             f"{termines} réussite(s), {nombre_erreurs} erreur(s). "
-            f"Dernière cause : {detail_derniere_erreur}. "
+            f"Cause : {detail_derniere_erreur}. "
             "Les analyses abouties restent conservées."
         )
     elif nombre_erreurs:

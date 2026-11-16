@@ -164,6 +164,8 @@ def coder_commentaire(
         details = reponse.text[:1000].strip()
         code_http = reponse.status_code
         description = (
+            f"Modèle sollicité : {MODELE} ; "
+            f"Contexte demandé : {CONTEXTE_MAXIMUM} tokens ; "
             f"Ollama a répondu HTTP {code_http} sur /api/chat. "
             + (f"Détail : {details}" if details else "Aucun détail retourné.")
         )

@@ -63,14 +63,18 @@ class TestAnalyseQwen(unittest.TestCase):
         session = Mock()
         session.post.return_value = reponse
         with self.assertRaisesRegex(
-            requests.HTTPError, "llama runner process has terminated"
-        ):
+            requests.HTTPError,
+            "Modèle sollicité : .* ; Contexte demandé : .*"
+        ) as contexte:
             coder_commentaire(
                 "Commentaire d'essai",
                 consigne="Analyse ce commentaire.",
                 mode_analyse="libre",
                 session=session,
             )
+        self.assertIn(
+            "llama runner process has terminated", str(contexte.exception)
+        )
 
     def test_reponse_ollama_vide_explicitement_signalee(self):
         reponse = Mock()
