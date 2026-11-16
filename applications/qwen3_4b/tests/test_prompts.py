@@ -151,15 +151,15 @@ class TestAnalyseQwen(unittest.TestCase):
         reponse.json.return_value = {
             "message": {"content": json.dumps({
                 "these_retenue": "these_3",
-                "indice_textuel": "peur de prendre la parole",
-                "justification": "Une retenue explicite apparaît.",
+                "indice_textuel": "responsable des violences",
+                "justification": "Un acteur est accusé explicitement.",
             }, ensure_ascii=False)}
         }
         session = Mock()
         session.post.return_value = reponse
         resultat = coder_commentaire(
-            "J'ai peur de prendre la parole.",
-            consigne="Étudie la violence et l'autocensure.",
+            "Ce groupe est responsable des violences contre nous.",
+            consigne="Classe les discours sur la violence.",
             mode_analyse="theses",
             theses=list(THESES_INITIALES),
             session=session,
@@ -167,7 +167,7 @@ class TestAnalyseQwen(unittest.TestCase):
         self.assertEqual(resultat["mode_analyse"], "theses")
         self.assertEqual(resultat["theme_retenu"], "theme_3")
         self.assertEqual(resultat["these_retenue"], "these_3")
-        self.assertIn("autocensure", resultat["these_intitule"].lower())
+        self.assertIn("persécuteur", resultat["these_intitule"].lower())
         charge = session.post.call_args.kwargs["json"]
         self.assertIn("format", charge)
         self.assertIn("Tâche : CLASSE", charge["messages"][0]["content"])
@@ -175,6 +175,52 @@ class TestAnalyseQwen(unittest.TestCase):
             "Consigne définie par le chercheur",
             charge["messages"][0]["content"],
         )
+
+    def test_trois_themes_demandes(self):
+        """Les trois classes imposées distinguent trois opérations discursives."""
+        from codage_qwen import THESES_INITIALES, PROMPT_THESES_DEFAUT
+        self.assertEqual(
+            [theme["titre"] for theme in THESES_INITIALES],
+            [
+                "Dénonciation de la violence",
+                "Indignation face à la violence",
+                "Détermination d'un persécuteur face à la violence",
+            ],
+        )
+        self.assertIn("trois thèmes", PROMPT_THESES_DEFAUT)
+        self.assertIn("indéterminé", PROMPT_THESES_DEFAUT)
+
+    def test_affinement_ne_remplace_pas_les_titres(self):
+        """L'affinement des définitions conserve les intitulés imposés."""
+        import json
+        from codage_qwen import THESES_INITIALES, proposer_trois_theses
+        reponse = Mock()
+        reponse.json.return_value = {
+            "message": {
+                "content": json.dumps({
+                    "theses": [
+                        {"titre": "Autre 1", "definition": "Définition Qwen 1."},
+                        {"titre": "Autre 2", "definition": "Définition Qwen 2."},
+                        {"titre": "Autre 3", "definition": "Définition Qwen 3."},
+                    ]
+                }, ensure_ascii=False)
+            }
+        }
+        session = Mock()
+        session.post.return_value = reponse
+        resultats = proposer_trois_theses(
+            ["Cette violence est inacceptable."],
+            session=session,
+            themes_imposes=list(THESES_INITIALES),
+        )
+        self.assertEqual(
+            [item["titre"] for item in resultats],
+            [item["titre"] for item in THESES_INITIALES],
+        )
+        self.assertEqual(resultats[2]["definition"], "Définition Qwen 3.")
+        message = session.post.call_args.kwargs["json"]["messages"][1]["content"]
+        self.assertIn("Intitulés IMPOSÉS", message)
+        self.assertIn("persécuteur", message)
 
     def test_schema_rejette_les_chaine_boolean(self):
         valeurs = {champ: "false" for champ in CHAMPS_BOOLEENS}
