@@ -54,7 +54,7 @@ services:
     volumes:
       - modeles_encodeurs:/modeles
     entrypoint: ["/bin/sh", "-c"]
-    command: ["python -c \"from huggingface_hub import snapshot_download; snapshot_download('dascim/juribert-base'); snapshot_download('Yanzhu/bertweetfr-base')\""]
+    command: ["python -c \"from huggingface_hub import snapshot_download; snapshot_download('dascim/juribert-base'); snapshot_download('Yanzhu/bertweetfr-base'); snapshot_download('MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli')\""]
     restart: "no"
   charger_modele:
     image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
