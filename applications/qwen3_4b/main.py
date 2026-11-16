@@ -162,7 +162,9 @@ def initialiser_tableau(
     cle_configuration: str = "",
 ) -> pd.DataFrame:
     """Initialiser les résultats en conservant les textes et les métadonnées."""
-    donnees = tableau.copy().reset_index(drop=True)
+    # Réutiliser les colonnes sources sans les dupliquer en mémoire.
+    # Les colonnes produites par Qwen sont créées séparément.
+    donnees = tableau.copy(deep=False).reset_index(drop=True)
     donnees["signature_corpus"] = signature
     donnees["cle_configuration"] = cle_configuration
     donnees["statut_codage"] = "non_traite"
@@ -504,60 +506,91 @@ choix_par_fichier = {
     int(choix["numero_fichier"]): choix for choix in correspondances_csv
 }
 
-try:
-    documents = []
-    metadonnees = {}
-    for numero_fichier, fichier in enumerate(fichiers):
-        nom_fichier = fichier.name
-        if nom_fichier.lower().endswith(".csv"):
-            choix = choix_par_fichier[numero_fichier]
-            nouveaux, informations = analyser_commentaires_csv(
-                fichier.getvalue(),
-                numero_depart=len(documents),
-                colonne_texte=str(choix["colonne_texte"]),
-                colonne_auteur=choix["colonne_auteur"],
-            )
-            documents.extend(nouveaux)
-            for numero_document, informations_document in informations.items():
-                metadonnees[numero_document] = {
-                    **informations_document,
-                    "fichier_source": nom_fichier,
-                    "format_source": "csv_commentaires",
-                }
-        else:
-            extraits = analyser_corpus(fichier.getvalue())
-            depart = len(documents)
-            documents.extend(
-                replace(doc, numero=depart + numero + 1)
-                for numero, doc in enumerate(extraits)
-            )
-            for doc in documents[depart:]:
-                metadonnees[doc.numero] = {
-                    "nom_affiche": "",
-                    "ligne_csv": "",
-                    "fichier_source": nom_fichier,
-                    "format_source": "iramuteq",
-                }
+# Calculer la signature historique sans assembler un nouveau fichier géant.
+empreinte_fichiers = hashlib.sha256()
+for numero_fichier, fichier in enumerate(fichiers):
+    if numero_fichier:
+        empreinte_fichiers.update(b"\\0")
+    empreinte_fichiers.update(fichier.getvalue())
+signature_fichiers = empreinte_fichiers.hexdigest()
 
-    tableau = tableau_documents(documents)
-    colonnes_metadonnees = {
-        "nom_affiche", "ligne_csv", "fichier_source", "format_source",
-        "colonne_texte_source", "colonne_auteur_source",
-    }
-    for informations_document in metadonnees.values():
-        colonnes_metadonnees.update(informations_document.keys())
-    for colonne in sorted(colonnes_metadonnees):
-        tableau[colonne] = [
-            metadonnees.get(int(numero), {}).get(colonne, "")
-            for numero in tableau["numero_document"]
-        ]
-except (ValueError, UnicodeError) as erreur:
-    st.error(str(erreur))
-    st.stop()
-
-signature_fichiers = hashlib.sha256(
-    b"\0".join(f.getvalue() for f in fichiers)
+# Réutiliser le corpus analysé tant que les fichiers et les colonnes
+# sélectionnées ne changent pas, même si l'interface Streamlit se réexécute.
+cle_importation = hashlib.sha256(
+    json.dumps(
+        {
+            "signature": signature_fichiers,
+            "fichiers": [fichier.name for fichier in fichiers],
+            "colonnes": correspondances_csv,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    ).encode("utf-8")
 ).hexdigest()
+if (
+    st.session_state.get("qwen_cle_importation") == cle_importation
+    and "qwen_documents_importes" in st.session_state
+    and "qwen_tableau_importe" in st.session_state
+):
+    documents = st.session_state["qwen_documents_importes"]
+    tableau = st.session_state["qwen_tableau_importe"]
+else:
+    try:
+        documents = []
+        metadonnees = {}
+        for numero_fichier, fichier in enumerate(fichiers):
+            nom_fichier = fichier.name
+            if nom_fichier.lower().endswith(".csv"):
+                choix = choix_par_fichier[numero_fichier]
+                nouveaux, informations = analyser_commentaires_csv(
+                    fichier.getvalue(),
+                    numero_depart=len(documents),
+                    colonne_texte=str(choix["colonne_texte"]),
+                    colonne_auteur=choix["colonne_auteur"],
+                )
+                documents.extend(nouveaux)
+                for numero_document, informations_document in informations.items():
+                    metadonnees[numero_document] = {
+                        **informations_document,
+                        "fichier_source": nom_fichier,
+                        "format_source": "csv_commentaires",
+                    }
+            else:
+                extraits = analyser_corpus(fichier.getvalue())
+                depart = len(documents)
+                documents.extend(
+                    replace(doc, numero=depart + numero + 1)
+                    for numero, doc in enumerate(extraits)
+                )
+                for doc in documents[depart:]:
+                    metadonnees[doc.numero] = {
+                        "nom_affiche": "",
+                        "ligne_csv": "",
+                        "fichier_source": nom_fichier,
+                        "format_source": "iramuteq",
+                    }
+
+        tableau = tableau_documents(documents)
+        colonnes_metadonnees = {
+            "nom_affiche", "ligne_csv", "fichier_source", "format_source",
+            "colonne_texte_source", "colonne_auteur_source",
+        }
+        for informations_document in metadonnees.values():
+            colonnes_metadonnees.update(informations_document.keys())
+        for colonne in sorted(colonnes_metadonnees):
+            tableau[colonne] = [
+                metadonnees.get(int(numero), {}).get(colonne, "")
+                for numero in tableau["numero_document"]
+            ]
+    except (ValueError, UnicodeError) as erreur:
+        st.error(str(erreur))
+        st.stop()
+
+    # Ne pas garder une copie supplémentaire des métadonnées CSV.
+    del metadonnees
+    st.session_state["qwen_documents_importes"] = documents
+    st.session_state["qwen_tableau_importe"] = tableau
+    st.session_state["qwen_cle_importation"] = cle_importation
 # Les importations historiques conservent leur signature pour les reprises.
 selection_personnalisee = any(
     choix["colonne_texte"] != "texte"
@@ -1083,19 +1116,36 @@ if mode_analyse == "structure" and not avec_resultat.empty:
             use_container_width=True,
         )
 
-archive = archive_resultats(
-    donnees, documents, signature,
-    {**configuration, "correspondances_csv": correspondances_csv},
-)
+# L'export des dizaines de milliers de lignes n'est pas exécuté
+# lors de chaque affichage : Streamlit le prépare au clic uniquement.
+parametres_export = {
+    **configuration, "correspondances_csv": correspondances_csv
+}
+
+
+def generer_archive_au_telechargement() -> bytes:
+    """Construire l'archive unique uniquement à la demande."""
+    return archive_resultats(
+        donnees, documents, signature, parametres_export
+    )
+
+
+def generer_csv_au_telechargement() -> bytes:
+    """Produire le CSV de reprise uniquement à la demande."""
+    return exporter_csv(donnees)
+
+
 st.download_button(
     "Télécharger tous les résultats, même partiels (ZIP)",
-    archive,
+    data=generer_archive_au_telechargement,
     file_name="resultats_qwen3_4b_iramuteq.zip",
     mime="application/zip",
+    on_click="ignore",
 )
 st.download_button(
     "Télécharger le CSV de reprise",
-    exporter_csv(donnees),
+    data=generer_csv_au_telechargement,
     file_name="codage_commentaires.csv",
     mime="text/csv",
+    on_click="ignore",
 )
