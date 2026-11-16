@@ -52,6 +52,10 @@ La vérification de l'inventaire Ollama `/api/tags` n'interdit plus automatiquem
 
 Les sélecteurs CSV, l'aperçu des dix lignes, les analyses, le CSV de reprise et le ZIP unique restent disponibles.
 
+## Arrêt manuel de l'analyse (16 novembre 2026)
+
+Le bouton **Arrêter l'analyse**, placé à côté des commandes de lancement, demande l'interruption du traitement. Les annotations réalisées sont conservées dans la session et dans les exports partiels ; les textes restants gardent leur statut initial. Une requête Ollama déjà envoyée peut devoir se terminer avant que l'arrêt soit pris en compte. Cliquer sur **Analyser tous les commentaires restants** permet de reprendre les unités non traitées. La reprise après perte de session reste assurée par l'import du CSV de résultats, comme auparavant.
+
 ## Parcours unique d'annotation des textes et commentaires (16 novembre 2026)
 
 L'interface ne présente plus la sélection de modes « Codage structuré sur la violence », « Analyse libre » ou « Classification en trois thèmes ». Elle propose directement **un seul prompt d'annotation** et la **matrice de trois thèmes non exclusifs**. La même grille s'applique aussi bien aux commentaires très courts de type SMS qu'aux descriptions longues. Les textes longs sont découpés en segments automatiquement puis leurs annotations réunies ; la longueur n'entraîne pas un changement de méthode.
