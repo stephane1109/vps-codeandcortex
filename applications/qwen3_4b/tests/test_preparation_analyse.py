@@ -46,13 +46,14 @@ class TestPreparationAnalyse(unittest.TestCase):
         self.assertFalse(etat["tester"])
         self.assertTrue(any("Aucun commentaire" in cause for cause in etat["causes"]))
 
-    def test_modes_anciens_independants_de_la_grille(self):
-        for mode in ("libre", "structure"):
-            with self.subTest(mode=mode):
-                etat = evaluer_commandes_analyse(
-                    1, 0, "Analyse.", mode, False, True,
-                )
-                self.assertTrue(etat["lancer"])
+    def test_grille_obligatoire_pour_le_parcours_unique(self):
+        etat = evaluer_commandes_analyse(
+            1, 0, "Analyse.", "matrice", False, True,
+        )
+        self.assertFalse(etat["lancer"])
+        self.assertTrue(
+            any("grille" in cause.lower() for cause in etat["causes"])
+        )
 
     def test_prompt_vide_signale(self):
         etat = evaluer_commandes_analyse(

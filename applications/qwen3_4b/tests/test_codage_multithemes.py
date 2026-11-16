@@ -1,71 +1,105 @@
-"""Tests de l'annotation commune aux commentaires et aux textes longs."""
+"""Tests des annotations indépendantes pour des prompts divers."""
 from __future__ import annotations
+
 import json
 import unittest
 from unittest.mock import Mock
-from codage_multithemes import coder_multithemes, segmenter_texte, valider_annotation
+
+from codage_multithemes import (
+    coder_multithemes, codes_themes, proposer_themes_depuis_prompt,
+    schema_annotation, segmenter_texte, valider_annotation, valider_themes,
+)
+
+
+THEMES = [
+    {"titre": "Critique", "definition": "Un jugement négatif explicite."},
+    {"titre": "Émotion", "definition": "Un sentiment explicitement manifesté."},
+]
 
 
 class TestCodageMultithemes(unittest.TestCase):
-    def creer_annotation(self, **valeurs):
-        resultat = {
-            "theme_denonciation": False,
-            "theme_indignation": False,
-            "theme_persecuteur": False,
-            "indice_denonciation": "",
-            "indice_indignation": "",
-            "indice_persecuteur": "",
-            "acteur_designe": "",
-            "incertitude_interpretation": False,
-            "justification": "Aucune prise de position explicite.",
-        }
-        resultat.update(valeurs)
-        return resultat
-
-    def creer_session(self, annotation):
+    def simulation(self, donnees):
         reponse = Mock()
         reponse.json.return_value = {
-            "message": {"content": json.dumps(annotation, ensure_ascii=False)}
+            "message": {"content": json.dumps(donnees, ensure_ascii=False)}
         }
         session = Mock()
         session.post.return_value = reponse
         return session
 
-    def test_commentaire_sms_deux_themes(self):
-        commentaire = "C honteux, cette violence est inacceptable."
-        session = self.creer_session(self.creer_annotation(
-            theme_denonciation=True,
-            theme_indignation=True,
-            indice_denonciation="violence est inacceptable",
-            indice_indignation="C honteux",
-        ))
-        resultat = coder_multithemes(commentaire, session=session)
-        self.assertTrue(resultat["theme_denonciation"])
-        self.assertTrue(resultat["theme_indignation"])
-        self.assertFalse(resultat["theme_persecuteur"])
+    def annotation(self):
+        return {
+            "theme_1": True, "indice_theme_1": "C nul",
+            "theme_2": True, "indice_theme_2": "jss deg",
+            "incertitude_interpretation": False,
+            "justification": "Critique et émotion exprimées.",
+        }
+
+    def test_themes_determines_par_prompt(self):
+        grille = valider_themes([
+            {"titre": "Mobilité", "definition": "Discours sur les transports."},
+        ])
+        self.assertEqual(codes_themes(grille), ["theme_1"])
+        self.assertEqual(
+            list(schema_annotation(grille)["properties"]),
+            [
+                "theme_1", "indice_theme_1",
+                "incertitude_interpretation", "justification",
+            ],
+        )
+
+    def test_commentaire_sms_plusieurs_themes(self):
+        texte = "C nul jss deg"
+        session = self.simulation(self.annotation())
+        resultat = coder_multithemes(
+            texte, themes=THEMES, session=session
+        )
+        self.assertTrue(resultat["theme_1"])
+        self.assertTrue(resultat["theme_2"])
         self.assertEqual(resultat["nombre_segments"], 1)
 
-    def test_texte_long_conserve_integralement(self):
-        texte = "Description descriptive sans prise de position. " * 80
-        morceaux = segmenter_texte(texte, longueur_max=850)
+    def test_texte_long_toujours_meme_grille(self):
+        texte = "Un paragraphe descriptif détaillé. " * 90
+        morceaux = segmenter_texte(texte, longueur_max=650)
         self.assertGreater(len(morceaux), 1)
-        self.assertTrue(all(len(morceau) <= 850 for morceau in morceaux))
+        self.assertEqual(morceaux[0][:15], texte[:15])
         self.assertEqual(morceaux[-1][-20:], texte[-20:])
-        session = self.creer_session(self.creer_annotation())
-        resultat = coder_multithemes(texte, session=session)
+        donnees = {
+            "theme_1": False, "indice_theme_1": "",
+            "theme_2": False, "indice_theme_2": "",
+            "incertitude_interpretation": False,
+            "justification": "Aucun jugement ni sentiment explicite.",
+        }
+        session = self.simulation(donnees)
+        resultat = coder_multithemes(texte, themes=THEMES, session=session)
         self.assertEqual(resultat["nombre_segments"], session.post.call_count)
+        self.assertFalse(resultat["theme_1"])
         self.assertFalse(resultat["texte_tronque"])
 
-    def test_citation_absente_signalee(self):
-        annote = valider_annotation(
-            self.creer_annotation(
-                theme_persecuteur=True, indice_persecuteur="texte inventé",
-                acteur_designe="acteur",
-            ),
-            "Un texte sans persécuteur.",
+    def test_citation_invente_signale_une_incertitude(self):
+        resultats = valider_annotation(
+            self.annotation(), "Ce texte n'a aucun indice.", THEMES
         )
-        self.assertTrue(annote["incertitude_interpretation"])
-        self.assertEqual(annote["indice_persecuteur"], "")
+        self.assertTrue(resultats["incertitude_interpretation"])
+        self.assertEqual(resultats["indice_theme_1"], "")
+
+    def test_proposition_avec_theme_du_chercheur(self):
+        session = self.simulation({
+            "themes": [
+                {"titre": "Tourisme", "definition": "Discours sur le tourisme."}
+            ]
+        })
+        resultats = proposer_themes_depuis_prompt(
+            "Repérer le tourisme.", ["Un séjour à la mer."],
+            session=session,
+        )
+        self.assertEqual(resultats[0]["titre"], "Tourisme")
+        charge = session.post.call_args.kwargs["json"]
+        self.assertIn("Repérer le tourisme.", charge["messages"][1]["content"])
+
+    def test_grille_duplicate_refusee(self):
+        with self.assertRaisesRegex(ValueError, "plusieurs fois"):
+            valider_themes([THEMES[0], dict(THEMES[0])])
 
 
 if __name__ == "__main__":

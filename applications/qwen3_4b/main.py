@@ -21,7 +21,7 @@ from codage_multithemes import (
     proposer_themes_depuis_prompt, valider_themes, codes_themes,
     coder_multithemes,
 )
-from matrice_violence import (
+from matrice_thematique import (
     SOURCES_TEXTE, LIBELLES_SOURCES,
     analyser_sources_csv, extraire_source_iramuteq,
     initialiser_annotations_matrice, construire_matrice,
