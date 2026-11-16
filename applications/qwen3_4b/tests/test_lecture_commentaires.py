@@ -59,7 +59,7 @@ class TestImportCommentaires(unittest.TestCase):
         contenu = (
             "pseudo;message;likes\n"
             "Nina;Un premier commentaire;27\n"
-            "José;Un commentaire sur plusieurs\nlignes;12\n"
+            "José;\"Un commentaire sur plusieurs\nlignes\";12\n"
         )
         colonnes = lister_colonnes_csv(contenu)
         self.assertEqual(colonnes, ["pseudo", "message", "likes"])
