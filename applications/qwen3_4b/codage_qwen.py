@@ -275,7 +275,16 @@ def proposer_trois_theses(
     propositions = valider_theses(donnees.get("theses"))
     if grille_imposee is None:
         return propositions
-    # L'IA peut affiner les définitions, mais pas substituer ses propres thèmes.
+    # Ne pas associer silencieusement une définition à un autre thème :
+    # l'intitulé proposé doit correspondre à la classe attendue.
+    for indice, (theme, proposition) in enumerate(
+        zip(grille_imposee, propositions), start=1
+    ):
+        if theme["titre"].strip().casefold() != proposition["titre"].strip().casefold():
+            raise ValueError(
+                f"La proposition de Qwen ne respecte pas le thème {indice} "
+                f"({theme['titre']}). Les définitions restent inchangées."
+            )
     return [
         {"titre": theme["titre"], "definition": proposition["definition"]}
         for theme, proposition in zip(grille_imposee, propositions)

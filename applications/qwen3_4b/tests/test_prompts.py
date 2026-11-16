@@ -199,9 +199,18 @@ class TestAnalyseQwen(unittest.TestCase):
             "message": {
                 "content": json.dumps({
                     "theses": [
-                        {"titre": "Autre 1", "definition": "Définition Qwen 1."},
-                        {"titre": "Autre 2", "definition": "Définition Qwen 2."},
-                        {"titre": "Autre 3", "definition": "Définition Qwen 3."},
+                        {
+                            "titre": THESES_INITIALES[0]["titre"],
+                            "definition": "Définition Qwen 1.",
+                        },
+                        {
+                            "titre": THESES_INITIALES[1]["titre"],
+                            "definition": "Définition Qwen 2.",
+                        },
+                        {
+                            "titre": THESES_INITIALES[2]["titre"],
+                            "definition": "Définition Qwen 3.",
+                        },
                     ]
                 }, ensure_ascii=False)
             }
@@ -221,6 +230,34 @@ class TestAnalyseQwen(unittest.TestCase):
         message = session.post.call_args.kwargs["json"]["messages"][1]["content"]
         self.assertIn("Intitulés IMPOSÉS", message)
         self.assertIn("persécuteur", message)
+
+    def test_affinement_rejette_substitution_themes(self):
+        """Un changement de classe par le modèle ne doit pas être masqué."""
+        import json
+        from codage_qwen import THESES_INITIALES, proposer_trois_theses
+        reponse = Mock()
+        reponse.json.return_value = {
+            "message": {
+                "content": json.dumps({
+                    "theses": [
+                        {
+                            "titre": "Sujet sans rapport",
+                            "definition": "Une nouvelle catégorie non autorisée.",
+                        },
+                        dict(THESES_INITIALES[1]),
+                        dict(THESES_INITIALES[2]),
+                    ]
+                }, ensure_ascii=False)
+            }
+        }
+        session = Mock()
+        session.post.return_value = reponse
+        with self.assertRaisesRegex(ValueError, "ne respecte pas"):
+            proposer_trois_theses(
+                ["Cette violence est inacceptable."],
+                session=session,
+                themes_imposes=list(THESES_INITIALES),
+            )
 
     def test_schema_rejette_les_chaine_boolean(self):
         valeurs = {champ: "false" for champ in CHAMPS_BOOLEENS}
