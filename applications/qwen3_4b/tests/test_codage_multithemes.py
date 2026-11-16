@@ -7,6 +7,8 @@ import unittest
 import requests
 from unittest.mock import Mock
 
+from configuration_qwen import MODELES_PROPOSES
+
 from codage_multithemes import (
     PROMPT_MATRICE_DEFAUT,
     coder_multithemes, codes_themes, extraire_themes_explicites,
@@ -73,6 +75,17 @@ class TestCodageMultithemes(unittest.TestCase):
             session.post.call_args.kwargs["timeout"], (10, 60)
         )
         self.assertTrue(resultat["theme_1"])
+
+    def test_quatre_modeles_ollama(self):
+        self.assertEqual(
+            MODELES_PROPOSES,
+            (
+                "qwen3:0.6b-q4_K_M",
+                "gemma3:1b",
+                "llama3.2:3b",
+                "qwen3:4b-q4_K_M",
+            ),
+        )
 
     def test_modele_leger_transmis_a_ollama(self):
         modele = "qwen3:0.6b-q4_K_M"

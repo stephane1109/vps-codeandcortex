@@ -15,7 +15,7 @@ import requests
 import streamlit as st
 
 from configuration_qwen import (
-    MODELE as MODELE_CONFIGURATION, MODELES_PROPOSES,
+    MODELE as MODELE_CONFIGURATION, MODELES_PROPOSES, LIBELLES_MODELES,
     CONTEXTE_MAXIMUM, URL_OLLAMA, verifier_service,
 )
 from codage_multithemes import (
@@ -94,12 +94,15 @@ def archive_resultats(
     ])
     tampon = io.BytesIO()
     with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("codage_commentaires.csv", exporter_csv(tableau))
+        archive.writestr(
+            "codage_commentaires.csv",
+            exporter_csv(tableau.drop(columns=["type_source"], errors="ignore")),
+        )
         archive.writestr("reponses_qwen.csv", exporter_csv(reponses))
         archive.writestr("corpus_qwen_iramuteq.txt", iramuteq)
         archive.writestr(
             "matrice_annotations_qwen.csv",
-            exporter_csv(matrice.drop(columns=["statut_codage"])),
+            exporter_csv(matrice.drop(columns=["statut_codage", "type_source"])),
         )
         archive.writestr(
             "comparaison_videos_qwen.csv",
@@ -107,7 +110,10 @@ def archive_resultats(
         )
         archive.writestr(
             "bilan_sources_themes_qwen.csv",
-            exporter_csv(construire_bilan_sources(matrice, themes)),
+            exporter_csv(
+                construire_bilan_sources(matrice, themes)
+                .drop(columns=["type_source"])
+            ),
         )
         archive.writestr(
             "grille_themes_qwen.json",
@@ -120,7 +126,7 @@ def archive_resultats(
             ]
             archive.writestr(
                 f"textes_{code}_qwen.csv",
-                exporter_csv(extraits.drop(columns=["statut_codage"])),
+                exporter_csv(extraits.drop(columns=["statut_codage", "type_source"])),
             )
         archive.writestr(
             "parametres.json",
@@ -385,11 +391,7 @@ if "qwen_modele_selectionne" not in st.session_state:
 MODELE = st.selectbox(
     "Modèle Ollama pour l'analyse",
     options=MODELES_PROPOSES,
-    format_func=lambda nom: (
-        "Qwen3 0.6B — ultra léger (523 Mo)"
-        if nom == MODELES_PROPOSES[0]
-        else "Qwen3 4B — analyse approfondie (2,6 Go)"
-    ),
+    format_func=lambda nom: LIBELLES_MODELES.get(nom, nom),
     key="qwen_modele_selectionne",
     help=(
         "Le modèle sélectionné sera utilisé pour proposer les thèmes, "
@@ -723,7 +725,10 @@ st.write(
     f"textes non vides : **{int(tableau['texte'].str.strip().ne('').sum())}**."
 )
 with st.expander("Aperçu des textes et variables", expanded=False):
-    st.dataframe(tableau.head(30), use_container_width=True, hide_index=True)
+    st.dataframe(
+        tableau.drop(columns=["type_source"], errors="ignore").head(30),
+        use_container_width=True, hide_index=True,
+    )
 
 with st.expander("Paramètres complémentaires", expanded=False):
     temperature = st.slider(
@@ -1204,7 +1209,7 @@ else:
         "statut_codage",
     ]
     colonnes_principales = [
-        "numero_document", "id_video", "source_texte", "type_source",
+        "numero_document", "id_video", "source_texte",
         "texte", *(codes_themes(themes_valides) if themes_valides else []),
         *(
             "probabilite_" + code
@@ -1292,7 +1297,10 @@ with st.expander("Tableau complet, métadonnées et variables du corpus", expand
         donnees.loc[donnees["statut_codage"].eq("ok")]
         if montrer_uniquement_valides else donnees
     )
-    st.dataframe(vue.head(1000), hide_index=True, use_container_width=True)
+    st.dataframe(
+        vue.drop(columns=["type_source"], errors="ignore").head(1000),
+        hide_index=True, use_container_width=True,
+    )
     if len(vue) > 1000:
         st.caption(
             "Aperçu limité à 1 000 lignes. Le ZIP et le CSV "
@@ -1305,7 +1313,7 @@ if themes_valides is not None:
     matrice_affichage = construire_matrice(donnees, themes_valides)
     codes = codes_themes(themes_valides)
     colonnes_matrice = [
-        "numero_document", "id_video", "source_texte", "type_source",
+        "numero_document", "id_video", "source_texte",
         "texte", *("final_" + code for code in codes),
         *("probabilite_" + code for code in codes),
         "probabilite_incertitude", "validation_humaine",
@@ -1327,7 +1335,7 @@ if themes_valides is not None:
     )
     st.caption(
         "source_texte affiche le nom exact de la colonne CSV sélectionnée ; "
-        "type_source conserve séparément la catégorie de provenance. "
+        ""
         "Les valeurs entre 0 et 1 sont des scores estimés par Qwen "
         "(non calibrés), distincts des annotations validées. "
         "Les exports conservent l'intégralité du corpus."
@@ -1348,7 +1356,7 @@ if themes_valides is not None:
                     sous_corpus[
                         [
                             "numero_document", "id_video", "source_texte",
-                            "type_source", "texte",
+                            "texte",
                         ]
                     ].head(1000),
                     use_container_width=True, hide_index=True,
@@ -1356,7 +1364,10 @@ if themes_valides is not None:
 
     st.subheader("Répartition des thèmes selon la source textuelle")
     bilan_sources = construire_bilan_sources(matrice_affichage, themes_valides)
-    st.dataframe(bilan_sources, use_container_width=True, hide_index=True)
+    st.dataframe(
+        bilan_sources.drop(columns=["type_source"]),
+        use_container_width=True, hide_index=True,
+    )
 
     st.subheader("Comparaison des textes appariés par identifiant vidéo")
     comparaison = comparer_sources_par_video(matrice_affichage, themes_valides)
@@ -1373,6 +1384,81 @@ if themes_valides is not None:
             "Une source absente est non_disponible ; une source non analysée "
             "est non_traite. Les discordances exigent deux annotations connues."
         )
+
+    st.subheader("Exploration avec JuriBERT et BERTweetFR")
+    st.caption(
+        "Ces modèles français produisent des représentations textuelles. "
+        "La similarité cosinus avec chaque définition de thème constitue "
+        "un indicateur exploratoire, PAS une probabilité ni une annotation. "
+        "Les résultats de Qwen et la matrice restent inchangés."
+    )
+    modele_encodeur = st.selectbox(
+        "Modèle spécialisé",
+        ("juribert", "bertweetfr"),
+        format_func=lambda identifiant: (
+            "JuriBERT — droit français (dascim/juribert-base)"
+            if identifiant == "juribert"
+            else "BERTweetFR — réseaux sociaux français (Yanzhu/bertweetfr-base)"
+        ),
+        key="qwen_modele_encodeur",
+    )
+    lignes_explorables = donnees.loc[
+        donnees["texte"].fillna("").astype(str).str.strip().ne("")
+    ]
+    if not lignes_explorables.empty:
+        numero_exploration = st.selectbox(
+            "Texte à comparer aux définitions thématiques",
+            lignes_explorables["numero_document"].astype(int).tolist(),
+            key="qwen_numero_exploration",
+        )
+        if st.button("Calculer les similarités avec le modèle spécialisé"):
+            texte_exploration = str(
+                lignes_explorables.loc[
+                    lignes_explorables["numero_document"].eq(numero_exploration),
+                    "texte",
+                ].iloc[0]
+            )
+            try:
+                with st.spinner("Calcul des représentations textuelles..."):
+                    reponse_encodeur = requests.post(
+                        os.getenv(
+                            "ENCODEURS_URL", "http://encodeurs:8502"
+                        ).rstrip("/") + "/similarites",
+                        json={
+                            "modele": modele_encodeur,
+                            "texte": texte_exploration[:12000],
+                            "themes": themes_valides,
+                        },
+                        timeout=(10, 180),
+                    )
+                if not reponse_encodeur.ok:
+                    st.error(
+                        f"Encodeur indisponible (HTTP "
+                        f"{reponse_encodeur.status_code}) : "
+                        f"{reponse_encodeur.text[:700]}"
+                    )
+                else:
+                    resultat_encodeur = reponse_encodeur.json()
+                    st.dataframe(
+                        pd.DataFrame(resultat_encodeur["scores"]),
+                        hide_index=True, use_container_width=True,
+                    )
+                    if resultat_encodeur.get("texte_tronque"):
+                        st.warning(
+                            "Le modèle a tronqué le texte à 256 tokens. "
+                            "Ces scores ne décrivent pas tout le document."
+                        )
+            except requests.RequestException as erreur:
+                st.error(
+                    "Service des modèles spécialisés indisponible : "
+                    f"{type(erreur).__name__} : {erreur}"
+                )
+    st.caption(
+        "SHARE-4B est un modèle de base principalement anglophone, "
+        "non conçu pour la classification par prompt. "
+        "Son installation sur ce VPS n'est pas activée : "
+        "les poids non quantifiés dépassent 15 Go."
+    )
 
     st.subheader("Validation et correction manuelles")
     lignes_verifiables = donnees.loc[donnees["statut_codage"].eq("ok")]
@@ -1456,7 +1542,9 @@ def generer_archive_au_telechargement() -> bytes:
 
 def generer_csv_au_telechargement() -> bytes:
     """Produire le CSV de reprise uniquement à la demande."""
-    return exporter_csv(donnees)
+    return exporter_csv(
+        donnees.drop(columns=["type_source"], errors="ignore")
+    )
 
 
 st.download_button(

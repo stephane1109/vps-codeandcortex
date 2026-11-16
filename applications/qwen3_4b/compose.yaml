@@ -8,8 +8,10 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-q4_K_M}
       QWEN_NUM_CTX: ${QWEN_NUM_CTX:-2048}
+      ENCODEURS_URL: http://encodeurs:8502
     depends_on:
       - ollama
+      - encodeurs
     expose:
       - "8501"
     restart: unless-stopped
@@ -27,10 +29,37 @@ services:
       - ollama_modeles:/root/.ollama
     restart: unless-stopped
     mem_limit: ${OLLAMA_MEMORY_LIMIT:-7g}
+  # Service séparé, CPU uniquement : aucun changement du moteur Ollama.
+  encodeurs:
+    build:
+      context: .
+      dockerfile: Dockerfile.encodeurs
+    environment:
+      HF_HOME: /modeles
+      OMP_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"
+    volumes:
+      - modeles_encodeurs:/modeles
+    expose:
+      - "8502"
+    mem_limit: ${ENCODEURS_MEMORY_LIMIT:-2g}
+    restart: unless-stopped
+  # Installation persistante des deux encodeurs français dans le volume HF.
+  charger_encodeurs:
+    build:
+      context: .
+      dockerfile: Dockerfile.encodeurs
+    environment:
+      HF_HOME: /modeles
+    volumes:
+      - modeles_encodeurs:/modeles
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["python -c \"from huggingface_hub import snapshot_download; snapshot_download('dascim/juribert-base'); snapshot_download('Yanzhu/bertweetfr-base')\""]
+    restart: "no"
   charger_modele:
     image: ${OLLAMA_CPU_IMAGE:-alpine/ollama:latest}
     entrypoint: ["/bin/sh", "-c"]
-    command: ["until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull qwen3:0.6b-q4_K_M && ollama pull qwen3:4b-q4_K_M"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull qwen3:0.6b-q4_K_M && ollama pull gemma3:1b && ollama pull llama3.2:3b && ollama pull qwen3:4b-q4_K_M"]
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-q4_K_M}
@@ -39,3 +68,4 @@ services:
     restart: "no"
 volumes:
   ollama_modeles:
+  modeles_encodeurs:
