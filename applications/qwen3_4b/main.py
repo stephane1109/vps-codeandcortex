@@ -617,6 +617,7 @@ else:
                         "fichier_source": nom_fichier,
                         "format_source": "iramuteq",
                         "source_texte": source_texte,
+                        "type_source": source_texte,
                         "id_video": id_video,
                     }
 
@@ -1060,8 +1061,8 @@ else:
         "statut_codage",
     ]
     colonnes_principales = [
-        "numero_document", "id_video", "source_texte", "texte",
-        *(codes_themes(themes_valides) if themes_valides else []),
+        "numero_document", "id_video", "source_texte", "type_source",
+        "texte", *(codes_themes(themes_valides) if themes_valides else []),
         "incertitude_interpretation", "statut_codage",
     ]
     st.dataframe(
@@ -1157,8 +1158,8 @@ if themes_valides is not None:
     matrice_affichage = construire_matrice(donnees, themes_valides)
     codes = codes_themes(themes_valides)
     colonnes_matrice = [
-        "numero_document", "id_video", "source_texte", "texte",
-        "statut_codage", *("final_" + code for code in codes),
+        "numero_document", "id_video", "source_texte", "type_source",
+        "texte", "statut_codage", *("final_" + code for code in codes),
         "incertitude_interpretation", "validation_humaine",
     ]
     st.dataframe(
@@ -1166,8 +1167,9 @@ if themes_valides is not None:
         use_container_width=True, hide_index=True,
     )
     st.caption(
-        "Une ligne correspond à un texte ; chaque colonne thématique est "
-        "indépendante. Les valeurs manquantes sont distinctes d'un thème absent. "
+        "source_texte affiche le nom exact de la colonne CSV sélectionnée ; "
+        "type_source conserve séparément la catégorie de provenance. "
+        "Les valeurs manquantes sont distinctes d'un thème absent. "
         "Les exports conservent l'intégralité du corpus."
     )
     with st.expander("Consulter les textes regroupés par thème", expanded=False):
@@ -1184,7 +1186,10 @@ if themes_valides is not None:
                 )
                 st.dataframe(
                     sous_corpus[
-                        ["numero_document", "id_video", "source_texte", "texte"]
+                        [
+                            "numero_document", "id_video", "source_texte",
+                            "type_source", "texte",
+                        ]
                     ].head(1000),
                     use_container_width=True, hide_index=True,
                 )

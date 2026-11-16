@@ -84,7 +84,10 @@ def analyser_sources_csv(
                 meta = {
                     "nom_affiche": auteur,
                     "id_video": id_video,
-                    "source_texte": source,
+                    # Le nom affiché est le nom exact du champ sélectionné.
+                    # La catégorie de provenance reste disponible séparément.
+                    "source_texte": colonne,
+                    "type_source": source,
                     "ligne_csv": str(position + 1),
                     "colonne_texte_source": colonne,
                     "colonne_auteur_source": colonne_auteur or "",
@@ -150,14 +153,19 @@ def construire_matrice(
     """Une ligne par unité textuelle et une colonne par thème non exclusif."""
     codes = codes_themes(themes)
     colonnes = [
-        "numero_document", "id_video", "source_texte", "fichier_source",
-        "ligne_csv", "nom_affiche", "texte", "statut_codage",
+        "numero_document", "id_video", "source_texte", "type_source",
+        "colonne_texte_source", "fichier_source", "ligne_csv",
+        "nom_affiche", "texte", "statut_codage",
         *codes, *("indice_" + code for code in codes),
         "incertitude_interpretation", "justification",
         "validation_humaine", "note_humaine",
         "nombre_segments", "segments_traites",
     ]
     donnees = tableau.reindex(columns=colonnes).copy()
+    # Compatibilité avec les anciennes matrices qui n'avaient pas
+    # encore de colonne dédiée au type de source.
+    if "type_source" not in tableau.columns:
+        donnees["type_source"] = donnees["source_texte"]
     for code in codes:
         manuel = "manuel_" + code
         valeurs = tableau[code].copy()
@@ -174,16 +182,19 @@ def construire_bilan_sources(
 ) -> pd.DataFrame:
     """Établir les fréquences des thèmes dans chaque source textuelle."""
     colonnes = [
-        "source_texte", "code_theme", "theme", "effectif_textes",
-        "presence", "absence", "indetermine",
+        "source_texte", "type_source", "code_theme", "theme",
+        "effectif_textes", "presence", "absence", "indetermine",
     ]
     valides = matrice.loc[matrice["statut_codage"].eq("ok")]
     lignes: list[dict[str, object]] = []
-    for source, groupe in valides.groupby("source_texte", dropna=False):
+    for (source, type_source), groupe in valides.groupby(
+        ["source_texte", "type_source"], dropna=False
+    ):
         for code, theme in zip(codes_themes(themes), valider_themes(themes)):
             valeurs = groupe["final_" + code]
             lignes.append({
                 "source_texte": source,
+                "type_source": type_source,
                 "code_theme": code,
                 "theme": theme["titre"],
                 "effectif_textes": len(groupe),
@@ -206,7 +217,8 @@ def comparer_sources_par_video(
         lambda: defaultdict(list)
     )
     for ligne in disponibles.to_dict("records"):
-        groupes[str(ligne["id_video"])][str(ligne["source_texte"])].append(ligne)
+        # Les comparaisons utilisent la provenance, pas l'en-tête CSV libre.
+        groupes[str(ligne["id_video"])][str(ligne["type_source"])].append(ligne)
     resultats: list[dict[str, object]] = []
     for id_video, sources in groupes.items():
         for code, theme in zip(codes_themes(themes), valider_themes(themes)):
@@ -275,7 +287,7 @@ def exporter_iramuteq_matrice(
                     variables.append(
                         f"*{code}_{'oui' if bool(valeur) else 'non'}"
                     )
-            source = str(ligne.get("source_texte") or "")
+            source = str(ligne.get("type_source") or "")
             if (
                 source in SOURCES_IMPORT
                 and "source_texte_" + source not in document.variables

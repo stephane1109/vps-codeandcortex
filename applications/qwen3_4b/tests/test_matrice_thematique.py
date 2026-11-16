@@ -23,7 +23,25 @@ class TestMatriceThematique(unittest.TestCase):
             {"texte_libre": "texte"},
         )
         self.assertEqual(len(docs), 2)
-        self.assertEqual(infos[1]["source_texte"], "texte_libre")
+        self.assertEqual(infos[1]["source_texte"], "texte")
+        self.assertEqual(infos[1]["type_source"], "texte_libre")
+        self.assertEqual(infos[1]["colonne_texte_source"], "texte")
+
+    def test_nom_csv_personnalise_et_type_de_source_distinct(self):
+        documents, infos = analyser_sources_csv(
+            "id_video;Texte narration IA;Publication\n"
+            "700;Description neutre;Quel scandale\n",
+            {
+                "texte_ia": "Texte narration IA",
+                "texte_auteur": "Publication",
+            },
+            colonne_id_video="id_video",
+        )
+        self.assertEqual(len(documents), 2)
+        self.assertEqual(infos[1]["source_texte"], "Texte narration IA")
+        self.assertEqual(infos[2]["source_texte"], "Publication")
+        self.assertEqual(infos[1]["type_source"], "texte_ia")
+        self.assertEqual(infos[2]["type_source"], "texte_auteur")
 
     def test_plusieurs_textes_associes_a_une_video(self):
         docs, infos = analyser_sources_csv(
@@ -43,12 +61,14 @@ class TestMatriceThematique(unittest.TestCase):
         tableau = pd.DataFrame([
             {
                 "numero_document": 1, "id_video": "700",
-                "source_texte": "texte_ia",
+                "source_texte": "Texte narration IA",
+                "type_source": "texte_ia",
                 "texte": "Texte descriptif", "statut_codage": "ok",
             },
             {
                 "numero_document": 2, "id_video": "700",
-                "source_texte": "texte_auteur",
+                "source_texte": "Publication",
+                "type_source": "texte_auteur",
                 "texte": "Texte critique", "statut_codage": "ok",
             },
         ])
@@ -62,10 +82,12 @@ class TestMatriceThematique(unittest.TestCase):
         matrice = construire_matrice(tableau, THEMES)
         self.assertTrue(matrice.at[0, "final_theme_1"])
         self.assertFalse(matrice.at[0, "theme_1"])
+        self.assertEqual(matrice.at[0, "source_texte"], "Texte narration IA")
+        self.assertEqual(matrice.at[0, "type_source"], "texte_ia")
         bilan = construire_bilan_sources(matrice, THEMES)
         self.assertEqual(
             int(bilan.loc[
-                bilan["source_texte"].eq("texte_auteur")
+                bilan["source_texte"].eq("Publication")
                 & bilan["theme"].eq("Affect"), "presence"
             ].iloc[0]), 1,
         )
@@ -77,7 +99,8 @@ class TestMatriceThematique(unittest.TestCase):
     def test_non_traite_est_distinct_de_absence(self):
         t = pd.DataFrame([{
             "numero_document": 1, "id_video": "700",
-            "source_texte": "texte_ia", "texte": "Texte",
+            "source_texte": "Texte narration IA",
+            "type_source": "texte_ia", "texte": "Texte",
             "statut_codage": "non_traite",
         }])
         matrice = construire_matrice(

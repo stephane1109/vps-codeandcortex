@@ -16,6 +16,10 @@ Dans « Définir les thèmes à partir de votre prompt », cliquer sur « Constr
 
 Les boutons « Tester sur un texte », « Analyser tous les textes restants », « Réessayer les textes en erreur » et « Arrêter l'analyse » sont conservés. L'arrêt est vérifié entre les requêtes : une requête Ollama déjà engagée peut devoir se terminer. Les annotations déjà abouties sont conservées et peuvent être exportées.
 
+## Noms de colonnes CSV et provenance (16 novembre 2026)
+
+Dans la matrice, **source_texte** affiche à l'identique le nom de la colonne CSV sélectionnée, et non une étiquette comme « commentaire ». **type_source** conserve séparément la provenance facultative (commentaire, texte IA, texte auteur, voice-to-text ou texte libre). La comparaison des sources d'une même vidéo continue à utiliser cette catégorie. Le bilan présente les deux champs, et les exports conservent les noms d'origine.
+
 ## Matrice et validation humaine
 
 Les catégories sont numérotées theme_1, theme_2, etc. Leur correspondance avec les titres et définitions du chercheur est conservée dans les fichiers grille_themes_qwen.json et parametres.json.
