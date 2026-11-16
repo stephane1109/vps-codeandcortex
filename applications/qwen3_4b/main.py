@@ -1453,12 +1453,6 @@ if themes_valides is not None:
                     "Service des modèles spécialisés indisponible : "
                     f"{type(erreur).__name__} : {erreur}"
                 )
-    st.caption(
-        "SHARE-4B est un modèle de base principalement anglophone, "
-        "non conçu pour la classification par prompt. "
-        "Son installation sur ce VPS n'est pas activée : "
-        "les poids non quantifiés dépassent 15 Go."
-    )
 
     st.subheader("Validation et correction manuelles")
     lignes_verifiables = donnees.loc[donnees["statut_codage"].eq("ok")]

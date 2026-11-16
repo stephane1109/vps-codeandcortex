@@ -18,8 +18,6 @@ Le sélecteur sous l'import propose quatre modèles génératifs dans Ollama : Q
 
 Un service `encodeurs` indépendant d'Ollama charge les poids de `dascim/juribert-base` et `Yanzhu/bertweetfr-base` par Transformers (CPU). Le conteneur `charger_encodeurs` télécharge les deux modèles sur un volume persistant lors du déploiement. Une rubrique Streamlit permet d'explorer la similarité cosinus entre un texte et les thèmes définis. **Ces scores ne sont ni des classifications ni des probabilités** : aucun entraînement supervisé sur la grille de recherche n'a été réalisé. Les annotations thématiques, les validations humaines et les CSV Qwen restent inchangés.
 
-SHARE-4B (`Joaoffg/SHARE-4B-Base-2604`) n'est pas installé automatiquement : ce modèle préentraîné de base s'adresse principalement à l'anglais et au néerlandais, n'a pas été aligné pour le chat et représente plus de 15 Go de poids en précision d'origine. Une inférence sur votre VPS nécessiterait un déploiement spécifique quantifié et la prise en compte de la licence RAIL-SHARE.
-
 ## Colonne type_source invisible
 
 Le champ interne `type_source` est conservé en mémoire pour assurer les calculs de comparaison par vidéo, mais il est masqué des tableaux de l'interface et supprimé des CSV exportés. Le champ `source_texte` conserve le nom exact de la colonne choisie dans le fichier importé.
