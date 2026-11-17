@@ -341,47 +341,15 @@ def afficher_resultats(
             fichiers[nom_graphique],
             cle_graphique=f"plan_{methode.lower()}_zoomable",
         )
-        # Regrouper les explications et le diagnostic dans un seul paragraphe.
-        textes_plan = []
         if methode == "ACM":
-            if "21_coordonnees_qualitatives_supplementaires.csv" in fichiers:
-                textes_plan.append(
-                    "Les modalités des variables supplémentaires apparaissent "
-                    "en triangles violets et restent visibles lorsque le "
-                    "filtre à p ≤ 0,05 des modalités actives est appliqué."
-                )
+            # Conserver la projection supplémentaire et l'alerte statistique,
+            # sans afficher de paragraphe explicatif sous le plan ACM.
             if "26_plan_quantitatives_supplementaires.png" in fichiers:
                 st.subheader("Projection des variables supplémentaires")
                 afficher_plan_zoomable(
                     fichiers["26_plan_quantitatives_supplementaires.png"],
                     cle_graphique="plan_acm_quantitatives_zoomable",
                 )
-                textes_plan.append(
-                    "Projection calculée par FactoMineR : les variables "
-                    "numériques sont représentées sur un graphique séparé."
-                )
-        textes_plan.append(
-            "Plan complet : toutes les modalités actives."
-            if not filtrer_modalites
-            else (
-                "Plan filtré : modalités associées significativement à une "
-                "autre modalité selon FactoMineR::descfreq (AFC)."
-                if methode == "AFC"
-                else (
-                    "Plan filtré : modalités caractérisant l'axe 1 ou 2 "
-                    "avec p ≤ 0,05 selon FactoMineR::dimdesc(), "
-                    "sans correction multiple."
-                )
-            )
-        )
-        textes_plan.append(
-            "Cette case ne modifie pas le calcul factoriel. "
-            "Les deux graphiques sont disponibles dans le ZIP. "
-            "Lorsque l'analyse ne comporte qu'un axe, le filtre n'est pas appliqué."
-        )
-        if methode == "ACM":
-            # Les effectifs et p-values affichés proviennent du même export
-            # que le filtre R, sans retraitement statistique en Python.
             nom_significativite = "significativite_modalites_factominer.csv"
             significativites = pd.read_csv(
                 io.BytesIO(fichiers[nom_significativite]),
@@ -391,14 +359,24 @@ def afficher_resultats(
             p_values = pd.to_numeric(
                 significativites["p_value_min"], errors="coerce"
             )
-            # Conserver uniquement l'alerte si aucune modalité n'est significative.
-            nombre_significatives = int(p_values.le(0.05).sum())
-            if nombre_significatives == 0:
+            if int(p_values.le(0.05).sum()) == 0:
                 st.warning(
                     "Aucune modalité n'atteint p ≤ 0,05 sur les axes "
                     "représentés. Le plan complet reste accessible."
                 )
-        if methode != "ACM":
+        else:
+            # Conserver les explications du plan factoriel de l'AFC.
+            textes_plan = [
+                "Plan complet : toutes les modalités actives."
+                if not filtrer_modalites
+                else (
+                    "Plan filtré : modalités associées significativement à une "
+                    "autre modalité selon FactoMineR::descfreq (AFC)."
+                ),
+                "Cette case ne modifie pas le calcul factoriel. "
+                "Les deux graphiques sont disponibles dans le ZIP. "
+                "Lorsque l'analyse ne comporte qu'un axe, le filtre n'est pas appliqué.",
+            ]
             st.caption(" ".join(textes_plan))
 
     with onglet_inertie:
