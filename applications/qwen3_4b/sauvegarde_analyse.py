@@ -334,3 +334,37 @@ def restaurer_resultats(
             restauration.at[indice, champ] = pd.NA if valeur is None else valeur
         nombre += 1
     return restauration, nombre
+
+
+def enregistrer_resultats_lot(cle: str, donnees: pd.DataFrame) -> int:
+    """Enregistrer en une transaction les résultats réimportés depuis un CSV."""
+    maintenant = horodatage()
+    lignes: list[tuple[str, int, str, str]] = []
+    for _, ligne in donnees.iterrows():
+        statut = str(ligne.get("statut_codage", ""))
+        if statut in ("", "vide", "non_traite", "nan"):
+            continue
+        lignes.append((
+            cle, int(ligne["numero_document"]),
+            json.dumps(extraire_resultat(ligne), ensure_ascii=False),
+            maintenant,
+        ))
+    if not lignes:
+        return 0
+    with ouvrir_base() as connexion:
+        connexion.executemany(
+            """
+            INSERT INTO resultats (
+                cle, numero_document, informations_json, modifie_le
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(cle, numero_document) DO UPDATE SET
+                informations_json = excluded.informations_json,
+                modifie_le = excluded.modifie_le
+            """,
+            lignes,
+        )
+        connexion.execute(
+            "UPDATE analyses SET modifie_le = ? WHERE cle = ?",
+            (maintenant, cle),
+        )
+    return len(lignes)
