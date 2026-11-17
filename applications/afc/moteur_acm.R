@@ -371,7 +371,7 @@ nombre_p_valides <- sum(is.finite(p_minimale))
 if (nombre_p_valides == 0L) {
   stop(
     "FactoMineR::dimdesc n'a fourni aucune p-value exploitable. ",
-    "Vérifier les catégories et le rapport méthodologique."
+    "Vérifier les catégories et les tableaux de résultats."
   )
 }
 tableau_significativite <- data.frame(
