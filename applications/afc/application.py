@@ -15,9 +15,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from interface_statistiques_descriptives import construire_onglet_statistique_descriptive
-from statistiques_descriptives import CHAMPS_ENGAGEMENT
-
 from traitement_csv import (
     concatener_fichiers_csv, decrire_variables,
     exclure_modalites_contingence, lire_csv, preparer_acm,
@@ -1253,40 +1250,33 @@ def construire_interface() -> None:
         variables_adaptees["Diagnostic"].eq("Catégorielle possible"), "Variable"
     ].tolist()
 
-    onglet_descriptif, onglet_factoriel = st.tabs(
-        ["Statistique descriptive", "AFC / ACM"]
+    methode = st.radio(
+        "Méthode d'analyse",
+        options=["AFC", "ACM"],
+        horizontal=True,
+        help=(
+            "AFC : croisement de deux variables qualitatives. "
+            "ACM : analyse simultanée de trois variables qualitatives ou davantage."
+        ),
     )
-    with onglet_descriptif:
-        construire_onglet_statistique_descriptive(donnees)
-
-    with onglet_factoriel:
-        methode = st.radio(
-            "Méthode d'analyse",
-            options=["AFC", "ACM"],
-            horizontal=True,
-            help=(
-                "AFC : croisement de deux variables qualitatives. "
-                "ACM : analyse simultanée de trois variables qualitatives ou davantage."
-            ),
+    if methode == "AFC":
+        st.caption(
+            "AFC avec FactoMineR::CA() : deux variables catégorielles croisées."
         )
-        if methode == "AFC":
-            st.caption(
-                "AFC avec FactoMineR::CA() : deux variables catégorielles croisées."
-            )
-        else:
-            st.caption(
-                "ACM avec FactoMineR::MCA() : choisir le tableau disjonctif "
-                "complet (TDC) ou le tableau de Burt pour plusieurs variables "
-                "catégorielles analysées simultanément."
-            )
-        if methode == "ACM":
-            construire_interface_acm(
-                donnees, contenu, nom_source, noms_variables, candidates
-            )
-        else:
-            construire_interface_afc(
-                donnees, contenu, nom_source, noms_variables, candidates
-            )
+    else:
+        st.caption(
+            "ACM avec FactoMineR::MCA() : choisir le tableau disjonctif "
+            "complet (TDC) ou le tableau de Burt pour plusieurs variables "
+            "catégorielles analysées simultanément."
+        )
+    if methode == "ACM":
+        construire_interface_acm(
+            donnees, contenu, nom_source, noms_variables, candidates
+        )
+    else:
+        construire_interface_afc(
+            donnees, contenu, nom_source, noms_variables, candidates
+        )
 
 
 
