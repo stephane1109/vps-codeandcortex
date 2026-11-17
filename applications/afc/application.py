@@ -904,18 +904,6 @@ def construire_interface_afc(
             "Nombre maximal de modalités par variable", min_value=2, max_value=100,
             value=40, step=1,
         )
-        options_filtre = ["(Aucun)"] + noms_variables
-        variable_filtre_choisie = st.selectbox("Filtrer sur une variable (facultatif)", options_filtre)
-        variable_filtre = None if variable_filtre_choisie == "(Aucun)" else variable_filtre_choisie
-        modalites_filtre = None
-        if variable_filtre:
-            modalites = sorted(donnees[variable_filtre].unique().tolist())
-            if len(modalites) > 300:
-                st.error("Cette variable comporte plus de 300 valeurs. Choisir un filtre catégoriel.")
-                return
-            modalites_filtre = st.multiselect(
-                "Modalités à conserver", options=modalites, default=modalites,
-            )
 
     try:
         preparation_initiale = preparer_contingence(
@@ -927,8 +915,6 @@ def construire_interface_afc(
             exclure_indeterminees=exclure_indeterminees,
             inclure_manquantes=inclure_manquantes,
             maximum_modalites=int(maximum_modalites),
-            variable_filtre=variable_filtre,
-            modalites_filtre=modalites_filtre,
         )
     except ValueError as erreur:
         st.warning(str(erreur))
@@ -947,8 +933,6 @@ def construire_interface_afc(
         "exclure_indeterminees": exclure_indeterminees,
         "inclure_manquantes": inclure_manquantes,
         "maximum_modalites": int(maximum_modalites),
-        "variable_filtre": variable_filtre,
-        "modalites_filtre": modalites_filtre,
         "effectif_initial": preparation.effectif_initial,
         "effectif_avant_exclusion_modalites": preparation.effectif_final,
         "modalites_exclues_lignes": [],
