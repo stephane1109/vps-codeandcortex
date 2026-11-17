@@ -822,7 +822,9 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
         return snapshot
 
     if snapshot["statut"] in {"actif", "attente"}:
-        _install_release_hooks(cfg, session_id)
+        # Éviter que le composant invisible crée un espace avant le titre.
+        with st.sidebar:
+            _install_release_hooks(cfg, session_id)
 
     with st.sidebar:
         st.markdown("### Accès utilisateur")
@@ -901,11 +903,14 @@ def enforce_streamlit_access(default_app_id: str, app_label: str) -> dict[str, A
                 st.error(snapshot["message"])
 
     if snapshot["statut"] == "actif":
-        st_autorefresh(interval=snapshot["heartbeat_ms"], key=f"{default_app_id}-heartbeat")
+        # Le rafraîchissement invisible reste dans la barre latérale.
+        with st.sidebar:
+            st_autorefresh(interval=snapshot["heartbeat_ms"], key=f"{default_app_id}-heartbeat")
         return snapshot
 
     if snapshot["statut"] == "attente":
-        st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
+        with st.sidebar:
+            st_autorefresh(interval=snapshot["wait_refresh_ms"], key=f"{default_app_id}-wait")
         st.warning(
             f"{app_label} est actuellement utilisée par un autre utilisateur. "
             f"Votre position dans la file d'attente : {snapshot['position'] or '?'}."
