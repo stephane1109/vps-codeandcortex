@@ -545,16 +545,24 @@ def construire_interface_acm(
 ) -> None:
     """Construire une ACM multi-variables et actualiser ses sorties."""
     st.subheader("2. Sélectionner les variables actives de l'ACM")
+    st.caption(
+        "L'ACM s'effectue exclusivement sur des variables qualitatives "
+        "(catégorielles). Les variables numériques doivent être préalablement "
+        "recodées en classes pour être utilisées comme variables actives."
+    )
     # La présélection suit l'ordre des colonnes catégorielles du CSV,
     # sans privilégier des variables liées à l'engagement.
     defaut_acm = candidates[:3]
     variables_actives = st.multiselect(
-        "Variables catégorielles actives (trois au minimum)",
+        "Variables qualitatives (catégorielles) actives — trois au minimum",
         options=noms_variables,
         default=defaut_acm[:3],
         help=(
-            "FactoMineR::MCA() analyse simultanément les modalités de toutes "
-            "les variables sélectionnées, sans transformation en tableau 2 × 2."
+            "Sélectionnez au moins trois variables qualitatives. "
+            "Les variables numériques brutes ne doivent pas être utilisées "
+            "comme variables actives ; elles peuvent être choisies comme "
+            "variables supplémentaires."
+
         ),
         key="acm_variables_actives",
     )
