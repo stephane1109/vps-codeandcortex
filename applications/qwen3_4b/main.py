@@ -401,6 +401,10 @@ def recharger_travail(identifiant: str) -> None:
     for nom, valeur in travail["widgets"].items():
         st.session_state[nom] = valeur
     st.session_state["qwen_fichiers_restaures"] = travail["fichiers"]
+    # Changer la clé du widget d'import pour vider d'anciens uploads du navigateur.
+    st.session_state["qwen_version_importation"] = (
+        st.session_state.get("qwen_version_importation", 0) + 1
+    )
     st.session_state["qwen_id_reprise"] = travail["cle"]
     st.session_state.pop("qwen_cle", None)
     st.session_state.pop("qwen_cle_importation", None)
@@ -1120,6 +1124,7 @@ if st.session_state.get("qwen_cle") != cle:
                 f"Analyse restaurée depuis le VPS : "
                 f"{nombre_restaures} texte(s) précédemment sauvegardé(s)."
             )
+            st.session_state["qwen_cle_sauvegarde"] = cle
         except (OSError, sqlite3.Error, ValueError) as erreur:
             st.error(f"Impossible de restaurer les résultats SQLite : {erreur}")
             st.stop()
