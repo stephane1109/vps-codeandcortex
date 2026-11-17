@@ -10,6 +10,7 @@ import math
 import os
 import sqlite3
 import zlib
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,48 +39,56 @@ def chemin_base() -> Path:
     return repertoire / "analyses.sqlite3"
 
 
-def ouvrir_base() -> sqlite3.Connection:
-    """Ouvrir une transaction SQLite avec verrouillage concurrent sûr."""
+@contextmanager
+def ouvrir_base():
+    """Fermer la connexion après chaque transaction, succès comme erreur."""
     chemin = chemin_base()
     connexion = sqlite3.connect(str(chemin), timeout=30)
-    connexion.execute("PRAGMA busy_timeout = 30000")
-    connexion.execute("PRAGMA journal_mode = WAL")
-    connexion.execute("PRAGMA synchronous = FULL")
-    connexion.execute("PRAGMA foreign_keys = ON")
-    connexion.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS analyses (
-            cle TEXT PRIMARY KEY,
-            cree_le TEXT NOT NULL,
-            modifie_le TEXT NOT NULL,
-            parametres_json TEXT NOT NULL,
-            widgets_json TEXT NOT NULL,
-            nombre_textes INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS fichiers (
-            cle TEXT NOT NULL,
-            position INTEGER NOT NULL,
-            nom TEXT NOT NULL,
-            contenu_compresse BLOB NOT NULL,
-            PRIMARY KEY (cle, position),
-            FOREIGN KEY (cle) REFERENCES analyses(cle) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS resultats (
-            cle TEXT NOT NULL,
-            numero_document INTEGER NOT NULL,
-            informations_json TEXT NOT NULL,
-            modifie_le TEXT NOT NULL,
-            PRIMARY KEY (cle, numero_document),
-            FOREIGN KEY (cle) REFERENCES analyses(cle) ON DELETE CASCADE
-        );
-        """
-    )
-    if chemin.exists():
-        try:
-            chemin.chmod(0o600)
-        except OSError:
-            pass
-    return connexion
+    try:
+        connexion.execute("PRAGMA busy_timeout = 30000")
+        connexion.execute("PRAGMA journal_mode = WAL")
+        connexion.execute("PRAGMA synchronous = FULL")
+        connexion.execute("PRAGMA foreign_keys = ON")
+        connexion.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS analyses (
+                cle TEXT PRIMARY KEY,
+                cree_le TEXT NOT NULL,
+                modifie_le TEXT NOT NULL,
+                parametres_json TEXT NOT NULL,
+                widgets_json TEXT NOT NULL,
+                nombre_textes INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS fichiers (
+                cle TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                nom TEXT NOT NULL,
+                contenu_compresse BLOB NOT NULL,
+                PRIMARY KEY (cle, position),
+                FOREIGN KEY (cle) REFERENCES analyses(cle) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS resultats (
+                cle TEXT NOT NULL,
+                numero_document INTEGER NOT NULL,
+                informations_json TEXT NOT NULL,
+                modifie_le TEXT NOT NULL,
+                PRIMARY KEY (cle, numero_document),
+                FOREIGN KEY (cle) REFERENCES analyses(cle) ON DELETE CASCADE
+            );
+            """
+        )
+        if chemin.exists():
+            try:
+                chemin.chmod(0o600)
+            except OSError:
+                pass
+        yield connexion
+        connexion.commit()
+    except BaseException:
+        connexion.rollback()
+        raise
+    finally:
+        connexion.close()
 
 
 def horodatage() -> str:
