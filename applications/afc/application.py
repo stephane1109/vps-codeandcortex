@@ -32,6 +32,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Appliquer le rouge aux titres, sans modifier les libellés des contrôles.
+st.markdown(
+    """
+    <style>
+    [data-testid="stApp"] h1,
+    [data-testid="stApp"] h2,
+    [data-testid="stApp"] h3 {
+        color: #C62828 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_data(show_spinner=False, max_entries=3)
 def importer_donnees(contenu: bytes, separateur: str, encodage: str) -> pd.DataFrame:
