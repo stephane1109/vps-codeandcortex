@@ -51,7 +51,7 @@ st.markdown(
 
 
 
-def afficher_plan_afc_zoomable(image_png: bytes) -> None:
+def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
     """Afficher le PNG de FactoMineR avec zoom, déplacement et réinitialisation."""
     if not image_png.startswith(b"\x89PNG\r\n\x1a\n") or len(image_png) < 24:
         st.image(image_png, use_container_width=True)
@@ -64,6 +64,17 @@ def afficher_plan_afc_zoomable(image_png: bytes) -> None:
 
     source = "data:image/png;base64," + base64.b64encode(image_png).decode("ascii")
     figure = go.Figure()
+    # Une trace transparente rend la zone graphique interactive pour le zoom.
+    figure.add_trace(
+        go.Scatter(
+            x=[0, largeur],
+            y=[0, hauteur],
+            mode="markers",
+            marker=dict(size=1, opacity=0),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
     figure.add_layout_image(
         source=source,
         xref="x",
@@ -95,7 +106,7 @@ def afficher_plan_afc_zoomable(image_png: bytes) -> None:
             "displaylogo": False,
             "modeBarButtonsToAdd": ["zoom2d", "pan2d", "resetScale2d"],
         },
-        key="plan_afc_zoomable",
+        key=cle_graphique,
     )
     st.caption(
         "Agrandir avec la molette ou sélectionner une zone ; "
@@ -304,10 +315,10 @@ def afficher_resultats(
         if methode == "AFC" and tailles_proportionnelles:
             nom_graphique += "_proportionnel"
         nom_graphique += ".png"
-        if methode == "AFC":
-            afficher_plan_afc_zoomable(fichiers[nom_graphique])
-        else:
-            st.image(fichiers[nom_graphique], use_container_width=True)
+        afficher_plan_zoomable(
+            fichiers[nom_graphique],
+            cle_graphique=f"plan_{methode.lower()}_zoomable",
+        )
         # Regrouper les explications et le diagnostic dans un seul paragraphe.
         textes_plan = []
         if methode == "ACM":
@@ -319,9 +330,9 @@ def afficher_resultats(
                 )
             if "26_plan_quantitatives_supplementaires.png" in fichiers:
                 st.subheader("Projection des variables supplémentaires")
-                st.image(
+                afficher_plan_zoomable(
                     fichiers["26_plan_quantitatives_supplementaires.png"],
-                    use_container_width=True,
+                    cle_graphique="plan_acm_quantitatives_zoomable",
                 )
                 textes_plan.append(
                     "Projection calculée par FactoMineR : les variables "
