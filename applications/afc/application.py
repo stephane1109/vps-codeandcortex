@@ -98,6 +98,11 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
         margin=dict(l=0, r=0, t=0, b=0),
         dragmode="zoom",
     )
+    # Réinitialiser explicitement la figure sans relancer FactoMineR.
+    cle_reset = f"{cle_graphique}_numero_reinitialisation"
+    if st.button("Réinitialiser le zoom", key=f"{cle_graphique}_bouton_reset"):
+        st.session_state[cle_reset] = st.session_state.get(cle_reset, 0) + 1
+    numero_reset = st.session_state.get(cle_reset, 0)
     st.plotly_chart(
         figure,
         use_container_width=True,
@@ -106,11 +111,13 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
             "displaylogo": False,
             "modeBarButtonsToAdd": ["zoom2d", "pan2d", "resetScale2d"],
         },
-        key=cle_graphique,
+        key=f"{cle_graphique}_{numero_reset}",
     )
     st.caption(
         "Agrandir avec la molette ou sélectionner une zone ; "
-        "déplacer avec l'outil main ; réinitialiser avec l'outil de la barre."
+        "déplacer avec l'outil main ; utiliser « Réinitialiser le zoom » pour "
+        "revenir au plan entier. En mode plein écran, utiliser Échap "
+        "ou l'icône de réduction en haut à droite pour revenir à l'interface."
     )
 
 
@@ -742,24 +749,6 @@ def construire_interface_acm(
             "Nombre maximal de modalités par variable",
             min_value=2, max_value=100, value=40, step=1,
         )
-        options_filtre = ["(Aucun)"] + noms_variables
-        variable_filtre_choisie = st.selectbox(
-            "Filtrer sur une variable (facultatif)", options_filtre
-        )
-        variable_filtre = (
-            None if variable_filtre_choisie == "(Aucun)"
-            else variable_filtre_choisie
-        )
-        modalites_filtre = None
-        if variable_filtre:
-            modalites = sorted(donnees[variable_filtre].unique().tolist())
-            if len(modalites) > 300:
-                st.error("Cette variable possède plus de 300 modalités.")
-                return
-            modalites_filtre = st.multiselect(
-                "Modalités à conserver", modalites, default=modalites
-            )
-
     options_preparation = dict(
         donnees=donnees,
         variables=variables_actives,
@@ -774,8 +763,6 @@ def construire_interface_acm(
         exclure_indeterminees=exclure_indeterminees,
         inclure_manquantes=inclure_manquantes,
         maximum_modalites=int(maximum_modalites),
-        variable_filtre=variable_filtre,
-        modalites_filtre=modalites_filtre,
     )
     try:
         preparation_initiale = preparer_acm(**options_preparation)
@@ -801,9 +788,6 @@ def construire_interface_acm(
             "exclure_indeterminees": exclure_indeterminees,
             "inclure_manquantes": inclure_manquantes,
             "maximum_modalites": int(maximum_modalites),
-            "variable_filtre": variable_filtre,
-            "modalites_filtre": sorted(modalites_filtre)
-            if modalites_filtre is not None else None,
         },
     }
 
