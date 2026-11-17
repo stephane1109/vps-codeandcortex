@@ -907,17 +907,20 @@ with st.expander("Aperçu des textes et variables", expanded=False):
 
 with st.expander("Paramètres complémentaires", expanded=False):
     temperature = st.slider(
-        "Température du modèle", 0.0, 0.8, 0.2, 0.05
+        "Température du modèle", 0.0, 0.8, 0.2, 0.05,
+        key="qwen_temperature",
     )
     contexte_general = st.text_area(
         "Contexte analytique facultatif commun aux commentaires",
         height=100,
+        key="qwen_contexte_general",
         help="Aucune vidéo, image ou donnée sonore n'est récupérée automatiquement.",
     )
     variables = [col for col in tableau if col.startswith("variable_")]
     contexte_variables = st.multiselect(
         "Variables étoilées incluses dans le contexte",
         variables,
+        key="qwen_contexte_variables",
         help="Les métadonnées ne remplacent pas les indices textuels.",
     )
     montrer_uniquement_valides = st.checkbox(
@@ -1101,9 +1104,42 @@ if st.session_state.get("qwen_cle") != cle:
         tableau_initial = initialiser_annotations_matrice(
             tableau_initial, themes_valides
         )
+    # Recharger toutes les lignes sauvegardées avant tout nouveau traitement.
+    if st.session_state.get("qwen_id_reprise") == cle:
+        try:
+            tableau_initial, nombre_restaures = restaurer_resultats(
+                tableau_initial, cle
+            )
+            st.session_state["qwen_message_reprise"] = (
+                f"Analyse restaurée depuis le VPS : "
+                f"{nombre_restaures} texte(s) précédemment sauvegardé(s)."
+            )
+        except (OSError, sqlite3.Error, ValueError) as erreur:
+            st.error(f"Impossible de restaurer les résultats SQLite : {erreur}")
+            st.stop()
     st.session_state["qwen_donnees"] = tableau_initial
     st.session_state["qwen_message"] = ""
     st.session_state.pop("qwen_test_rapide", None)
+
+
+def initialiser_sauvegarde_courante() -> None:
+    """Enregistrer le corpus et la grille avant d'exécuter le moindre calcul."""
+    try:
+        enregistrer_analyse(
+            cle=cle,
+            parametres={**configuration, "signature": signature},
+            widgets=capter_reglages_reprise(),
+            fichiers=list(fichiers),
+            nombre_textes=len(tableau),
+        )
+        st.session_state["qwen_cle_sauvegarde"] = cle
+    except (OSError, sqlite3.Error, ValueError) as erreur:
+        st.error(
+            "L'analyse n'a pas démarré : le volume de sauvegarde est "
+            f"indisponible ({type(erreur).__name__} : {erreur}). "
+            "Aucune inférence ne doit commencer sans sauvegarde."
+        )
+        st.stop()
 
 
 checkpoint = st.file_uploader(
