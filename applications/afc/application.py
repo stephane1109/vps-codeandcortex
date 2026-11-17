@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 import os
 import shutil
+import struct
 import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from traitement_csv import (
@@ -45,6 +48,59 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+
+def afficher_plan_afc_zoomable(image_png: bytes) -> None:
+    """Afficher le PNG de FactoMineR avec zoom, déplacement et réinitialisation."""
+    if not image_png.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or len(image_png) < 24:
+        st.image(image_png, use_container_width=True)
+        return
+
+    largeur, hauteur = struct.unpack(">II", image_png[16:24])
+    if largeur <= 0 or hauteur <= 0:
+        st.image(image_png, use_container_width=True)
+        return
+
+    source = "data:image/png;base64," + base64.b64encode(image_png).decode("ascii")
+    figure = go.Figure()
+    figure.add_layout_image(
+        source=source,
+        xref="x",
+        yref="y",
+        x=0,
+        y=hauteur,
+        sizex=largeur,
+        sizey=hauteur,
+        sizing="stretch",
+        layer="below",
+    )
+    figure.update_xaxes(visible=False, range=[0, largeur], constrain="domain")
+    figure.update_yaxes(
+        visible=False,
+        range=[0, hauteur],
+        scaleanchor="x",
+        scaleratio=1,
+    )
+    figure.update_layout(
+        height=max(450, min(850, round(hauteur * 0.8))),
+        margin=dict(l=0, r=0, t=0, b=0),
+        dragmode="zoom",
+    )
+    st.plotly_chart(
+        figure,
+        use_container_width=True,
+        config={
+            "scrollZoom": True,
+            "displaylogo": False,
+            "modeBarButtonsToAdd": ["zoom2d", "pan2d", "resetScale2d"],
+        },
+        key="plan_afc_zoomable",
+    )
+    st.caption(
+        "Agrandir avec la molette ou sélectionner une zone ; "
+        "déplacer avec l'outil main ; réinitialiser avec l'outil de la barre."
+    )
 
 
 @st.cache_data(show_spinner=False, max_entries=3)
@@ -235,7 +291,10 @@ def afficher_resultats(
             if filtrer_modalites
             else "13_plan_factoriel.png"
         )
-        st.image(fichiers[nom_graphique], use_container_width=True)
+        if methode == "AFC":
+            afficher_plan_afc_zoomable(fichiers[nom_graphique])
+        else:
+            st.image(fichiers[nom_graphique], use_container_width=True)
         # Regrouper les explications et le diagnostic dans un seul paragraphe.
         textes_plan = []
         if methode == "ACM":
