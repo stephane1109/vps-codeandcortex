@@ -738,7 +738,7 @@ def construire_interface_acm(
     )
 
     st.subheader("3. Paramètres de préparation et de calcul")
-    col_param, col_filtre = st.columns(2)
+    col_param, col_options = st.columns(2)
     with col_param:
         uniquement_retenues = st.checkbox(
             "Conserver uniquement les publications retenues",
@@ -750,17 +750,13 @@ def construire_interface_acm(
             value=False,
             disabled="publication_id" not in donnees.columns,
         )
+    with col_options:
         exclure_indeterminees = st.checkbox(
             "Exclure les modalités indéterminées", value=True
         )
         inclure_manquantes = st.checkbox(
             "Conserver les valeurs manquantes comme une modalité distincte",
             value=False,
-        )
-    with col_filtre:
-        maximum_modalites = st.number_input(
-            "Nombre maximal de modalités par variable",
-            min_value=2, max_value=100, value=40, step=1,
         )
     options_preparation = dict(
         donnees=donnees,
@@ -775,7 +771,6 @@ def construire_interface_acm(
         dedoublonner=dedoublonner,
         exclure_indeterminees=exclure_indeterminees,
         inclure_manquantes=inclure_manquantes,
-        maximum_modalites=int(maximum_modalites),
     )
     try:
         preparation_initiale = preparer_acm(**options_preparation)
@@ -800,8 +795,7 @@ def construire_interface_acm(
             "dedoublonner": dedoublonner,
             "exclure_indeterminees": exclure_indeterminees,
             "inclure_manquantes": inclure_manquantes,
-            "maximum_modalites": int(maximum_modalites),
-        },
+            },
     }
 
     parametres = dict(
@@ -885,7 +879,7 @@ def construire_interface_afc(
         )
 
     st.subheader("3. Paramètres de préparation et de calcul")
-    col_param, col_filtre = st.columns(2)
+    col_param, col_options = st.columns(2)
     with col_param:
         uniquement_retenues = st.checkbox(
             "Conserver uniquement les publications retenues",
@@ -897,16 +891,11 @@ def construire_interface_afc(
             value=False,
             disabled="publication_id" not in donnees.columns,
         )
+    with col_options:
         exclure_indeterminees = st.checkbox("Exclure les modalités indéterminées", value=True)
         inclure_manquantes = st.checkbox(
             "Conserver les valeurs manquantes comme une modalité distincte", value=False
         )
-    with col_filtre:
-        maximum_modalites = st.number_input(
-            "Nombre maximal de modalités par variable", min_value=2, max_value=100,
-            value=40, step=1,
-        )
-
     try:
         preparation_initiale = preparer_contingence(
             donnees=donnees,
@@ -916,8 +905,7 @@ def construire_interface_afc(
             dedoublonner=dedoublonner,
             exclure_indeterminees=exclure_indeterminees,
             inclure_manquantes=inclure_manquantes,
-            maximum_modalites=int(maximum_modalites),
-        )
+            )
     except ValueError as erreur:
         st.warning(str(erreur))
         return
@@ -934,7 +922,6 @@ def construire_interface_afc(
         "dedoublonner": dedoublonner,
         "exclure_indeterminees": exclure_indeterminees,
         "inclure_manquantes": inclure_manquantes,
-        "maximum_modalites": int(maximum_modalites),
         "effectif_initial": preparation.effectif_initial,
         "effectif_avant_exclusion_modalites": preparation.effectif_final,
         "modalites_exclues_lignes": [],
