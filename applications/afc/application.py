@@ -45,11 +45,11 @@ st.html(
     [data-testid="stApp"] h3 {
         color: #C62828 !important;
     }
-    /* Supprimer entièrement la marge et le retrait supérieurs du contenu. */
+    /* Garder le titre visible sous la barre supérieure de Streamlit. */
     [data-testid="stMainBlockContainer"],
     [data-testid="stMain"] .block-container,
     .stMainBlockContainer {
-        padding-top: 0 !important;
+        padding-top: 3.5rem !important;
         margin-top: 0 !important;
     }
     </style>
