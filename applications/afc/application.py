@@ -991,7 +991,7 @@ def construire_interface_afc(
 
 def construire_interface() -> None:
     """Importer un ou plusieurs CSV et proposer les analyses conservées."""
-    st.title("Analyses des correspondances — FactoMineR")
+    st.title("Analyses Factorielles des Correspondances — FactoMineR")
     st.caption("version 0.1 - 17-11-2026")
     st.subheader("1. Importer un ou plusieurs fichiers CSV")
     colonne_choix, colonne_fichier = st.columns([1, 2])
