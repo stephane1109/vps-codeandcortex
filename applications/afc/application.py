@@ -36,8 +36,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Appliquer le rouge aux titres, sans modifier les libellés des contrôles.
-st.markdown(
+# Appliquer les styles sans ajouter de bloc vide avant le titre principal.
+st.html(
     """
     <style>
     [data-testid="stApp"] h1,
@@ -45,13 +45,15 @@ st.markdown(
     [data-testid="stApp"] h3 {
         color: #C62828 !important;
     }
-    /* Réduire l'espace vide au-dessus du titre de l'application. */
-    [data-testid="stMainBlockContainer"] {
-        padding-top: 1rem !important;
+    /* Supprimer entièrement la marge et le retrait supérieurs du contenu. */
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stMain"] .block-container,
+    .stMainBlockContainer {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
     </style>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 
