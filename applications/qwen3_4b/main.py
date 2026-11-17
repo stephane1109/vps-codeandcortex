@@ -38,8 +38,8 @@ from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
 from sauvegarde_analyse import (
-    enregistrer_analyse, enregistrer_resultat, lister_analyses,
-    charger_analyse, restaurer_resultats,
+    enregistrer_analyse, enregistrer_resultat, enregistrer_resultats_lot,
+    lister_analyses, charger_analyse, restaurer_resultats,
 )
 
 st.set_page_config(page_title="Qwen — analyse de corpus", layout="wide")
@@ -1170,11 +1170,21 @@ if checkpoint is not None and st.button(
                 "texte": str,
             },
         )
-        st.session_state["qwen_donnees"] = restaurer_checkpoint(
+        resultats_repris = restaurer_checkpoint(
             st.session_state["qwen_donnees"],
             anciens, signature, cle, themes_valides,
         )
-        st.success("Résultats restaurés. Vous pouvez poursuivre les analyses.")
+        # Enregistrer également le CSV restauré sur le volume du VPS.
+        initialiser_sauvegarde_courante()
+        nombre_enregistres = enregistrer_resultats_lot(
+            cle, resultats_repris
+        )
+        st.session_state["qwen_donnees"] = resultats_repris
+        st.success(
+            "Résultats restaurés. "
+            f"{nombre_enregistres} ligne(s) conservée(s) sur disque. "
+            "Vous pouvez poursuivre les analyses."
+        )
     except (ValueError, pd.errors.ParserError) as erreur:
         st.error(f"Reprise impossible : {erreur}")
 
