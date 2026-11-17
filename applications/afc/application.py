@@ -203,7 +203,7 @@ def executer_moteur_r(
             if chemin.is_file()
         }
         attendus = {
-            "00_rapport_afc.txt", "06_valeurs_propres_inerties.csv",
+            "06_valeurs_propres_inerties.csv",
             "13_plan_factoriel.png", "16_resultats_statistiques.csv",
             "significativite_modalites_factominer.csv",
         }
@@ -257,8 +257,7 @@ def afficher_resultats(
     if methode == "AFC":
         st.caption(
             "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
-            "Le rapport méthodologique utilise le résumé natif de FactoMineR "
-            "ou, pour une AFC à un seul axe, les matrices natives de CA()."
+            "Les coordonnées et les inerties proviennent directement de FactoMineR::CA()."
         )
     else:
         libelle_mode = (
@@ -272,8 +271,8 @@ def afficher_resultats(
             "coordonnées proviennent de FactoMineR::MCA()."
         )
 
-    onglet_plan, onglet_inertie, onglet_matrices, onglet_rapport = st.tabs(
-        ["Plan factoriel", "Inerties", "Tableaux", "Rapport méthodologique"]
+    onglet_plan, onglet_inertie, onglet_matrices = st.tabs(
+        ["Plan factoriel", "Inerties", "Tableaux"]
     )
     with onglet_plan:
         filtrer_modalites = st.checkbox(
@@ -450,12 +449,6 @@ def afficher_resultats(
             file_name=tableau_selectionne,
             mime="text/csv",
         )
-    with onglet_rapport:
-        nom_rapport = (
-            "00_rapport_afc.txt" if methode == "AFC"
-            else "00_rapport_acm.txt"
-        )
-        st.text(fichiers[nom_rapport].decode("utf-8"))
 
 
 
@@ -554,7 +547,7 @@ def executer_moteur_acm(
             if chemin.is_file()
         }
         attendus = {
-            "00_rapport_acm.txt", "01_donnees_acm_filtrees.csv",
+            "01_donnees_acm_filtrees.csv",
             "06_valeurs_propres_inerties.csv",
             "07_coordonnees_modalites.csv",
             "08_contributions_modalites.csv",
