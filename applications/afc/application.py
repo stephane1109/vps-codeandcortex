@@ -310,7 +310,6 @@ def afficher_resultats(
             st.caption(" ".join(textes_plan))
 
     with onglet_inertie:
-        st.image(fichiers["15_inerties.png"], use_container_width=True)
         st.subheader("Inertie des axes factoriels (%)")
         tableau_inerties = preparer_tableau_inerties(
             fichiers["06_valeurs_propres_inerties.csv"]
