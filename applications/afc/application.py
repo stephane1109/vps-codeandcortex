@@ -236,9 +236,11 @@ def afficher_resultats(
             else "13_plan_factoriel.png"
         )
         st.image(fichiers[nom_graphique], use_container_width=True)
+        # Regrouper les explications et le diagnostic dans un seul paragraphe.
+        textes_plan = []
         if methode == "ACM":
             if "21_coordonnees_qualitatives_supplementaires.csv" in fichiers:
-                st.caption(
+                textes_plan.append(
                     "Les modalités des variables supplémentaires apparaissent "
                     "en triangles violets et restent visibles lorsque le "
                     "filtre à p ≤ 0,05 des modalités actives est appliqué."
@@ -249,11 +251,11 @@ def afficher_resultats(
                     fichiers["26_plan_quantitatives_supplementaires.png"],
                     use_container_width=True,
                 )
-                st.caption(
+                textes_plan.append(
                     "Projection calculée par FactoMineR : les variables "
                     "numériques sont représentées sur un graphique séparé."
                 )
-        st.caption(
+        textes_plan.append(
             "Plan complet : toutes les modalités actives."
             if not filtrer_modalites
             else (
@@ -267,7 +269,7 @@ def afficher_resultats(
                 )
             )
         )
-        st.caption(
+        textes_plan.append(
             "Cette case ne modifie pas le calcul factoriel. "
             "Les deux graphiques sont disponibles dans le ZIP. "
             "Lorsque l'analyse ne comporte qu'un axe, le filtre n'est pas appliqué."
@@ -297,14 +299,13 @@ def afficher_resultats(
                 f"{nombre_valides} p-value(s) exploitables ; "
                 f"p minimale = {valeur_p}."
             )
+            textes_plan.append(diagnostic_p)
+            st.caption(" ".join(textes_plan))
             if nombre_significatives == 0:
                 st.warning(
-                    diagnostic_p
-                    + " Aucune modalité n'atteint p ≤ 0,05 sur les axes "
+                    "Aucune modalité n'atteint p ≤ 0,05 sur les axes "
                     "représentés. Le plan complet reste accessible."
                 )
-            else:
-                st.caption(diagnostic_p)
             with st.expander(
                 "Contrôler les p-values de toutes les modalités",
                 expanded=False,
@@ -331,6 +332,9 @@ def afficher_resultats(
                     mime="text/csv",
                     key="telecharger_pvalues_acm",
                 )
+        if methode != "ACM":
+            st.caption(" ".join(textes_plan))
+
     with onglet_inertie:
         st.image(fichiers["15_inerties.png"], use_container_width=True)
         st.subheader("Inertie des axes factoriels (%)")
