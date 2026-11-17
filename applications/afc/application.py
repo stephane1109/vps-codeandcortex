@@ -303,24 +303,35 @@ def afficher_resultats(
                 "Les calculs, inerties et exports restent inchangés."
             ),
         )
-        tailles_proportionnelles = False
+        mode_taille_afc = "Taille uniforme"
         if methode == "AFC":
-            tailles_proportionnelles = st.checkbox(
-                "Taille des modalités proportionnelle à leur effectif",
-                value=False,
+            mode_taille_afc = st.radio(
+                "Taille des modalités",
+                options=[
+                    "Taille uniforme",
+                    "Taille proportionnelle aux effectifs",
+                    "Taille proportionnelle à la contribution aux axes 1 et 2",
+                ],
+                index=0,
+                key="afc_mode_taille_modalites",
                 help=(
-                    "La surface des symboles reflète la fréquence des modalités "
-                    "dans le tableau de contingence analysé. Les coordonnées "
-                    "et les calculs FactoMineR restent inchangés."
+                    "Effectifs : fréquences marginales des modalités. "
+                    "Contribution : contributions natives de FactoMineR::CA() "
+                    "aux axes représentés, pondérées par leurs valeurs propres. "
+                    "Cette option n'est pas un test du χ² ni une p-value."
                 ),
-                key="afc_tailles_proportionnelles",
             )
         nom_graphique = (
             "13_plan_factoriel_significatif" if filtrer_modalites
             else "13_plan_factoriel"
         )
-        if methode == "AFC" and tailles_proportionnelles:
-            nom_graphique += "_proportionnel"
+        if methode == "AFC":
+            if mode_taille_afc == "Taille proportionnelle aux effectifs":
+                nom_graphique += "_proportionnel"
+            elif mode_taille_afc == (
+                "Taille proportionnelle à la contribution aux axes 1 et 2"
+            ):
+                nom_graphique += "_contributions"
         nom_graphique += ".png"
         afficher_plan_zoomable(
             fichiers[nom_graphique],
