@@ -283,6 +283,7 @@ def lancer_analyse(
     contexte_variables: list[str],
     temperature: float,
     modele: str,
+    cle_sauvegarde: str,
 ) -> tuple[int, int, bool]:
     """Analyser automatiquement toutes les lignes sélectionnées, sans lots visibles."""
     nombre_total = len(indices)
@@ -348,6 +349,11 @@ def lancer_analyse(
                         or "unexpected eof" in str(erreur).lower()
                     ) else erreurs_consecutives + 1
                 )
+            # Écriture transactionnelle avant l'itération suivante.
+            enregistrer_resultat(
+                cle_sauvegarde, int(ligne["numero_document"]),
+                donnees.loc[indice],
+            )
             barre.progress(
                 round(position * 100 / max(1, nombre_total)),
                 text=f"Textes examinés : {position} / {nombre_total}",
@@ -1257,6 +1263,8 @@ if MODELE_EST_SPECIALISE:
         on_click=demander_arret_analyse,
         help="Arrêt entre deux textes, sans effacer les résultats calculés.",
     )
+    if test_encodeur or tous_encodeur or relancer_encodeur:
+        initialiser_sauvegarde_courante()
     if test_encodeur:
         indice = min(
             lignes_restantes[:200],
@@ -1279,6 +1287,10 @@ if MODELE_EST_SPECIALISE:
             donnees.at[indice, "statut_codage"] = statut_reussite
             donnees.at[indice, "erreur_codage"] = ""
             st.session_state["qwen_donnees"] = donnees
+            enregistrer_resultat(
+                cle, int(donnees.at[indice, "numero_document"]),
+                donnees.loc[indice],
+            )
         except (requests.RequestException, ValueError, KeyError) as erreur:
             st.session_state["qwen_test_rapide"] = {
                 "reussi": False,
@@ -1319,6 +1331,10 @@ if MODELE_EST_SPECIALISE:
                     )
                     nombre_erreurs += 1
                 st.session_state["qwen_donnees"] = donnees
+                enregistrer_resultat(
+                    cle, int(donnees.at[indice, "numero_document"]),
+                    donnees.loc[indice],
+                )
                 avancement.progress(
                     position / max(1, len(indices)),
                     text=f"Textes examinés : {position}/{len(indices)}",
@@ -1641,6 +1657,8 @@ colonne_arret.button(
         "La requête déjà envoyée peut devoir se terminer avant l'arrêt."
     ),
 )
+if tester or lancer or relancer:
+    initialiser_sauvegarde_courante()
 if tester:
     # Le bouton de test ne doit jamais parcourir un texte long segment après
     # segment. Retenir un texte court, ou seulement le début d'un texte long.
@@ -1697,6 +1715,10 @@ if tester:
         donnees.at[indice_test, "statut_codage"] = "ok"
         donnees.at[indice_test, "erreur_codage"] = ""
         st.session_state["qwen_donnees"] = donnees
+        enregistrer_resultat(
+            cle, int(donnees.at[indice_test, "numero_document"]),
+            donnees.loc[indice_test],
+        )
     # Si un extrait a été testé, le document original reste non traité.
     st.rerun()
 
@@ -1706,6 +1728,7 @@ if lancer or relancer:
     termines, nombre_erreurs, interrompu = lancer_analyse(
         donnees, indices, prompt, themes_valides,
         contexte_general, contexte_variables, float(temperature), MODELE,
+        cle,
     )
     st.session_state["qwen_donnees"] = donnees
     if st.session_state.get("qwen_arret_demande", False):
@@ -2051,6 +2074,12 @@ if themes_valides is not None:
             )
             donnees.at[indice, "note_humaine"] = note
             st.session_state["qwen_donnees"] = donnees
+            # Les validations humaines doivent survivre au rechargement du navigateur.
+            if st.session_state.get("qwen_cle_sauvegarde") == cle:
+                enregistrer_resultat(
+                    cle, int(donnees.at[indice, "numero_document"]),
+                    donnees.loc[indice],
+                )
             st.success("Validation humaine enregistrée dans la matrice.")
             st.rerun()
 
