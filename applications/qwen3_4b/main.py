@@ -6,6 +6,7 @@ import hmac
 import io
 import json
 import os
+import sqlite3
 import time
 import zipfile
 from dataclasses import replace
@@ -36,6 +37,10 @@ from analyse_specialisee import (
 from lecture_commentaires import obtenir_apercu_csv
 from preparation_analyse import evaluer_commandes_analyse
 from lecture_iramuteq import analyser_corpus, exporter_csv, tableau_documents
+from sauvegarde_analyse import (
+    enregistrer_analyse, enregistrer_resultat, lister_analyses,
+    charger_analyse, restaurer_resultats,
+)
 
 st.set_page_config(page_title="Qwen — analyse de corpus", layout="wide")
 
@@ -360,9 +365,112 @@ def lancer_analyse(
     return termines, erreurs, interruption_service
 
 
+def capter_reglages_reprise() -> dict[str, object]:
+    """Conserver les réglages nécessaires pour restaurer les widgets et la grille."""
+    noms_exacts = {
+        "qwen_prompt_matrice", "qwen_modele_selectionne",
+        "qwen_approche_specialisee", "qwen_id_grille_libre",
+        "qwen_themes_proposes", "qwen_origine_grille",
+        "qwen_temperature", "qwen_contexte_general",
+        "qwen_contexte_variables",
+    }
+    prefixes = (
+        "qwen_texte_csv_", "qwen_auteur_csv_", "qwen_type_source_",
+        "qwen_id_video_", "qwen_comparer_sources_",
+        "qwen_autre_source_", "qwen_titre_libre_", "qwen_definition_libre_",
+    )
+    return {
+        nom: valeur
+        for nom, valeur in st.session_state.items()
+        if nom in noms_exacts or nom.startswith(prefixes)
+    }
+
+
+def recharger_travail(identifiant: str) -> None:
+    """Restaurer corpus, choix et grille avant la création des widgets Streamlit."""
+    travail = charger_analyse(identifiant)
+    noms_widget = set(capter_reglages_reprise())
+    for nom in noms_widget:
+        del st.session_state[nom]
+    for nom, valeur in travail["widgets"].items():
+        st.session_state[nom] = valeur
+    st.session_state["qwen_fichiers_restaures"] = travail["fichiers"]
+    st.session_state["qwen_id_reprise"] = travail["cle"]
+    st.session_state.pop("qwen_cle", None)
+    st.session_state.pop("qwen_cle_importation", None)
+    st.session_state.pop("qwen_documents_importes", None)
+    st.session_state.pop("qwen_tableau_importe", None)
+    st.session_state.pop("qwen_donnees", None)
+    st.session_state.pop("qwen_test_rapide", None)
+    st.session_state["qwen_message_reprise"] = (
+        "Travail enregistré sur le VPS rechargé. "
+        "Les résultats déjà sauvegardés seront restaurés automatiquement."
+    )
+
+
 authentifier()
 
+# Une nouvelle connexion Streamlit ne doit pas effacer un travail enregistré.
+if not st.session_state.get("qwen_reprise_initialisee"):
+    st.session_state["qwen_reprise_initialisee"] = True
+    try:
+        travaux_enregistres = lister_analyses()
+        if travaux_enregistres:
+            recharger_travail(travaux_enregistres[0]["cle"])
+    except (OSError, sqlite3.Error, ValueError, KeyError) as erreur:
+        st.session_state["qwen_erreur_reprise"] = str(erreur)
+
 st.title("Qwen — analyser un corpus avec votre prompt")
+if st.session_state.get("qwen_erreur_reprise"):
+    st.error(
+        "La lecture de la sauvegarde persistante a échoué : "
+        + st.session_state["qwen_erreur_reprise"]
+    )
+    st.stop()
+try:
+    travaux_enregistres = lister_analyses()
+except (OSError, sqlite3.Error) as erreur:
+    st.error(f"Le volume des sauvegardes est indisponible : {erreur}")
+    st.stop()
+if travaux_enregistres:
+    with st.expander("Analyses enregistrées sur le VPS", expanded=False):
+        identifiants_travaux = [ligne["cle"] for ligne in travaux_enregistres]
+        libelles_travaux = {
+            ligne["cle"]: (
+                f"{ligne['modifie_le']} — {ligne['modele']} — "
+                f"{ligne['nombre_sauvegardes']} / {ligne['nombre_textes']} "
+                "texte(s) sauvegardé(s)"
+            )
+            for ligne in travaux_enregistres
+        }
+        choix_travail = st.selectbox(
+            "Travail à récupérer",
+            identifiants_travaux,
+            format_func=lambda identifiant: libelles_travaux[identifiant],
+            key="qwen_choix_historique",
+        )
+        if st.button("Restaurer ce travail enregistré"):
+            try:
+                recharger_travail(choix_travail)
+                st.rerun()
+            except (OSError, sqlite3.Error, ValueError) as erreur:
+                st.error(f"Restauration impossible : {erreur}")
+        if st.button("Nouvel import (conserver les sauvegardes)"):
+            for nom in tuple(capter_reglages_reprise()):
+                del st.session_state[nom]
+            for nom in (
+                "qwen_fichiers_restaures", "qwen_id_reprise",
+                "qwen_cle", "qwen_cle_importation",
+                "qwen_documents_importes", "qwen_tableau_importe",
+                "qwen_donnees", "qwen_test_rapide", "qwen_message_reprise",
+            ):
+                st.session_state.pop(nom, None)
+            st.session_state["qwen_version_importation"] = (
+                st.session_state.get("qwen_version_importation", 0) + 1
+            )
+            st.rerun()
+if st.session_state.get("qwen_message_reprise"):
+    st.info(st.session_state["qwen_message_reprise"])
 # La mention de version reste sous le titre, avec le modèle réellement sélectionné.
 mention_version = st.empty()
 # Un seul parcours : le même prompt et la même matrice pour les commentaires
@@ -397,15 +505,25 @@ st.caption(
 if not prompt.strip():
     st.error("Vous devez saisir un prompt avant de lancer l'analyse.")
 
-fichiers = st.file_uploader(
+fichiers_televerses = st.file_uploader(
     "Importer un ou plusieurs fichiers : commentaires CSV ou corpus IRaMuTeQ TXT",
     type=["csv", "txt"], accept_multiple_files=True,
+    key=f"qwen_fichiers_source_{st.session_state.get('qwen_version_importation', 0)}",
     help=(
         "CSV : choisissez librement la colonne des commentaires et, "
         "si elle existe, celle des auteurs. Séparateurs : point-virgule, "
         "virgule ou tabulation. TXT : en-têtes IRaMuTeQ ****."
     ),
 )
+if fichiers_televerses:
+    # Un nouveau téléversement remplace la reprise visible, jamais l'archive disque.
+    fichiers = fichiers_televerses
+    if st.session_state.get("qwen_fichiers_restaures"):
+        st.session_state["qwen_fichiers_restaures"] = []
+        st.session_state.pop("qwen_id_reprise", None)
+        st.session_state.pop("qwen_message_reprise", None)
+else:
+    fichiers = st.session_state.get("qwen_fichiers_restaures", [])
 # Réunir les modèles génératifs Ollama et les encodeurs français dans un menu.
 # Le choix initial suit la configuration Coolify, sans modifier ses variables.
 if "qwen_modele_selectionne" not in st.session_state:
