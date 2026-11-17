@@ -564,59 +564,63 @@ def construire_interface_acm(
         "(catégorielles). Les variables numériques doivent être préalablement "
         "recodées en classes pour être utilisées comme variables actives."
     )
-    # Seules les colonnes reconnues comme catégorielles sont proposées.
-    # Les autres restent visibles, mais dans un champ grisé non modifiable.
+    # Afficher toutes les colonnes dans un seul sélecteur.
+    # Les cases non admissibles sont grisées et impossibles à cocher.
     descriptions_acm = decrire_variables(donnees)
-    variables_autorisees = descriptions_acm.loc[
-        descriptions_acm["Diagnostic"].eq("Catégorielle possible"), "Variable"
-    ].tolist()
-    variables_exclues = descriptions_acm.loc[
-        descriptions_acm["Diagnostic"].ne("Catégorielle possible"),
-        ["Variable", "Diagnostic"],
+    diagnostics_acm = dict(zip(
+        descriptions_acm["Variable"], descriptions_acm["Diagnostic"]
+    ))
+    variables_autorisees = [
+        nom for nom in noms_variables
+        if diagnostics_acm[nom] == "Catégorielle possible"
     ]
 
-    # Écarter également une ancienne sélection enregistrée dans la session.
-    selection_precedente = st.session_state.get("acm_variables_actives")
-    if selection_precedente is not None:
-        st.session_state["acm_variables_actives"] = [
-            nom for nom in selection_precedente if nom in variables_autorisees
-        ]
+    # Réinitialiser les sélections uniquement à l'import d'un autre corpus.
+    empreinte_selection = hashlib.sha256(contenu).hexdigest()
+    if st.session_state.get("acm_empreinte_selection") != empreinte_selection:
+        for cle in list(st.session_state):
+            if cle.startswith("acm_choix_variable_"):
+                del st.session_state[cle]
+        st.session_state["acm_empreinte_selection"] = empreinte_selection
+
     if not variables_autorisees:
         st.warning(
             "Aucune variable catégorielle utilisable n'a été identifiée "
             "dans ce fichier CSV."
         )
-    variables_actives = st.multiselect(
-        "Variables qualitatives (catégorielles) actives — trois au minimum",
-        options=variables_autorisees,
-        default=[],
-        help=(
-            "Seules les variables catégorielles comportant de 2 à 40 "
-            "modalités distinctes sont proposées. Les variables numériques "
-            "brutes, les textes libres et les colonnes possédant trop de "
-            "modalités ne peuvent pas être sélectionnés comme variables actives."
-        ),
-        key="acm_variables_actives",
+
+    st.markdown(
+        "**Variables qualitatives (catégorielles) actives — trois au minimum**"
     )
-    if not variables_exclues.empty:
-        with st.expander(
-            f"Variables exclues de l'ACM ({len(variables_exclues)})",
-            expanded=False,
-        ):
-            st.caption(
-                "Ces colonnes du CSV ne sont pas sélectionnables comme "
-                "variables actives. Elles apparaissent en gris ci-dessous."
-            )
-            st.text_area(
-                "Colonnes non sélectionnables",
-                value="\n".join(
-                    f"{ligne.Variable} — {ligne.Diagnostic}"
-                    for ligne in variables_exclues.itertuples(index=False)
-                ),
-                height=min(240, max(80, 30 * len(variables_exclues))),
-                disabled=True,
-                key="acm_variables_exclues",
-            )
+    with st.popover("Choisir les variables actives", use_container_width=True):
+        st.caption(
+            "Cochez les variables à analyser. Les colonnes grisées ne "
+            "peuvent pas être sélectionnées."
+        )
+        with st.container(height=350):
+            for nom in noms_variables:
+                diagnostic = diagnostics_acm[nom]
+                autorisee = nom in variables_autorisees
+                cle_variable = (
+                    "acm_choix_variable_"
+                    + hashlib.sha256(nom.encode("utf-8")).hexdigest()[:16]
+                )
+                st.checkbox(
+                    nom if autorisee else f"{nom} — {diagnostic}",
+                    disabled=not autorisee,
+                    key=cle_variable,
+                )
+
+    variables_actives = [
+        nom for nom in noms_variables
+        if nom in variables_autorisees
+        and st.session_state.get(
+            "acm_choix_variable_"
+            + hashlib.sha256(nom.encode("utf-8")).hexdigest()[:16],
+            False,
+        )
+    ]
+    st.caption(f"{len(variables_actives)} variable(s) active(s) sélectionnée(s).")
     if len(variables_actives) < 3:
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
