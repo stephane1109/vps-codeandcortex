@@ -286,11 +286,25 @@ def afficher_resultats(
                 "Les calculs, inerties et exports restent inchangés."
             ),
         )
+        tailles_proportionnelles = False
+        if methode == "AFC":
+            tailles_proportionnelles = st.checkbox(
+                "Taille des modalités proportionnelle à leur effectif",
+                value=False,
+                help=(
+                    "La surface des symboles reflète la fréquence des modalités "
+                    "dans le tableau de contingence analysé. Les coordonnées "
+                    "et les calculs FactoMineR restent inchangés."
+                ),
+                key="afc_tailles_proportionnelles",
+            )
         nom_graphique = (
-            "13_plan_factoriel_significatif.png"
-            if filtrer_modalites
-            else "13_plan_factoriel.png"
+            "13_plan_factoriel_significatif" if filtrer_modalites
+            else "13_plan_factoriel"
         )
+        if methode == "AFC" and tailles_proportionnelles:
+            nom_graphique += "_proportionnel"
+        nom_graphique += ".png"
         if methode == "AFC":
             afficher_plan_afc_zoomable(fichiers[nom_graphique])
         else:
