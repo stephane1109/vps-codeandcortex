@@ -38,6 +38,8 @@
         "Conversion de fichier mp3 en texte avec Whisper.": "Convert MP3 files to text with Whisper.",
         "Convertir un ou plusieurs PDF en texte nettoyé compatible avec IRaMuTeQ.": "Convert one or more PDF files into cleaned text compatible with IRaMuTeQ.",
         "Conversion d’exports Europresse vers un corpus compatible avec IRaMuTeQ.": "Convert Europresse exports into an IRaMuTeQ-compatible corpus.",
+        "AFC/ACM": "CA/MCA",
+        "Analyses factorielles des correspondances (AFC et ACM) avec FactoMineR.": "Correspondence analysis (CA) and multiple correspondence analysis (MCA) using FactoMineR.",
         "Cooccurrences mot pivot": "Pivot-word co-occurrences",
         "Analyse de cooccurrences centrée sur un mot pivot.": "Co-occurrence analysis centred on a pivot word.",
         "Classification descendante hiérarchique Rainette.": "Rainette descending hierarchical classification.",
