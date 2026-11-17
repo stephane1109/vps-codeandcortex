@@ -16,3 +16,12 @@ services:
       - "8501"
     mem_limit: 3g
     cpus: 2.0
+    # Rendre Redis et les autres services Coolify accessibles depuis l'AFC.
+    networks:
+      - default
+      - coolify
+
+networks:
+  coolify:
+    external: true
+    name: coolify
