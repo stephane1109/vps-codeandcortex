@@ -560,7 +560,6 @@ def construire_interface_acm(
         descriptions_acm["Diagnostic"].ne("Catégorielle possible"),
         ["Variable", "Diagnostic"],
     ]
-    defaut_acm = variables_autorisees[:3]
 
     # Écarter également une ancienne sélection enregistrée dans la session.
     selection_precedente = st.session_state.get("acm_variables_actives")
@@ -576,7 +575,7 @@ def construire_interface_acm(
     variables_actives = st.multiselect(
         "Variables qualitatives (catégorielles) actives — trois au minimum",
         options=variables_autorisees,
-        default=defaut_acm,
+        default=[],
         help=(
             "Seules les variables catégorielles comportant de 2 à 40 "
             "modalités distinctes sont proposées. Les variables numériques "
