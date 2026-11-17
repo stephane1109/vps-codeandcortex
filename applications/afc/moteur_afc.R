@@ -262,6 +262,99 @@ dessiner_plan <- function(filtrer_modalites = FALSE, mode_taille = "uniforme") {
   }
 }
 
+
+# Le mode ggrepel produit des vues supplémentaires sans modifier le plan initial.
+chemin_script <- sub(
+  "^--file=", "",
+  grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[[1L]]
+)
+source(
+  file.path(dirname(normalizePath(chemin_script)), "etiquettes_ggrepel.R"),
+  encoding = "UTF-8"
+)
+
+dessiner_plan_sans_chevauchement <- function(
+  filtrer_modalites = FALSE, mode_taille = "uniforme"
+) {
+  lignes <- as.matrix(resultat$row$coord)
+  colonnes <- as.matrix(resultat$col$coord)
+  deux_axes <- ncol(lignes) >= 2L && ncol(colonnes) >= 2L
+  visibles_lignes <- if (deux_axes && filtrer_modalites) {
+    significativite_modalites$significative_005[
+      significativite_modalites$type_modalite == "ligne"
+    ]
+  } else {
+    rep(TRUE, nrow(lignes))
+  }
+  visibles_colonnes <- if (deux_axes && filtrer_modalites) {
+    significativite_modalites$significative_005[
+      significativite_modalites$type_modalite == "colonne"
+    ]
+  } else {
+    rep(TRUE, nrow(colonnes))
+  }
+  effectifs_lignes <- as.numeric(rowSums(tableau))
+  effectifs_colonnes <- as.numeric(colSums(tableau))
+  reference <- max(c(effectifs_lignes, effectifs_colonnes))
+  tailles_lignes <- if (mode_taille == "effectifs") {
+    5 * sqrt(effectifs_lignes / reference)
+  } else {
+    rep(3, nrow(lignes))
+  }
+  tailles_colonnes <- if (mode_taille == "effectifs") {
+    5 * sqrt(effectifs_colonnes / reference)
+  } else {
+    rep(3, nrow(colonnes))
+  }
+  points_lignes <- data.frame(
+    x = lignes[visibles_lignes, 1L],
+    y = if (deux_axes) lignes[visibles_lignes, 2L] else rep(0.12, sum(visibles_lignes)),
+    libelle = rownames(lignes)[visibles_lignes],
+    variable = rep("Modalités en lignes", sum(visibles_lignes)),
+    type = rep("Modalités en lignes", sum(visibles_lignes)),
+    taille = tailles_lignes[visibles_lignes],
+    stringsAsFactors = FALSE
+  )
+  points_colonnes <- data.frame(
+    x = colonnes[visibles_colonnes, 1L],
+    y = if (deux_axes) colonnes[visibles_colonnes, 2L] else rep(-0.12, sum(visibles_colonnes)),
+    libelle = rownames(colonnes)[visibles_colonnes],
+    variable = rep("Modalités en colonnes", sum(visibles_colonnes)),
+    type = rep("Modalités en colonnes", sum(visibles_colonnes)),
+    taille = tailles_colonnes[visibles_colonnes],
+    stringsAsFactors = FALSE
+  )
+  points <- rbind(points_lignes, points_colonnes)
+  abscisses <- if (nrow(points)) points$x else c(-1, 1)
+  ordonnees <- if (nrow(points)) points$y else c(-1, 1)
+  inerties <- resultat$eig[, 2L]
+  nom_x <- sprintf("Axe 1 (%.1f %% d'inertie)", inerties[[1L]])
+  nom_y <- if (deux_axes) {
+    sprintf("Axe 2 (%.1f %% d'inertie)", inerties[[2L]])
+  } else {
+    "Disposition illustrative (aucun axe 2)"
+  }
+  note <- if (deux_axes && filtrer_modalites) {
+    sprintf("Modalités significatives : %d/%d (FactoMineR::descfreq, p <= 0,05).",
+            nombre_significatives, nrow(significativite_modalites))
+  } else if (!deux_axes) {
+    "Un seul axe : décalage vertical illustratif, sans filtrage."
+  } else {
+    "Plan complet : toutes les modalités actives sont représentées."
+  }
+  dessiner_plan_ggrepel(
+    points = points,
+    couleurs = c("Modalités en lignes" = "#2166AC",
+                 "Modalités en colonnes" = "#B2182B"),
+    formes = c("Modalités en lignes" = 16, "Modalités en colonnes" = 17),
+    titre = paste("AFC :", variable_lignes, "x", variable_colonnes),
+    axe_x = nom_x, axe_y = nom_y,
+    limites_x = limites_axes(c(0, abscisses)),
+    limites_y = limites_axes(c(0, ordonnees), 0.3),
+    note = note, titre_couleurs = "Modalités", titre_formes = "Modalités"
+  )
+}
+
 dessiner_inerties <- function() {
   inerties <- resultat$eig[, 2L]
   par(mar = c(5, 5, 4, 2))
@@ -282,6 +375,28 @@ gg("13_plan_factoriel_significatif_proportionnel.png", function() dessiner_plan(
 gg("13_plan_factoriel_significatif.png", function() dessiner_plan(TRUE))
 grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel_significatif.pdf"), width = 12, height = 8.5)
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
+
+# Vues optionnelles ggrepel : toutes les combinaisons du plan et de la taille.
+gg("13_plan_factoriel_ggrepel.png",
+   function() dessiner_plan_sans_chevauchement(FALSE))
+gg("13_plan_factoriel_proportionnel_ggrepel.png",
+   function() dessiner_plan_sans_chevauchement(FALSE, "effectifs"))
+gg("13_plan_factoriel_significatif_ggrepel.png",
+   function() dessiner_plan_sans_chevauchement(TRUE))
+gg("13_plan_factoriel_significatif_proportionnel_ggrepel.png",
+   function() dessiner_plan_sans_chevauchement(TRUE, "effectifs"))
+grDevices::pdf(
+  file.path(dossier_sortie, "14_plan_factoriel_ggrepel.pdf"),
+  width = 12, height = 8.5
+)
+tryCatch(dessiner_plan_sans_chevauchement(FALSE),
+         finally = grDevices::dev.off())
+grDevices::pdf(
+  file.path(dossier_sortie, "14_plan_factoriel_significatif_ggrepel.pdf"),
+  width = 12, height = 8.5
+)
+tryCatch(dessiner_plan_sans_chevauchement(TRUE),
+         finally = grDevices::dev.off())
 gg("15_inerties.png", dessiner_inerties)
 
 # Indicateurs issus des résultats FactoMineR, sans nouveau test.
