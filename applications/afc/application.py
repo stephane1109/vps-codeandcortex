@@ -45,6 +45,10 @@ st.markdown(
     [data-testid="stApp"] h3 {
         color: #C62828 !important;
     }
+    /* Réduire l'espace vide au-dessus du titre de l'application. */
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 1rem !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
