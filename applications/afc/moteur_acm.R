@@ -283,6 +283,21 @@ if (length(niveaux_modalites) != length(noms_modalites)) {
     "au nombre de coordonnées des modalités FactoMineR."
   )
 }
+
+# Effectifs de chaque modalité active, dans le même ordre que les
+# coordonnées renvoyées par FactoMineR. Les modalités supplémentaires
+# ne participent pas au calcul de la taille des points.
+effectifs_observes_modalites <- unlist(
+  lapply(variables_actives, function(variable) {
+    as.numeric(table(variable)[levels(variable)])
+  }),
+  use.names = FALSE
+)
+if (length(effectifs_observes_modalites) != nrow(coordonnees) ||
+    anyNA(effectifs_observes_modalites) ||
+    any(effectifs_observes_modalites <= 0)) {
+  stop("Les effectifs des modalités actives ne correspondent pas au plan ACM.")
+}
 identifiants_dimdesc <- paste0(
   variables_modalites, "=", niveaux_modalites
 )
@@ -443,7 +458,7 @@ limites_axes <- function(valeurs, proportion = 0.22) {
   marge <- if (amplitude < 1e-9) 0.75 else amplitude * proportion
   bornes + c(-marge, marge)
 }
-dessiner_plan <- function(filtrer_modalites = FALSE) {
+dessiner_plan <- function(filtrer_modalites = FALSE, tailles_proportionnelles = FALSE) {
   x <- coordonnees[, 1L]
   y <- if (deux_axes) coordonnees[, 2L] else rep(0, nrow(coordonnees))
   visibles <- if (deux_axes && filtrer_modalites) {
@@ -489,10 +504,19 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
     main = titre_graphique
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
+  # Conserver la taille uniforme par défaut. En mode proportionnel,
+  # la surface des points reflète l'effectif observé de chaque modalité.
+  tailles_modalites <- if (tailles_proportionnelles) {
+    2.8 * sqrt(
+      effectifs_observes_modalites / max(effectifs_observes_modalites)
+    )
+  } else {
+    rep(1.1, length(effectifs_observes_modalites))
+  }
   if (any(visibles)) {
     points(
       x[visibles], y[visibles], pch = 16,
-      col = couleurs_modalites[visibles], cex = 1.1
+      col = couleurs_modalites[visibles], cex = tailles_modalites[visibles]
     )
     text(
       x[visibles], y[visibles],
@@ -617,6 +641,14 @@ dessiner_png <- function(nom, action) {
   tryCatch(action(), finally = grDevices::dev.off())
 }
 dessiner_png("13_plan_factoriel.png", function() dessiner_plan(FALSE))
+dessiner_png(
+  "13_plan_factoriel_proportionnel.png",
+  function() dessiner_plan(FALSE, TRUE)
+)
+dessiner_png(
+  "13_plan_factoriel_significatif_proportionnel.png",
+  function() dessiner_plan(TRUE, TRUE)
+)
 grDevices::pdf(
   file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 14, height = 8.5
 )
