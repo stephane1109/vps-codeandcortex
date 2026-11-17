@@ -564,10 +564,11 @@ def preparer_acm(
             .replace("", "Valeur manquante")
         )
         nombre = supplementaires[nom].nunique()
-        if nombre < 2 or nombre > 100:
+        if nombre < 2:
             raise ValueError(
                 f"Variable qualitative supplémentaire '{nom}' : "
-                f"{nombre} modalités ; entre 2 et 100 sont nécessaires."
+                f"{nombre} modalité ; deux modalités distinctes au minimum "
+                "sont nécessaires."
             )
     for nom in supplementaires_quantitatives:
         supplementaires[nom] = convertir_supplementaire_quantitative(
