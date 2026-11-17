@@ -752,12 +752,9 @@ def construire_interface_acm(
         st.warning(str(erreur))
         return
 
-    st.subheader("4. Vérifier et modifier les modalités de l'ACM")
-    st.caption(
-        "Les modalités exclues retirent les observations correspondantes "
-        "avant l'ACM. Les autres variables et le CSV original restent intacts. "
-        "La modification d'une exclusion relance automatiquement FactoMineR."
-    )
+    # Préparer l'ACM directement avec les variables et les filtres retenus.
+    # La sélection et l'exclusion manuelles des modalités sont supprimées.
+    preparation = preparation_initiale
     portee = {
         "empreinte_sha256": hashlib.sha256(contenu).hexdigest(),
         "variables_actives": variables_actives,
@@ -778,103 +775,6 @@ def construire_interface_acm(
             if modalites_filtre is not None else None,
         },
     }
-    identifiant_portee = hashlib.sha256(
-        json.dumps(portee, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    ).hexdigest()
-    if st.session_state.get("acm_portee") != identifiant_portee:
-        st.session_state["acm_portee"] = identifiant_portee
-        for indice in range(len(noms_variables)):
-            st.session_state.pop(f"acm_exclure_{indice}", None)
-        st.session_state["acm_exclusions_precedentes"] = (
-            identifiant_portee, ()
-        )
-
-    exclusions = {}
-    colonnes = st.columns(2)
-    for indice, nom in enumerate(variables_actives):
-        with colonnes[indice % 2]:
-            valeurs_possibles = sorted(
-                preparation_initiale.donnees[nom].unique().tolist()
-            )
-            exclusions[nom] = st.multiselect(
-                f"Supprimer des modalités — {nom}",
-                options=valeurs_possibles,
-                key=f"acm_exclure_{indice}",
-            )
-    if st.button(
-        "Rétablir toutes les modalités de l'ACM",
-        disabled=not any(exclusions.values()),
-    ):
-        for indice in range(len(variables_actives)):
-            st.session_state[f"acm_exclure_{indice}"] = []
-        st.rerun()
-
-    selection_exclusions = (
-        identifiant_portee,
-        methode_calcul,
-        tuple(
-            (nom, tuple(sorted(valeurs)))
-            for nom, valeurs in exclusions.items()
-        ),
-    )
-    recalcul_automatique = (
-        selection_exclusions
-        != st.session_state.get("acm_exclusions_precedentes")
-    )
-    st.session_state["acm_exclusions_precedentes"] = selection_exclusions
-    try:
-        preparation = preparer_acm(
-            **options_preparation, modalites_a_exclure=exclusions
-        )
-    except ValueError as erreur:
-        st.warning(str(erreur))
-        st.dataframe(
-            preparation_initiale.donnees.head(NOMBRE_LIGNES_APERCU),
-            use_container_width=True,
-        )
-        return
-
-    metriques = st.columns(3)
-    metriques[0].metric("Observations analysables", preparation.effectif_final)
-    metriques[1].metric("Variables actives", len(variables_actives))
-    metriques[2].metric(
-        "Modalités actives",
-        sum(preparation.donnees[nom].nunique() for nom in variables_actives),
-    )
-    if variables_supplementaires:
-        st.caption(
-            "Variables supplémentaires : "
-            + " ; ".join(variables_supplementaires)
-            + ". Elles ne contribuent pas à la construction des axes."
-        )
-    tableau_effectifs = pd.concat(
-        [
-            pd.DataFrame({
-                "Variable": nom,
-                "Modalité": valeurs.index.tolist(),
-                "Effectif": valeurs.values.tolist(),
-            })
-            for nom in variables_actives
-            for valeurs in [preparation.donnees[nom].value_counts()]
-        ],
-        ignore_index=True,
-    )
-    st.dataframe(
-        tableau_effectifs, use_container_width=True, hide_index=True
-    )
-    with st.expander("Afficher les observations conservées", expanded=False):
-        st.dataframe(
-            preparation.donnees.head(NOMBRE_LIGNES_APERCU),
-            use_container_width=True, hide_index=True,
-        )
-    st.caption(
-        f"Import : {preparation.effectif_initial} ; "
-        f"après filtres : {preparation.effectif_apres_filtre} ; "
-        f"après dédoublonnage : {preparation.effectif_apres_dedoublonnage} ; "
-        f"avant exclusion des modalités : "
-        f"{preparation.effectif_avant_exclusion_modalites} ; "
-        f"observations conservées : {preparation.effectif_final}."
-    )
 
     parametres = dict(
         portee,
@@ -893,13 +793,9 @@ def construire_interface_acm(
     lancement_manuel = st.button(
         "Lancer l'ACM avec FactoMineR", type="primary"
     )
-    if lancement_manuel or recalcul_automatique:
+    if lancement_manuel:
         try:
-            with st.spinner(
-                "Recalcul automatique de l'ACM avec FactoMineR..."
-                if recalcul_automatique and not lancement_manuel
-                else "Calcul de l'ACM avec FactoMineR..."
-            ):
+            with st.spinner("Calcul de l'ACM avec FactoMineR..."):
                 resultats = executer_moteur_acm(
                     donnees=preparation.donnees,
                     nom_source=nom_source,
