@@ -1281,10 +1281,12 @@ def construire_interface() -> None:
         variables_adaptees["Diagnostic"].eq("Catégorielle possible"), "Variable"
     ].tolist()
 
+    st.subheader("2. Méthode d'analyse")
     methode = st.radio(
         "Méthode d'analyse",
         options=["AFC", "ACM"],
         horizontal=True,
+        label_visibility="collapsed",
         help=(
             "AFC : croisement de deux variables qualitatives. "
             "ACM : analyse simultanée de trois variables qualitatives ou davantage."
