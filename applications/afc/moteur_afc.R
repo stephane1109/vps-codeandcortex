@@ -210,7 +210,6 @@ dessiner_plan <- function(filtrer_modalites = FALSE, mode_taille = "uniforme") {
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
   # Les effectifs marginaux proviennent du tableau de contingence analysé.
-  # Les contributions aux axes proviennent exclusivement de FactoMineR::CA().
   effectifs_lignes <- as.numeric(rowSums(tableau))
   effectifs_colonnes <- as.numeric(colSums(tableau))
   tailles_lignes <- rep(1.2, length(effectifs_lignes))
@@ -221,36 +220,6 @@ dessiner_plan <- function(filtrer_modalites = FALSE, mode_taille = "uniforme") {
     effectif_reference <- max(c(effectifs_lignes, effectifs_colonnes))
     tailles_lignes <- 2.8 * sqrt(effectifs_lignes / effectif_reference)
     tailles_colonnes <- 2.8 * sqrt(effectifs_colonnes / effectif_reference)
-  } else if (mode_taille == "contributions") {
-    # Contribution à l'inertie du plan : moyenne des contributions natives
-    # pondérée par les valeurs propres des axes effectivement représentés.
-    axes_representes <- seq_len(if (deux_axes) 2L else 1L)
-    valeurs_propres <- as.numeric(resultat$eig[axes_representes, 1L])
-    contributions_lignes <- as.matrix(resultat$row$contrib)[
-      , axes_representes, drop = FALSE
-    ]
-    contributions_colonnes <- as.matrix(resultat$col$contrib)[
-      , axes_representes, drop = FALSE
-    ]
-    contribution_plan_lignes <- as.vector(
-      contributions_lignes %*% valeurs_propres / sum(valeurs_propres)
-    )
-    contribution_plan_colonnes <- as.vector(
-      contributions_colonnes %*% valeurs_propres / sum(valeurs_propres)
-    )
-    contribution_reference <- max(
-      c(contribution_plan_lignes, contribution_plan_colonnes),
-      na.rm = TRUE
-    )
-    if (is.finite(contribution_reference) && contribution_reference > 0) {
-      # Une taille minimale conserve les modalités à faible contribution visibles.
-      tailles_lignes <- pmax(
-        0.45, 2.8 * sqrt(pmax(contribution_plan_lignes, 0) / contribution_reference)
-      )
-      tailles_colonnes <- pmax(
-        0.45, 2.8 * sqrt(pmax(contribution_plan_colonnes, 0) / contribution_reference)
-      )
-    }
   }
   if (any(visibles_lignes)) {
     points(abscisses_lignes[visibles_lignes], ordonnees_lignes[visibles_lignes],
@@ -310,8 +279,6 @@ grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, h
 tryCatch(dessiner_plan(FALSE), finally = grDevices::dev.off())
 gg("13_plan_factoriel_proportionnel.png", function() dessiner_plan(FALSE, "effectifs"))
 gg("13_plan_factoriel_significatif_proportionnel.png", function() dessiner_plan(TRUE, "effectifs"))
-gg("13_plan_factoriel_contributions.png", function() dessiner_plan(FALSE, "contributions"))
-gg("13_plan_factoriel_significatif_contributions.png", function() dessiner_plan(TRUE, "contributions"))
 gg("13_plan_factoriel_significatif.png", function() dessiner_plan(TRUE))
 grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel_significatif.pdf"), width = 12, height = 8.5)
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
