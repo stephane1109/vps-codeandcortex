@@ -22,6 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     r-base-core \
     r-cran-factominer \
+    r-cran-ggrepel \
     curl \
     fonts-dejavu-core \
     ca-certificates \
@@ -30,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
-    && Rscript -e "stopifnot(requireNamespace('FactoMineR', quietly = TRUE))"
+    && Rscript -e "stopifnot(requireNamespace('FactoMineR', quietly = TRUE), requireNamespace('ggplot2', quietly = TRUE), requireNamespace('ggrepel', quietly = TRUE))"
 
 RUN useradd --create-home --uid 10001 analyste
 COPY --chown=analyste:analyste . /app
