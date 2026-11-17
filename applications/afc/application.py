@@ -391,21 +391,8 @@ def afficher_resultats(
             p_values = pd.to_numeric(
                 significativites["p_value_min"], errors="coerce"
             )
-            nombre_valides = int(p_values.notna().sum())
+            # Conserver uniquement l'alerte si aucune modalité n'est significative.
             nombre_significatives = int(p_values.le(0.05).sum())
-            p_minimale = p_values.min()
-            valeur_p = (
-                f"{p_minimale:.3g}".replace(".", ",")
-                if pd.notna(p_minimale) else "indisponible"
-            )
-            diagnostic_p = (
-                f"Vérification ACM : {nombre_significatives} modalité(s) "
-                f"significative(s) sur {len(significativites)} ; "
-                f"{nombre_valides} p-value(s) exploitables ; "
-                f"p minimale = {valeur_p}."
-            )
-            textes_plan.append(diagnostic_p)
-            st.caption(" ".join(textes_plan))
             if nombre_significatives == 0:
                 st.warning(
                     "Aucune modalité n'atteint p ≤ 0,05 sur les axes "
