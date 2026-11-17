@@ -137,7 +137,7 @@ class TestSauvegardeAnalyse(unittest.TestCase):
         self.assertEqual(enregistrer_resultats_lot("test", tableau), 2)
         resultat, nombre = restaurer_resultats(self.tableau_initial(), "test")
         self.assertEqual(nombre, 2)
-        self.assertIs(resultat.at[0, "theme_1"], False)
+        self.assertFalse(bool(resultat.at[0, "theme_1"]))
         self.assertEqual(
             resultat.at[1, "erreur_codage"], "Interruption Ollama"
         )
