@@ -15,7 +15,6 @@ import zipfile
 from pathlib import Path
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 from traitement_csv import (
@@ -61,6 +60,9 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
     if largeur <= 0 or hauteur <= 0:
         st.image(image_png, use_container_width=True)
         return
+
+    # Charger Plotly seulement lorsqu’un résultat factoriel doit être affiché.
+    import plotly.graph_objects as go
 
     source = "data:image/png;base64," + base64.b64encode(image_png).decode("ascii")
     figure = go.Figure()
