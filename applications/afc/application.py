@@ -17,6 +17,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from ticket_gate import enforce_streamlit_access
+
 from traitement_csv import (
     concatener_fichiers_csv, decrire_variables,
     lire_csv, preparer_acm,
@@ -936,6 +938,8 @@ def construire_interface_afc(
 
 def construire_interface() -> None:
     """Importer un ou plusieurs CSV et proposer les analyses conservées."""
+    # Vérifier l’accès à la session avant toute analyse et afficher sa libération.
+    enforce_streamlit_access("afc", "AFC/ACM")
     st.title("Analyses Factorielles des Correspondances — FactoMineR")
     st.caption("version 0.1 - 17-11-2026")
     st.subheader("1. Importer un ou plusieurs fichiers CSV")
