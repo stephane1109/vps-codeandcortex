@@ -545,18 +545,9 @@ def construire_interface_acm(
 ) -> None:
     """Construire une ACM multi-variables et actualiser ses sorties."""
     st.subheader("2. Sélectionner les variables actives de l'ACM")
-    defaut_acm = [
-        nom for nom in [
-            "vues_classe", "classe_taux_engagement", "type_media",
-            "likes_classe", "commentaires_classe",
-        ]
-        if nom in candidates
-    ]
-    for nom in candidates:
-        if len(defaut_acm) >= 3:
-            break
-        if nom not in defaut_acm:
-            defaut_acm.append(nom)
+    # La présélection suit l'ordre des colonnes catégorielles du CSV,
+    # sans privilégier des variables liées à l'engagement.
+    defaut_acm = candidates[:3]
     variables_actives = st.multiselect(
         "Variables catégorielles actives (trois au minimum)",
         options=noms_variables,
@@ -601,15 +592,9 @@ def construire_interface_acm(
             "Variable",
         ]
     )
-    aliases_mesures = {
-        alias.casefold()
-        for noms_alias in CHAMPS_ENGAGEMENT.values()
-        for alias in noms_alias
-    }
     variables_supplementaires_quantitatives = [
         nom for nom in variables_supplementaires
-        if nom.casefold() in aliases_mesures
-        or nom in candidats_numeriques
+        if nom in candidats_numeriques
     ]
     variables_supplementaires_qualitatives = [
         nom for nom in variables_supplementaires
