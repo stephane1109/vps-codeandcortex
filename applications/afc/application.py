@@ -278,10 +278,16 @@ def afficher_resultats(
         "Modalités significatives",
         valeurs.get("Modalités significatives (p <= 0,05)", "—"),
     )
-    indicateurs[3].metric(
-        "Inertie totale",
-        valeurs.get("Inertie totale (FactoMineR)", "—"),
-    )
+    # Arrondir seulement l'affichage du score, sans modifier les valeurs R.
+    inertie_totale_brute = valeurs.get("Inertie totale (FactoMineR)", "—")
+    try:
+        inertie_totale_affichee = (
+            f"{float(inertie_totale_brute.replace(',', '.').replace(' ', '')):.6f}"
+            .replace(".", ",")
+        )
+    except (ValueError, AttributeError):
+        inertie_totale_affichee = inertie_totale_brute
+    indicateurs[3].metric("Inertie totale", inertie_totale_affichee)
     if methode == "AFC":
         st.caption(
             "Résultats issus de FactoMineR::CA() et FactoMineR::descfreq(). "
