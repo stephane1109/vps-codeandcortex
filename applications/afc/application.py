@@ -107,17 +107,17 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
         figure,
         use_container_width=True,
         config={
-            "scrollZoom": True,
+            "scrollZoom": False,
             "displaylogo": False,
             "modeBarButtonsToAdd": ["zoom2d", "pan2d", "resetScale2d"],
         },
         key=f"{cle_graphique}_{numero_reset}",
     )
     st.caption(
-        "Agrandir avec la molette ou sélectionner une zone ; "
-        "déplacer avec l'outil main ; utiliser « Réinitialiser le zoom » pour "
-        "revenir au plan entier. En mode plein écran, utiliser Échap "
-        "ou l'icône de réduction en haut à droite pour revenir à l'interface."
+        "Pour zoomer, tracer un rectangle sur le graphique ou utiliser "
+        "les outils de zoom en haut à droite. La molette sert à faire "
+        "défiler la page. « Réinitialiser le zoom » rétablit le plan entier. "
+        "En plein écran, utiliser l'icône de réduction en haut à droite."
     )
 
 
