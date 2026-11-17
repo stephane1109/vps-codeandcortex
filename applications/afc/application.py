@@ -100,6 +100,12 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
         margin=dict(l=0, r=0, t=0, b=0),
         dragmode="zoom",
     )
+    # Permettre le zoom direct à la molette sans piéger le défilement de la page.
+    zoom_molette = st.checkbox(
+        "Activer le zoom à la molette (décocher pour faire défiler la page)",
+        value=True,
+        key=f"{cle_graphique}_zoom_molette",
+    )
     # Réinitialiser explicitement la figure sans relancer FactoMineR.
     cle_reset = f"{cle_graphique}_numero_reinitialisation"
     if st.button("Réinitialiser le zoom", key=f"{cle_graphique}_bouton_reset"):
@@ -109,16 +115,18 @@ def afficher_plan_zoomable(image_png: bytes, cle_graphique: str) -> None:
         figure,
         use_container_width=True,
         config={
-            "scrollZoom": False,
+            "scrollZoom": zoom_molette,
             "displaylogo": False,
+            "displayModeBar": True,
             "modeBarButtonsToAdd": ["zoom2d", "pan2d", "resetScale2d"],
         },
         key=f"{cle_graphique}_{numero_reset}",
     )
     st.caption(
-        "Pour zoomer, tracer un rectangle sur le graphique ou utiliser "
-        "les outils de zoom en haut à droite. La molette sert à faire "
-        "défiler la page. « Réinitialiser le zoom » rétablit le plan entier. "
+        "Zoomer avec la molette ou sélectionner une zone en maintenant le clic "
+        "gauche de la souris. Pour faire défiler la page avec la molette, "
+        "décocher « Activer le zoom à la molette ». "
+        "« Réinitialiser le zoom » rétablit le plan entier. "
         "En plein écran, utiliser l'icône de réduction en haut à droite."
     )
 
@@ -312,15 +320,13 @@ def afficher_resultats(
                 options=[
                     "Taille uniforme",
                     "Taille proportionnelle aux effectifs",
-                    "Taille proportionnelle à la contribution aux axes 1 et 2",
                 ],
                 index=0,
                 key="afc_mode_taille_modalites",
                 help=(
-                    "Effectifs : fréquences marginales des modalités. "
-                    "Contribution : contributions natives de FactoMineR::CA() "
-                    "aux axes représentés, pondérées par leurs valeurs propres. "
-                    "Cette option n'est pas un test du χ² ni une p-value."
+                    "La taille des symboles est uniforme par défaut. "
+                    "Le mode proportionnel utilise les effectifs marginaux "
+                    "du tableau de contingence, sans modifier les calculs FactoMineR."
                 ),
             )
         nom_graphique = (
@@ -330,10 +336,6 @@ def afficher_resultats(
         if methode == "AFC":
             if mode_taille_afc == "Taille proportionnelle aux effectifs":
                 nom_graphique += "_proportionnel"
-            elif mode_taille_afc == (
-                "Taille proportionnelle à la contribution aux axes 1 et 2"
-            ):
-                nom_graphique += "_contributions"
         nom_graphique += ".png"
         afficher_plan_zoomable(
             fichiers[nom_graphique],
