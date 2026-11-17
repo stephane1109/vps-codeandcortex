@@ -78,6 +78,14 @@ docker compose down
 
 Le `Dockerfile` installe automatiquement Python, R et le paquet Debian `r-cran-factominer` ; aucune configuration manuelle de R n'est nécessaire pour l'exécution dans Docker.
 
+## Contrôle d'accès VPS
+
+L'application utilise le même module `ticket_gate.py` que les autres applications Streamlit du VPS. Après validation du ticket Redis, un panneau « Accès utilisateur » apparaît dans la barre latérale, avec le bouton « Libérer l'accès ». La session peut également être placée en file d'attente, quitter cette file ou reprendre l'accès après libération. Le tableau de bord utilise l'identifiant exact `afc`.
+
+Dans Coolify, définir `REDIS_URL` avec **la même URL Redis que celle utilisée par le tableau de bord VPS**. Cette valeur est une variable de déploiement confidentielle et ne doit jamais être inscrite dans le dépôt GitHub. Les réglages du conteneur comprennent `APP_TICKET_ID=afc`, `APP_TICKET_MAX_ACTIVE=1`, `APP_TICKET_COST=4`, `APP_TICKET_ENFORCED=1` et `APP_TICKET_RELEASE_URL=https://vps.codeandcortex.fr/api/tickets/release`. Les autres paramètres `APP_TICKET_*` permettent de configurer la durée des tickets et les délais de rafraîchissement.
+
+Si Redis n'est pas configuré ou ne répond pas, le contrôle d'accès refuse l'ouverture des analyses et affiche un message explicite. Le bouton « Libérer l'accès » retire le ticket courant de Redis ; les analyses et les résultats de FactoMineR ne sont pas modifiés par cette gestion des sessions.
+
 ## Exécution hors Docker
 
 Installer **R**, le paquet R **FactoMineR** et les dépendances Python :
