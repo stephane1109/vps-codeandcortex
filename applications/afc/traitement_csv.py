@@ -271,7 +271,7 @@ def preparer_tableau_inerties(contenu: bytes) -> pd.DataFrame:
     })
 
 
-def decrire_variables(donnees: pd.DataFrame, maximum_modalites: int = 40) -> pd.DataFrame:
+def decrire_variables(donnees: pd.DataFrame, maximum_modalites: int | None = None) -> pd.DataFrame:
     """Établit l'inventaire des colonnes et distingue les variables à recoder."""
     descriptions = []
     for nom in donnees.columns:
@@ -286,7 +286,7 @@ def decrire_variables(donnees: pd.DataFrame, maximum_modalites: int = 40) -> pd.
         numerique_continue = (proportion_numerique > 0.95 and uniques > max(12, int(len(presentes) * 0.1)))
         statut = (
             "À recoder (numérique)" if numerique_continue else
-            "À regrouper (nombreuses modalités)" if uniques > maximum_modalites else
+            "À regrouper (nombreuses modalités)" if maximum_modalites is not None and uniques > maximum_modalites else
             "Insuffisante (< 2 modalités)" if uniques < 2 else
             "Catégorielle possible"
         )
@@ -307,7 +307,7 @@ def preparer_contingence(
     dedoublonner: bool = False,
     exclure_indeterminees: bool = True,
     inclure_manquantes: bool = False,
-    maximum_modalites: int = 40,
+    maximum_modalites: int | None = None,
     variable_filtre: str | None = None,
     modalites_filtre: list[str] | None = None,
 ) -> PreparationAFC:
@@ -348,7 +348,7 @@ def preparer_contingence(
             f"AFC impossible : {nombre_lignes} modalité(s) en lignes et "
             f"{nombre_colonnes} en colonnes. Il faut au moins 2 modalités de chaque côté."
         )
-    if max(nombre_lignes, nombre_colonnes) > maximum_modalites:
+    if maximum_modalites is not None and max(nombre_lignes, nombre_colonnes) > maximum_modalites:
         raise ValueError(
             f"Trop de modalités : {nombre_lignes} × {nombre_colonnes} "
             f"(maximum autorisé : {maximum_modalites} par variable). "
@@ -455,7 +455,7 @@ def preparer_acm(
     dedoublonner: bool = False,
     exclure_indeterminees: bool = True,
     inclure_manquantes: bool = False,
-    maximum_modalites: int = 40,
+    maximum_modalites: int | None = None,
     variable_filtre: str | None = None,
     modalites_filtre: list[str] | None = None,
     modalites_a_exclure: dict[str, list[str]] | None = None,
@@ -560,7 +560,7 @@ def preparer_acm(
                 f"ACM impossible : la variable '{nom}' ne possède plus "
                 "au moins deux modalités actives."
             )
-        if nombre > maximum_modalites:
+        if maximum_modalites is not None and nombre > maximum_modalites:
             raise ValueError(
                 f"ACM impossible : '{nom}' possède {nombre} modalités "
                 f"(maximum : {maximum_modalites})."
