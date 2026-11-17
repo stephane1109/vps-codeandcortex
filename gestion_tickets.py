@@ -66,6 +66,12 @@ APPLICATIONS_PAR_DEFAUT = {
         "max_active": 2,
         "cout": 2,
     },
+    "afc": {
+        "label": "AFC/ACM",
+        "max_active": 1,
+        "cout": 4,
+        "duree_ticket": 3600,
+    },
     "cooccurrencesmotpivot": {
         "label": "Cooccurrences mot pivot",
         "max_active": 3,
