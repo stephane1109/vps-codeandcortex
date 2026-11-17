@@ -53,7 +53,7 @@ st.markdown(
 
 def afficher_plan_afc_zoomable(image_png: bytes) -> None:
     """Afficher le PNG de FactoMineR avec zoom, déplacement et réinitialisation."""
-    if not image_png.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or len(image_png) < 24:
+    if not image_png.startswith(b"\x89PNG\r\n\x1a\n") or len(image_png) < 24:
         st.image(image_png, use_container_width=True)
         return
 
