@@ -550,22 +550,60 @@ def construire_interface_acm(
         "(catégorielles). Les variables numériques doivent être préalablement "
         "recodées en classes pour être utilisées comme variables actives."
     )
-    # La présélection suit l'ordre des colonnes catégorielles du CSV,
-    # sans privilégier des variables liées à l'engagement.
-    defaut_acm = candidates[:3]
+    # Seules les colonnes reconnues comme catégorielles sont proposées.
+    # Les autres restent visibles, mais dans un champ grisé non modifiable.
+    descriptions_acm = decrire_variables(donnees)
+    variables_autorisees = descriptions_acm.loc[
+        descriptions_acm["Diagnostic"].eq("Catégorielle possible"), "Variable"
+    ].tolist()
+    variables_exclues = descriptions_acm.loc[
+        descriptions_acm["Diagnostic"].ne("Catégorielle possible"),
+        ["Variable", "Diagnostic"],
+    ]
+    defaut_acm = variables_autorisees[:3]
+
+    # Écarter également une ancienne sélection enregistrée dans la session.
+    selection_precedente = st.session_state.get("acm_variables_actives")
+    if selection_precedente is not None:
+        st.session_state["acm_variables_actives"] = [
+            nom for nom in selection_precedente if nom in variables_autorisees
+        ]
+    if not variables_autorisees:
+        st.warning(
+            "Aucune variable catégorielle utilisable n'a été identifiée "
+            "dans ce fichier CSV."
+        )
     variables_actives = st.multiselect(
         "Variables qualitatives (catégorielles) actives — trois au minimum",
-        options=noms_variables,
-        default=defaut_acm[:3],
+        options=variables_autorisees,
+        default=defaut_acm,
         help=(
-            "Sélectionnez au moins trois variables qualitatives. "
-            "Les variables numériques brutes ne doivent pas être utilisées "
-            "comme variables actives ; elles peuvent être choisies comme "
-            "variables supplémentaires."
-
+            "Seules les variables catégorielles comportant de 2 à 40 "
+            "modalités distinctes sont proposées. Les variables numériques "
+            "brutes, les textes libres et les colonnes possédant trop de "
+            "modalités ne peuvent pas être sélectionnés comme variables actives."
         ),
         key="acm_variables_actives",
     )
+    if not variables_exclues.empty:
+        with st.expander(
+            f"Variables exclues de l'ACM ({len(variables_exclues)})",
+            expanded=False,
+        ):
+            st.caption(
+                "Ces colonnes du CSV ne sont pas sélectionnables comme "
+                "variables actives. Elles apparaissent en gris ci-dessous."
+            )
+            st.text_area(
+                "Colonnes non sélectionnables",
+                value="\\n".join(
+                    f"{ligne.Variable} — {ligne.Diagnostic}"
+                    for ligne in variables_exclues.itertuples(index=False)
+                ),
+                height=min(240, max(80, 30 * len(variables_exclues))),
+                disabled=True,
+                key="acm_variables_exclues",
+            )
     if len(variables_actives) < 3:
         st.info("Sélectionnez au moins trois variables pour l'ACM.")
         return
