@@ -14,11 +14,11 @@ dessiner_plan_ggrepel <- function(
   points$variable <- factor(points$variable, levels = names(couleurs))
   points$type <- factor(points$type, levels = names(formes))
   graphique <- ggplot2::ggplot(
-    points, ggplot2::aes(x = x, y = y, colour = variable, shape = type)
+    points, ggplot2::aes(x = x, y = y, colour = variable)
   ) +
     ggplot2::geom_hline(yintercept = 0, colour = "grey75", linetype = "dashed") +
     ggplot2::geom_vline(xintercept = 0, colour = "grey75", linetype = "dashed") +
-    ggplot2::geom_point(ggplot2::aes(size = taille), na.rm = TRUE) +
+    ggplot2::geom_point(ggplot2::aes(size = taille, shape = type), na.rm = TRUE) +
     ggrepel::geom_text_repel(
       ggplot2::aes(label = libelle),
       size = 2.8, seed = 42L, max.overlaps = Inf,
