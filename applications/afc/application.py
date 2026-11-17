@@ -306,32 +306,6 @@ def afficher_resultats(
                     "Aucune modalité n'atteint p ≤ 0,05 sur les axes "
                     "représentés. Le plan complet reste accessible."
                 )
-            with st.expander(
-                "Contrôler les p-values de toutes les modalités",
-                expanded=False,
-            ):
-                colonnes_p = [
-                    "variable", "modalite", "identifiant_dimdesc", "v_test_axe_1",
-                    "p_value_axe_1", "v_test_axe_2", "p_value_axe_2",
-                    "p_value_min", "significative_005",
-                ]
-                tableau_p = significativites[
-                    [nom for nom in colonnes_p if nom in significativites]
-                ].copy()
-                if "p_value_min" in tableau_p:
-                    tableau_p = tableau_p.sort_values(
-                        "p_value_min", na_position="last"
-                    )
-                st.dataframe(
-                    tableau_p, hide_index=True, use_container_width=True,
-                )
-                st.download_button(
-                    "Télécharger les p-values des modalités (CSV)",
-                    data=fichiers[nom_significativite],
-                    file_name=nom_significativite,
-                    mime="text/csv",
-                    key="telecharger_pvalues_acm",
-                )
         if methode != "ACM":
             st.caption(" ".join(textes_plan))
 
