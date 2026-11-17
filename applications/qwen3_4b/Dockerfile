@@ -7,7 +7,8 @@ RUN useradd -m -u 10001 app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 COPY . /app
-RUN chown -R app:app /app
+RUN mkdir -p /data/analyses_qwen \
+    && chown -R app:app /app /data/analyses_qwen
 USER app
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

@@ -9,6 +9,9 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-q4_K_M}
       QWEN_NUM_CTX: ${QWEN_NUM_CTX:-2048}
       ENCODEURS_URL: http://encodeurs:8502
+      QWEN_DATA_DIR: /data/analyses_qwen
+    volumes:
+      - analyses_qwen:/data/analyses_qwen
     depends_on:
       - ollama
       - encodeurs
@@ -69,3 +72,4 @@ services:
 volumes:
   ollama_modeles:
   modeles_encodeurs:
+  analyses_qwen:

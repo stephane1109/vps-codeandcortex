@@ -77,3 +77,14 @@ L'application Streamlit écoute sur le port interne 8501 derrière le proxy HTTP
 OLLAMA_MODEL permet de choisir le modèle Qwen. QWEN_NUM_CTX règle la fenêtre de contexte (2048 tokens par défaut). QWEN_APP_MEMORY_LIMIT fixe le plafond de Streamlit (1 Gio par défaut), séparé de OLLAMA_MEMORY_LIMIT (7 Gio par défaut). Sur le VPS, contrôler les ressources avec docker stats et free -h avant d'augmenter ces limites.
 
 Une erreur HTTP 502 ou une interruption d'Ollama ne permet pas à elle seule de conclure à un problème de RAM ; consulter les journaux Docker et le proxy. La découverte thématique et la classification peuvent être imparfaites : valider manuellement un échantillon avant toute interprétation scientifique.
+
+
+## Conservation automatique des analyses et reprise après interruption (17 novembre 2026)
+
+L'application enregistre **avant le premier traitement** la copie des fichiers CSV/TXT d'origine, le prompt, les colonnes choisies, le modèle, la grille et les paramètres. Après **chaque texte** (annotation réussie ou erreur technique), elle écrit les résultats dans SQLite avec une transaction atomique. Les validations humaines sont également enregistrées. Le service Streamlit utilise un volume Docker nommé `analyses_qwen` monté sur `/data/analyses_qwen`. Les données persistent donc après un redémarrage du conteneur ou une perte de session navigateur, sauf suppression volontaire du volume ou du VPS.
+
+Après authentification, une nouvelle session recharge automatiquement la dernière analyse sauvegardée, ses fichiers et ses paramètres. L'interface « Analyses enregistrées sur le VPS » permet de choisir d'autres travaux ou de commencer un nouveau corpus sans supprimer les sauvegardes. Les lignes déjà traitées sont restaurées et l'utilisateur reprend uniquement les lignes restantes avec le bouton existant. Les CSV et le ZIP d'export restent disponibles.
+
+**Limite :** les boucles d'analyse s'exécutent encore dans la session Streamlit. Si le navigateur ou le conteneur interrompt le calcul, le travail n'avance pas hors connexion ; il peut néanmoins être repris sans perdre les résultats enregistrés. Cette amélioration n'est pas un ordonnanceur autonome ou un traitement continu en arrière-plan. Les exécutions antérieures à cette mise à jour qui n'ont pas été exportées ne peuvent pas être recréées à partir d'une session Streamlit disparue.
+
+Le SQLite contient les textes bruts : sécuriser les accès au VPS et conserver le mot de passe de l'application. La base n'est pas chiffrée par l'application. Les sauvegardes persistantes ne remplacent pas une sauvegarde externe du volume `analyses_qwen`.
