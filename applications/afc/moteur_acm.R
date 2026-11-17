@@ -586,6 +586,108 @@ dessiner_plan <- function(filtrer_modalites = FALSE, tailles_proportionnelles = 
     )
   }
 }
+
+# Les vues avec répulsion utilisent les coordonnées natives déjà calculées.
+chemin_script <- sub(
+  "^--file=", "",
+  grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[[1L]]
+)
+source(
+  file.path(dirname(normalizePath(chemin_script)), "etiquettes_ggrepel.R"),
+  encoding = "UTF-8"
+)
+
+dessiner_plan_sans_chevauchement <- function(
+  filtrer_modalites = FALSE, tailles_proportionnelles = FALSE
+) {
+  visibles <- if (deux_axes && filtrer_modalites) {
+    tableau_significativite$significative_005
+  } else {
+    rep(TRUE, nrow(coordonnees))
+  }
+  tailles_actives <- if (tailles_proportionnelles) {
+    5 * sqrt(
+      effectifs_observes_modalites / max(effectifs_observes_modalites)
+    )
+  } else {
+    rep(3, nrow(coordonnees))
+  }
+  points_actifs <- data.frame(
+    x = coordonnees[visibles, 1L],
+    y = if (deux_axes) coordonnees[visibles, 2L] else rep(0, sum(visibles)),
+    libelle = libelles_graphiques(noms_modalites[visibles]),
+    variable = variables_modalites[visibles],
+    type = rep("Actives", sum(visibles)),
+    taille = tailles_actives[visibles],
+    stringsAsFactors = FALSE
+  )
+  # Les variables illustratives sont projetées sans participer aux axes.
+  noms_sup <- if (length(indices_quali_sup)) {
+    paste0("Supplémentaire : ", colnames(donnees)[indices_quali_sup])
+  } else {
+    character(0)
+  }
+  repartition_sup <- if (length(indices_quali_sup)) {
+    vapply(donnees[, indices_quali_sup, drop = FALSE], nlevels, integer(1))
+  } else {
+    integer(0)
+  }
+  types_sup <- rep(noms_sup, times = repartition_sup)
+  nombre_sup <- if (is.null(coordonnees_quali_sup)) 0L else nrow(coordonnees_quali_sup)
+  if (length(types_sup) != nombre_sup) {
+    # Certains niveaux absents peuvent être omis dans les coordonnées natives.
+    types_sup <- rep("Modalités illustratives", nombre_sup)
+  }
+  points_sup <- if (nombre_sup) {
+    data.frame(
+      x = coordonnees_quali_sup[, 1L],
+      y = if (deux_axes) coordonnees_quali_sup[, 2L] else rep(0, nombre_sup),
+      libelle = libelles_graphiques(rownames(coordonnees_quali_sup)),
+      variable = types_sup,
+      type = rep("Illustratives", nombre_sup),
+      taille = rep(3.4, nombre_sup),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      x = numeric(0), y = numeric(0), libelle = character(0),
+      variable = character(0), type = character(0), taille = numeric(0)
+    )
+  }
+  points <- rbind(points_actifs, points_sup)
+  noms_palette_sup <- unique(types_sup)
+  palette_sup <- stats::setNames(
+    rep("#7A1FA2", length(noms_palette_sup)), noms_palette_sup
+  )
+  palette_complete <- c(couleurs_variables, palette_sup)
+  x_visibles <- if (nrow(points)) points$x else c(-1, 1)
+  y_visibles <- if (nrow(points)) points$y else c(-1, 1)
+  inerties <- resultat$eig[, 2L]
+  axe_x <- sprintf("Axe 1 (%.1f %% d'inertie)", inerties[[1L]])
+  axe_y <- if (deux_axes) {
+    sprintf("Axe 2 (%.1f %% d'inertie)", inerties[[2L]])
+  } else {
+    "Aucun axe 2"
+  }
+  note <- if (deux_axes && filtrer_modalites) {
+    sprintf("Modalités actives significatives : %d/%d (FactoMineR::dimdesc, p <= 0,05).",
+            sum(visibles), length(visibles))
+  } else if (!deux_axes) {
+    "Un seul axe factoriel : aucun filtrage appliqué."
+  } else {
+    "Plan complet : toutes les modalités actives sont affichées."
+  }
+  dessiner_plan_ggrepel(
+    points = points, couleurs = palette_complete,
+    formes = c("Actives" = 16, "Illustratives" = 17),
+    titre = titre_graphique,
+    axe_x = axe_x, axe_y = axe_y,
+    limites_x = limites_axes(c(0, x_visibles)),
+    limites_y = limites_axes(c(0, y_visibles), 0.3),
+    note = note, titre_couleurs = "Variables", titre_formes = "Statut"
+  )
+}
+
 dessiner_quanti_sup <- function() {
   # Corrélations calculées par FactoMineR : projection séparée des
   # modalités actives car les deux familles n'ont pas la même échelle.
@@ -661,6 +763,36 @@ grDevices::pdf(
   width = 14, height = 8.5
 )
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
+
+# Exports facultatifs ggrepel : vue complète/filtrée et taille des points.
+dessiner_png(
+  "13_plan_factoriel_ggrepel.png",
+  function() dessiner_plan_sans_chevauchement(FALSE)
+)
+dessiner_png(
+  "13_plan_factoriel_proportionnel_ggrepel.png",
+  function() dessiner_plan_sans_chevauchement(FALSE, TRUE)
+)
+dessiner_png(
+  "13_plan_factoriel_significatif_ggrepel.png",
+  function() dessiner_plan_sans_chevauchement(TRUE)
+)
+dessiner_png(
+  "13_plan_factoriel_significatif_proportionnel_ggrepel.png",
+  function() dessiner_plan_sans_chevauchement(TRUE, TRUE)
+)
+grDevices::pdf(
+  file.path(dossier_sortie, "14_plan_factoriel_ggrepel.pdf"),
+  width = 14, height = 8.5
+)
+tryCatch(dessiner_plan_sans_chevauchement(FALSE),
+         finally = grDevices::dev.off())
+grDevices::pdf(
+  file.path(dossier_sortie, "14_plan_factoriel_significatif_ggrepel.pdf"),
+  width = 14, height = 8.5
+)
+tryCatch(dessiner_plan_sans_chevauchement(TRUE),
+         finally = grDevices::dev.off())
 dessiner_png("15_inerties.png", dessiner_inerties)
 if (length(indices_quanti_sup)) {
   dessiner_png(
