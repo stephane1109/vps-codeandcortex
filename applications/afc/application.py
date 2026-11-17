@@ -596,7 +596,7 @@ def construire_interface_acm(
             )
             st.text_area(
                 "Colonnes non sélectionnables",
-                value="\\n".join(
+                value="\n".join(
                     f"{ligne.Variable} — {ligne.Diagnostic}"
                     for ligne in variables_exclues.itertuples(index=False)
                 ),
