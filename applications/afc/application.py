@@ -319,29 +319,28 @@ def afficher_resultats(
                 "Les calculs, inerties et exports restent inchangés."
             ),
         )
-        mode_taille_afc = "Taille uniforme"
-        if methode == "AFC":
-            mode_taille_afc = st.radio(
-                "Taille des modalités",
-                options=[
-                    "Taille uniforme",
-                    "Taille proportionnelle aux effectifs",
-                ],
-                index=0,
-                key="afc_mode_taille_modalites",
-                help=(
-                    "La taille des symboles est uniforme par défaut. "
-                    "Le mode proportionnel utilise les effectifs marginaux "
-                    "du tableau de contingence, sans modifier les calculs FactoMineR."
-                ),
-            )
+        mode_taille = st.radio(
+            "Taille des modalités",
+            options=[
+                "Taille uniforme",
+                "Taille proportionnelle aux effectifs",
+            ],
+            index=0,
+            key=f"{methode.lower()}_mode_taille_modalites",
+            help=(
+                "La taille des symboles est uniforme par défaut. "
+                "En mode proportionnel, la surface reflète les effectifs "
+                "marginaux du tableau de contingence pour l'AFC, ou "
+                "les effectifs observés des modalités actives pour l'ACM. "
+                "Les calculs FactoMineR restent inchangés."
+            ),
+        )
         nom_graphique = (
             "13_plan_factoriel_significatif" if filtrer_modalites
             else "13_plan_factoriel"
         )
-        if methode == "AFC":
-            if mode_taille_afc == "Taille proportionnelle aux effectifs":
-                nom_graphique += "_proportionnel"
+        if mode_taille == "Taille proportionnelle aux effectifs":
+            nom_graphique += "_proportionnel"
         nom_graphique += ".png"
         afficher_plan_zoomable(
             fichiers[nom_graphique],
