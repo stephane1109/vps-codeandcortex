@@ -343,16 +343,37 @@ def afficher_resultats(
                 "Les calculs FactoMineR restent inchangés."
             ),
         )
+        eviter_chevauchement = st.checkbox(
+            "Éviter le chevauchement des étiquettes (ggrepel)",
+            value=False,
+            key=f"{methode.lower()}_eviter_chevauchement_ggrepel",
+            help=(
+                "Déplace uniquement les libellés pour améliorer la lisibilité. "
+                "Les coordonnées FactoMineR, les filtres et les calculs "
+                "restent inchangés. Cette option ne relance pas l'analyse."
+            ),
+        )
         nom_graphique = (
             "13_plan_factoriel_significatif" if filtrer_modalites
             else "13_plan_factoriel"
         )
         if mode_taille == "Taille proportionnelle aux effectifs":
             nom_graphique += "_proportionnel"
+        if eviter_chevauchement:
+            nom_graphique += "_ggrepel"
         nom_graphique += ".png"
+        if nom_graphique not in fichiers and eviter_chevauchement:
+            st.warning(
+                "La version ggrepel n'est pas disponible dans ces résultats. "
+                "Relancez le calcul pour générer les nouveaux graphiques."
+            )
+            nom_graphique = nom_graphique.replace("_ggrepel.png", ".png")
         afficher_plan_zoomable(
             fichiers[nom_graphique],
-            cle_graphique=f"plan_{methode.lower()}_zoomable",
+            cle_graphique=(
+                f"plan_{methode.lower()}_zoomable_"
+                f"{'ggrepel' if nom_graphique.endswith('_ggrepel.png') else 'classique'}"
+            ),
         )
         if methode == "ACM":
             # Conserver la projection supplémentaire et l'alerte statistique,
