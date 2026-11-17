@@ -203,7 +203,7 @@ limites_axes <- function(valeurs, proportion = 0.22) {
   bornes + c(-marge, marge)
 }
 
-dessiner_plan <- function(filtrer_modalites = FALSE) {
+dessiner_plan <- function(filtrer_modalites = FALSE, tailles_proportionnelles = FALSE) {
   lignes <- as.matrix(resultat$row$coord)
   colonnes <- as.matrix(resultat$col$coord)
   deux_axes <- ncol(lignes) >= 2L && ncol(colonnes) >= 2L
@@ -256,9 +256,24 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
     main = paste("AFC :", variable_lignes, "x", variable_colonnes)
   )
   abline(h = 0, v = 0, col = "grey75", lty = 2)
+  # La surface des symboles est proportionnelle aux effectifs marginaux.
+  # Le diamètre varie avec la racine carrée de l'effectif relatif.
+  effectifs_lignes <- as.numeric(rowSums(tableau))
+  effectifs_colonnes <- as.numeric(colSums(tableau))
+  effectif_reference <- max(c(effectifs_lignes, effectifs_colonnes))
+  tailles_lignes <- if (tailles_proportionnelles) {
+    2.8 * sqrt(effectifs_lignes / effectif_reference)
+  } else {
+    rep(1.2, length(effectifs_lignes))
+  }
+  tailles_colonnes <- if (tailles_proportionnelles) {
+    2.8 * sqrt(effectifs_colonnes / effectif_reference)
+  } else {
+    rep(1.25, length(effectifs_colonnes))
+  }
   if (any(visibles_lignes)) {
     points(abscisses_lignes[visibles_lignes], ordonnees_lignes[visibles_lignes],
-           col = "#2166AC", pch = 16, cex = 1.2)
+           col = "#2166AC", pch = 16, cex = tailles_lignes[visibles_lignes])
     text(abscisses_lignes[visibles_lignes], ordonnees_lignes[visibles_lignes],
          rownames(lignes)[visibles_lignes], pos = 3, cex = 0.75,
          col = "#2166AC", xpd = TRUE)
@@ -266,7 +281,7 @@ dessiner_plan <- function(filtrer_modalites = FALSE) {
   if (any(visibles_colonnes)) {
     points(abscisses_colonnes[visibles_colonnes],
            ordonnees_colonnes[visibles_colonnes],
-           col = "#B2182B", pch = 17, cex = 1.25)
+           col = "#B2182B", pch = 17, cex = tailles_colonnes[visibles_colonnes])
     text(abscisses_colonnes[visibles_colonnes],
          ordonnees_colonnes[visibles_colonnes],
          rownames(colonnes)[visibles_colonnes],
@@ -312,6 +327,8 @@ gg <- function(nom, action) {
 gg("13_plan_factoriel.png", function() dessiner_plan(FALSE))
 grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel.pdf"), width = 12, height = 8.5)
 tryCatch(dessiner_plan(FALSE), finally = grDevices::dev.off())
+gg("13_plan_factoriel_proportionnel.png", function() dessiner_plan(FALSE, TRUE))
+gg("13_plan_factoriel_significatif_proportionnel.png", function() dessiner_plan(TRUE, TRUE))
 gg("13_plan_factoriel_significatif.png", function() dessiner_plan(TRUE))
 grDevices::pdf(file.path(dossier_sortie, "14_plan_factoriel_significatif.pdf"), width = 12, height = 8.5)
 tryCatch(dessiner_plan(TRUE), finally = grDevices::dev.off())
