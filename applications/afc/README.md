@@ -22,7 +22,7 @@ Importer un ou plusieurs CSV de même structure (détection des séparateurs `;`
 
 L'analyse s'effectue exclusivement à partir d'un ou plusieurs fichiers CSV ou TXT importés par l'utilisateur. Aucun corpus de démonstration ni générateur de données fictives n'est proposé dans l'interface.
 
-Le panneau de paramétrage permet de conserver uniquement les lignes `retenue`, de supprimer les doublons selon `publication_id`, d'exclure les modalités indéterminées, de traiter les cellules vides comme une modalité ou de les exclure, de filtrer sur une troisième variable, de limiter la cardinalité.
+Le panneau de paramétrage permet de conserver uniquement les lignes `retenue`, de supprimer les doublons selon `publication_id`, d'exclure les modalités indéterminées, de traiter les cellules vides comme une modalité ou de les exclure, et de limiter la cardinalité.
 
 ## Construction du tableau de contingence
 
