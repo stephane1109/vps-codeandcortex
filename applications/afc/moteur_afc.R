@@ -57,53 +57,6 @@ resultat <- FactoMineR::CA(
 if (sum(resultat$eig[, 1L]) < 1e-12) {
   stop("L'AFC FactoMineR ne présente aucune inertie à représenter.")
 }
-# Produire un rapport à partir des résultats natifs de FactoMineR.
-# Avec un seul axe, summary.CA() peut échouer : l'extraction d'une ligne
-# dans la matrice des valeurs propres provoque une perte de dimension.
-# Le résumé détaillé reste utilisé lorsqu'au moins deux axes existent.
-produire_resume_factominer <- function(resultat, nombre_axes) {
-  if (nombre_axes >= 2L) {
-    resume_standard <- tryCatch(
-      capture.output(
-        summary(resultat, nbelements = Inf, ncp = nombre_axes)
-      ),
-      error = function(erreur) NULL
-    )
-    if (!is.null(resume_standard) && length(resume_standard) > 0L) {
-      return(resume_standard)
-    }
-  }
-
-  # Le repli reprend directement les matrices de FactoMineR::CA().
-  # Aucun test supplémentaire ni valeur statistique n'est recalculé.
-  c(
-    "RÉSUMÉ DES RÉSULTATS DE FACTOMINER::CA()",
-    if (nombre_axes == 1L) {
-      "Un seul axe factoriel : restitution directe des résultats FactoMineR."
-    } else {
-      "Résumé standard indisponible : restitution des résultats FactoMineR."
-    },
-    "",
-    "Valeurs propres et pourcentages d'inertie",
-    capture.output(print(resultat$eig)),
-    "",
-    "Modalités en lignes : coordonnées",
-    capture.output(print(resultat$row$coord)),
-    "Modalités en lignes : contributions",
-    capture.output(print(resultat$row$contrib)),
-    "Modalités en lignes : cos²",
-    capture.output(print(resultat$row$cos2)),
-    "",
-    "Modalités en colonnes : coordonnées",
-    capture.output(print(resultat$col$coord)),
-    "Modalités en colonnes : contributions",
-    capture.output(print(resultat$col$contrib)),
-    "Modalités en colonnes : cos²",
-    capture.output(print(resultat$col$cos2))
-  )
-}
-resume_factominer <- produire_resume_factominer(resultat, nombre_axes)
-
 # Toutes les matrices sont exportées dans un CSV lisible avec Excel en français.
 exporter_matrice <- function(matrice, nom_fichier) {
   matrice <- as.matrix(matrice)
@@ -360,35 +313,4 @@ utils::write.csv2(statistiques,
   file.path(dossier_sortie, "16_resultats_statistiques.csv"),
   row.names = FALSE, fileEncoding = "UTF-8")
 
-rapport <- c(
-  "ANALYSE FACTORIELLE DES CORRESPONDANCES — FactoMineR",
-  paste("Source :", nom_source),
-  paste("Variables :", variable_lignes, "x", variable_colonnes),
-  paste("Observations initiales :", effectif_initial),
-  paste("Observations analysées :", effectif_final),
-  paste("Dimensions du tableau :", nrow(tableau), "x", ncol(tableau)),
-  paste("Inertie totale FactoMineR :", signif(sum(resultat$eig[, 1L]), 7)),
-  paste("Modalités significatives (p <= 0,05) :", nombre_significatives,
-        "/", nrow(significativite_modalites)),
-  "Modalités retenues par FactoMineR::descfreq (test hypergéométrique, p <= 0,05).",
-  "Le seuil porte sur l'association entre modalités, pas sur leur position factorielle.",
-  "La p-value minimale est celle des associations significatives renvoyées par FactoMineR.",
-  "Aucune correction Benjamini-Hochberg ni test Chi-deux par modalité ajouté.",
-  "Fichier significativite_modalites_factominer.csv : toutes les modalités.",
-  "",
-  "VALEURS PROPRES ET INERTIES (%)",
-  capture.output(print(round(resultat$eig, 4))),
-  "",
-  "RÉSUMÉ NATIF DE L'AFC PAR FACTOMINER",
-  resume_factominer,
-  "",
-  "AVERTISSEMENTS METHODOLOGIQUES",
-  "L'AFC décrit des associations entre variables catégorielles sans établir de causalité.",
-  "La position des modalités de groupes différents n'est pas une mesure directe de leur proximité.",
-  "Lire les contributions, cos2 et profils avant de conclure.",
-  "Vues et taux d'engagement partagent un dénominateur : association mécanique possible.",
-  if (effectif_final < 30) "Effectif inférieur à 30 : interprétation exploratoire uniquement." else "",
-  if (nombre_axes == 1L) "Un seul axe existe : le décalage vertical du graphique est illustratif." else ""
-)
-writeLines(rapport, file.path(dossier_sortie, "00_rapport_afc.txt"), useBytes = TRUE)
 cat("AFC FactoMineR terminée. ", effectif_final, " observations analysées.\n", sep = "")
