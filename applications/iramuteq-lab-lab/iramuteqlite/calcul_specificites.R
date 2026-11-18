@@ -176,10 +176,12 @@ indiquer_seuil_p_specificites <- function(log_p) {
 
 formater_p_scientifique_specificites <- function(log_p) {
   vapply(log_p, function(value) {
-    if (!is.finite(value)) return("< 1e-300")
-    exponent <- value / log(10)
-    if (exponent < -300) return(paste0("< 1e", floor(exponent)))
-    format(exp(value), scientific = TRUE, digits = 4)
+    # Conserver quatre chiffres significatifs, sans notation scientifique.
+    if (is.na(value)) return(NA_character_)
+    limite <- paste0("< 0,", strrep("0", 299L), "1")
+    if (!is.finite(value) || value < log(1e-300)) return(limite)
+    format(exp(value), scientific = FALSE, digits = 4,
+           trim = TRUE, decimal.mark = ",")
   }, character(1))
 }
 
