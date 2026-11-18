@@ -88,6 +88,12 @@ expected_files <- c(
 stopifnot(all(file.exists(file.path(output_dir, expected_files))))
 stopifnot(identical(result$summary$term, "soin"))
 stopifnot(identical(result$summary$best_modality, "Classe 1"))
+# Le seuil p < 0,01 se décide sur la p-value non arrondie.
+stopifnot(identical(
+  indiquer_seuil_p_specificites(c(log(0.009), log(0.01), log(0.05), -Inf)),
+  c("p < 0,01", "p ≥ 0,01", "p ≥ 0,01", "p < 0,01")
+))
+stopifnot("significativite_p_0_01" %in% names(result$result))
 # Les dénominateurs doivent provenir de la matrice lexicale complète,
 # et non des seules occurrences du terme sélectionné.
 totaux_attendus <- as.numeric(Matrix::colSums(lexical_table))
@@ -107,6 +113,25 @@ stopifnot(isTRUE(all.equal(resultat_csv$total_occurrences_modalite,
                            as.numeric(result$result$total_occurrences_modalite))))
 stopifnot(isTRUE(all.equal(resultat_csv$total_occurrences_corpus,
                            as.numeric(result$result$total_occurrences_corpus))))
+stopifnot(identical(resultat_csv$significativite_p_0_01,
+                    result$result$significativite_p_0_01))
+
+# Vérifier aussi l'export du χ² et la présence du seuil dans le CSV.
+dossier_chi2 <- file.path(output_dir, "chi2")
+resultat_chi2 <- ecrire_resultats_specificites(
+  source = source_data,
+  term = "soin",
+  variable = "__classes_chd__",
+  index = "chi2",
+  output_dir = dossier_chi2
+)
+stopifnot("p < 0,01" %in% resultat_chi2$result$significativite_p_0_01)
+stopifnot("p ≥ 0,01" %in% resultat_chi2$result$significativite_p_0_01)
+tableau_chi2 <- utils::read.csv(
+  file.path(dossier_chi2, "specificites_terme_modalites.csv"),
+  check.names = FALSE, encoding = "UTF-8")
+stopifnot(identical(tableau_chi2$significativite_p_0_01,
+                    resultat_chi2$result$significativite_p_0_01))
 stopifnot(!any(c(
   "tokens_modalite",
   "tokens_corpus",
