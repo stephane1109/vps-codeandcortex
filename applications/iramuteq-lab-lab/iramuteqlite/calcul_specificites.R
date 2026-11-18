@@ -168,6 +168,12 @@ calculer_scores_chi2_specificites <- function(table, reference_col_totals = NULL
   list(scores = scores, log_p = log_p)
 }
 
+indiquer_seuil_p_specificites <- function(log_p) {
+  # Le seuil est évalué sur la probabilité non arrondie, en échelle logarithmique.
+  ifelse(is.na(log_p), NA_character_,
+         ifelse(log_p < log(0.01), "p < 0,01", "p ≥ 0,01"))
+}
+
 formater_p_scientifique_specificites <- function(log_p) {
   vapply(log_p, function(value) {
     if (!is.finite(value)) return("< 1e-300")
@@ -230,6 +236,7 @@ ecrire_resultats_specificites <- function(source, term, variable, index, output_
     total_occurrences_corpus = as.numeric(corpus_total),
     score_specificite = round(as.numeric(selected_scores), 4),
     p_value = formater_p_scientifique_specificites(selected_log_p),
+    significativite_p_0_01 = indiquer_seuil_p_specificites(selected_log_p),
     interpretation = ifelse(selected_scores > 0, "surreprésenté", ifelse(selected_scores < 0, "sous-représenté", "attendu")),
     stringsAsFactors = FALSE
   )
