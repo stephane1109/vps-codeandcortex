@@ -94,6 +94,16 @@ stopifnot(identical(
   c("p < 0,01", "p ≥ 0,01", "p ≥ 0,01", "p < 0,01")
 ))
 stopifnot("significativite_p_0_01" %in% names(result$result))
+# La p-value doit être lisible en notation décimale française, sans exposant.
+stopifnot(identical(
+  formater_p_scientifique_specificites(log(9.427e-7)),
+  "0,0000009427"
+))
+stopifnot(identical(
+  formater_p_scientifique_specificites(log(0.01234)),
+  "0,01234"
+))
+stopifnot(!any(grepl("[eE][+-]?[0-9]+", result$result$p_value)))
 # Les dénominateurs doivent provenir de la matrice lexicale complète,
 # et non des seules occurrences du terme sélectionné.
 totaux_attendus <- as.numeric(Matrix::colSums(lexical_table))
@@ -132,6 +142,9 @@ tableau_chi2 <- utils::read.csv(
   check.names = FALSE, encoding = "UTF-8")
 stopifnot(identical(tableau_chi2$significativite_p_0_01,
                     resultat_chi2$result$significativite_p_0_01))
+stopifnot(identical(tableau_chi2$p_value, resultat_chi2$result$p_value))
+stopifnot(!any(grepl("[eE][+-]?[0-9]+", tableau_chi2$p_value)))
+stopifnot(all(grepl(",", tableau_chi2$p_value, fixed = TRUE)))
 stopifnot(!any(c(
   "tokens_modalite",
   "tokens_corpus",
