@@ -226,6 +226,8 @@ ecrire_resultats_specificites <- function(source, term, variable, index, output_
     occurrences_modalite = as.integer(observed),
     occurrences_attendues = round(expected, 4),
     occurrences_totales_terme = as.integer(row_totals[[term_index]]),
+    total_occurrences_modalite = as.numeric(col_totals),
+    total_occurrences_corpus = as.numeric(corpus_total),
     score_specificite = round(as.numeric(selected_scores), 4),
     p_value = formater_p_scientifique_specificites(selected_log_p),
     interpretation = ifelse(selected_scores > 0, "surreprésenté", ifelse(selected_scores < 0, "sous-représenté", "attendu")),
