@@ -88,6 +88,25 @@ expected_files <- c(
 stopifnot(all(file.exists(file.path(output_dir, expected_files))))
 stopifnot(identical(result$summary$term, "soin"))
 stopifnot(identical(result$summary$best_modality, "Classe 1"))
+# Les dénominateurs doivent provenir de la matrice lexicale complète,
+# et non des seules occurrences du terme sélectionné.
+totaux_attendus <- as.numeric(Matrix::colSums(lexical_table))
+stopifnot(identical(names(result$result)[6:7],
+                    c("total_occurrences_modalite", "total_occurrences_corpus")))
+stopifnot(isTRUE(all.equal(
+  as.numeric(result$result$total_occurrences_modalite), totaux_attendus)))
+stopifnot(all(result$result$total_occurrences_corpus == sum(totaux_attendus)))
+stopifnot(isTRUE(all.equal(
+  result$result$occurrences_attendues,
+  round(result$result$occurrences_totales_terme *
+          totaux_attendus / sum(totaux_attendus), 4))))
+resultat_csv <- utils::read.csv(
+  file.path(output_dir, "specificites_terme_modalites.csv"),
+  check.names = FALSE, encoding = "UTF-8")
+stopifnot(isTRUE(all.equal(resultat_csv$total_occurrences_modalite,
+                           as.numeric(result$result$total_occurrences_modalite))))
+stopifnot(isTRUE(all.equal(resultat_csv$total_occurrences_corpus,
+                           as.numeric(result$result$total_occurrences_corpus))))
 stopifnot(!any(c(
   "tokens_modalite",
   "tokens_corpus",
