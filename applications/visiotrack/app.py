@@ -319,7 +319,7 @@ def afficher_application():
     # Réserver un accès avant de permettre les imports ou l'analyse.
     acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
     st.title("VisioTrack")
-    st.caption("La présence à l'écran est mesurée ; elle ne prouve pas une utilisation effective.")
+    st.caption("version 19-11-2026")
 
     with st.form("analyse"):
         urls = st.text_area("URL YouTube ou TikTok", placeholder=(
