@@ -22,7 +22,17 @@ vidéo plus courte conserve sa dernière image. Les rapports d'image des vidéos
 verticales et horizontales sont conservés par des bandes noires si nécessaire.
 
 Le lecteur est visible directement dans la page, puis le montage MP4 peut être
-téléchargé. Un tableau comparatif reprend les résultats YOLO de chacune des
+téléchargé. **Si une URL a déjà été analysée dans le module principal au cours
+de la même session Streamlit**, le montage réutilise automatiquement son aperçu
+annoté YOLO et sa chronologie, lorsque ces fichiers contiennent la catégorie
+demandée. Les rectangles proviennent de l'analyse précédente et le compteur
+est ajouté à partir des effectifs enregistrés : aucun second téléchargement
+n'est effectué pour cette URL, ce qui évite les erreurs HTTP intermittentes
+liées aux accès répétés aux plateformes. Les vidéos non encore analysées
+continuent à suivre le traitement ordinaire. La fréquence d'échantillonnage
+d'un résultat réutilisé reste celle de son analyse d'origine. Cette réutilisation
+ne concerne pas des sessions déjà terminées.
+Un tableau comparatif reprend les résultats YOLO de chacune des
 quatre URL et propose un fichier CSV supplémentaire. La fréquence d'analyse
 est réglable (5 images/s par défaut). Les rectangles peuvent rester approximatifs
 entre les images analysées ; leur affichage suit les observations du moteur et
