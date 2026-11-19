@@ -200,31 +200,42 @@ def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
             Path(destination).unlink(missing_ok=True)
 
 
-def assembler_quatre_videos(chemins, sortie):
-    """Réunir les quatre vidéos annotées en un seul lecteur 1920 × 1080."""
-    if len(chemins) != 4:
-        raise ValueError("Le montage requiert exactement quatre vidéos.")
+def assembler_videos(chemins, sortie):
+    """Composer deux, trois ou quatre vidéos YOLO dans une image 1920 × 1080."""
+    nombre = len(chemins)
+    if nombre not in (2, 3, 4):
+        raise ValueError("La vidéo split nécessite deux, trois ou quatre vidéos.")
+
+    largeur_case = LARGEUR_CASE if nombre in (2, 4) else 640
+    hauteur_case = HAUTEUR_CASE if nombre == 4 else 1080
+    positions = (
+        [(0, 0), (largeur_case, 0), (0, hauteur_case), (largeur_case, hauteur_case)]
+        if nombre == 4
+        else [(indice * largeur_case, 0) for indice in range(nombre)]
+    )
+
     durees = [lire_metadonnees(chemin)[0] for chemin in chemins]
     duree_max = max(durees)
     commande = ["ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error"]
     for chemin in chemins:
         commande.extend(["-i", str(chemin)])
+
     filtres = []
     for indice, duree in enumerate(durees):
-        # Préserver le cadrage de chaque vidéo (verticale ou horizontale).
-        # Prolonger la dernière image jusqu'à la fin de la piste la plus longue.
         prolongation = max(0.0, duree_max - duree) + 1.0 / CADENCE_SORTIE
         filtres.append(
             f"[{indice}:v]fps={CADENCE_SORTIE},"
-            f"scale={LARGEUR_CASE}:{HAUTEUR_CASE}:force_original_aspect_ratio=decrease,"
-            f"pad={LARGEUR_CASE}:{HAUTEUR_CASE}:(ow-iw)/2:(oh-ih)/2:color=black,"
-            f"setsar=1,setpts=PTS-STARTPTS,"
+            f"scale={largeur_case}:{hauteur_case}:force_original_aspect_ratio=decrease,"
+            f"pad={largeur_case}:{hauteur_case}:(ow-iw)/2:(oh-ih)/2:color=black,"
+            "setsar=1,setpts=PTS-STARTPTS,"
             f"tpad=stop_mode=clone:stop_duration={prolongation:.6f}[v{indice}]"
         )
+
+    positionnement = "|".join(f"{x}_{y}" for x, y in positions)
+    etiquettes = "".join(f"[v{indice}]" for indice in range(nombre))
     filtres.append(
-        "[v0][v1][v2][v3]xstack=inputs=4:"
-        f"layout=0_0|{LARGEUR_CASE}_0|0_{HAUTEUR_CASE}|"
-        f"{LARGEUR_CASE}_{HAUTEUR_CASE},format=yuv420p[montage]"
+        f"{etiquettes}xstack=inputs={nombre}:layout={positionnement},"
+        "format=yuv420p[montage]"
     )
     commande.extend([
         "-filter_complex", ";".join(filtres), "-map", "[montage]", "-an",
@@ -234,27 +245,38 @@ def assembler_quatre_videos(chemins, sortie):
     ])
     resultat = subprocess.run(commande, capture_output=True, text=True)
     if resultat.returncode != 0:
-        raise ValueError(f"Échec de l'assemblage FFmpeg : {resultat.stderr[-1500:]}")
+        raise ValueError(
+            f"Échec de l'assemblage FFmpeg : {resultat.stderr[-1500:]}"
+        )
     if not Path(sortie).is_file() or Path(sortie).stat().st_size == 0:
-        raise ValueError("Le montage MP4 est absent.")
+        raise ValueError("Le fichier vidéo split n'a pas été produit.")
     return duree_max
 
 
-def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
-                 categorie=67, reutilisations=None):
-    """Analyser réellement les quatre vidéos avec VisioTrack puis assembler leurs annotations.
+def assembler_quatre_videos(chemins, sortie):
+    """Conserver la compatibilité avec l'ancien moteur de montage."""
+    return assembler_videos(chemins, sortie)
 
-    Chaque URL utilise le même moteur YOLO, ByteTrack, la détection des
-    changements de plan et la quantification que l'analyse individuelle.
+
+def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
+                 categorie=67, reutilisations=None, generer_split=True):
+    """Analyser une à quatre URL et produire une vidéo split seulement sur demande.
+
+    Les quatre champs URL sont facultatifs : seuls ceux renseignés sont analysés.
+    Les vidéos déjà analysées dans la session réutilisent leurs annotations.
+    Chaque URL restante suit le moteur individuel YOLO/ByteTrack de VisioTrack.
     """
-    if len(urls) != 4 or any(not url.strip() for url in urls):
-        raise ValueError("Renseignez les quatre URL vidéo.")
+    adresses = [str(adresse).strip() for adresse in urls if str(adresse).strip()]
+    if not 1 <= len(adresses) <= 4:
+        raise ValueError("Renseignez entre une et quatre URL vidéo.")
+    if generer_split and len(adresses) < 2:
+        raise ValueError("Une vidéo split nécessite au moins deux URL.")
     if categorie not in CATEGORIES:
         raise ValueError("Sélectionnez une catégorie YOLO valide.")
     if not math.isfinite(frequence) or not 0 < frequence <= 30:
         raise ValueError("La fréquence d'analyse doit être comprise entre 0 et 30 images/s.")
-    for url in urls:
-        verifier_url(url.strip())
+    for adresse in adresses:
+        verifier_url(adresse)
 
     racine = Path(dossier)
     racine.mkdir(parents=True, exist_ok=True)
@@ -262,19 +284,19 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
     modele = None
     chemins_annotes = []
     resultats = []
+    total_etapes = len(adresses) + (1 if generer_split else 0)
 
-    for indice, url in enumerate(urls, 1):
-        adresse = url.strip()
+    for indice, adresse in enumerate(adresses, 1):
         destination = racine / f"case_{indice}.mp4"
         reprise = reutilisations.get(adresse)
         if reprise is not None:
             try:
-                progression(indice, 5, f"Réutilisation de l'analyse URL {indice}", 0.0)
+                progression(indice, total_etapes, f"Réutilisation de l'analyse URL {indice}", 0.0)
                 reutiliser_apercu_analyse(
                     reprise["apercu"], reprise["chronologie"], reprise["video_id"],
                     categorie, destination,
                     lambda valeur: progression(
-                        indice, 5, f"Annotation du compteur URL {indice}", valeur
+                        indice, total_etapes, f"Compteur URL {indice}", valeur
                     ),
                 )
                 ligne = dict(reprise["resultat"])
@@ -283,28 +305,32 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
                 chemins_annotes.append(destination)
                 continue
             except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-                # Le téléchargement reste possible lorsque l'aperçu n'est plus lisible.
+                # Revenir à l'analyse ordinaire si le résultat antérieur a expiré.
                 destination.unlink(missing_ok=True)
 
-        progression(indice, 5, f"Téléchargement URL {indice}", 0.0)
+        progression(indice, total_etapes, f"Téléchargement URL {indice}", 0.0)
         try:
             if modele is None:
                 modele = charger_modele()
-            with tempfile.TemporaryDirectory(prefix=f"source-{indice}-", dir=racine) as temporaire:
+            with tempfile.TemporaryDirectory(
+                prefix=f"source-{indice}-", dir=racine
+            ) as temporaire:
                 source = SourceVideo(adresse, "url", adresse)
                 chemin = preparer_video(source, temporaire)
                 video_id = f"v{indice:06d}"
                 lignes = analyser_video(
-                    chemin, video_id, url.strip(), [categorie], frequence, modele,
+                    chemin, video_id, adresse, [categorie], frequence, modele,
                     temporaire,
-                    lambda valeur: progression(indice, 5, f"Analyse YOLO URL {indice}", 0.7 * valeur),
+                    lambda valeur: progression(
+                        indice, total_etapes, f"Analyse YOLO URL {indice}", 0.7 * valeur
+                    ),
                     quantifier_temps=True, compter_distincts=True,
                 )
                 creer_video_annotee(
                     chemin, Path(temporaire) / "observations.jsonl", destination,
                     lignes[0]["duree_totale_s"],
                     lambda valeur: progression(
-                        indice, 5, f"Vidéo annotée URL {indice}", 0.7 + valeur * 0.3
+                        indice, total_etapes, f"Vidéo annotée URL {indice}", 0.7 + valeur * 0.3
                     ),
                     categories_compteur=[categorie],
                 )
@@ -313,7 +339,6 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
         except Exception as erreur:
             raise ValueError(f"Échec de l'analyse de l'URL {indice} : {erreur}") from erreur
 
-    # Les résultats numériques et les vidéos proviennent des mêmes observations YOLO.
     chemin_csv = racine / "visiotrack_montage_resultats.csv"
     with chemin_csv.open("w", encoding="utf-8-sig", newline="") as fichier:
         redacteur = csv.DictWriter(
@@ -322,11 +347,14 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
         redacteur.writeheader()
         redacteur.writerows(resultats)
 
-    progression(5, 5, "Assemblage des quatre vidéos analysées", 0.0)
-    sortie = racine / "visiotrack_montage_4_fenetres.mp4"
-    duree = assembler_quatre_videos(chemins_annotes, sortie)
-    # Le fichier final et le CSV restent accessibles durant la session Streamlit.
-    for chemin in chemins_annotes:
-        chemin.unlink(missing_ok=True)
-    progression(5, 5, "Vidéo comparative terminée", 1.0)
+    sortie = None
+    duree = None
+    if generer_split:
+        progression(total_etapes, total_etapes, "Assemblage des vidéos analysées", 0.0)
+        sortie = racine / f"visiotrack_montage_{len(adresses)}_fenetres.mp4"
+        duree = assembler_quatre_videos(chemins_annotes, sortie)
+        progression(total_etapes, total_etapes, "Vidéo split terminée", 1.0)
+
+    # Conserver les vidéos annotées individuelles : elles restent consultables
+    # et téléchargeables, que la vidéo split ait été demandée ou non.
     return sortie, duree
