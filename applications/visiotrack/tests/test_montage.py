@@ -110,11 +110,13 @@ class TestAnalyseQuatreUrls(unittest.TestCase):
                 Path(sortie).write_bytes(b"video finale")
                 return 1.0
 
-            with patch("montage.charger_modele", return_value=object()), \\
-                 patch("montage.preparer_video", return_value=racine / "source.mp4"), \\
-                 patch("montage.analyser_video", side_effect=simuler_analyse), \\
-                 patch("montage.creer_video_annotee", side_effect=simuler_apercu), \\
-                 patch("montage.assembler_quatre_videos", side_effect=simuler_assemblage):
+            with (
+                patch("montage.charger_modele", return_value=object()),
+                patch("montage.preparer_video", return_value=racine / "source.mp4"),
+                patch("montage.analyser_video", side_effect=simuler_analyse),
+                patch("montage.creer_video_annotee", side_effect=simuler_apercu),
+                patch("montage.assembler_quatre_videos", side_effect=simuler_assemblage),
+            ):
                 sortie, duree = creer_montage(urls, racine, 5.0, categorie=67)
 
             self.assertTrue(sortie.is_file())
