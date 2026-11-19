@@ -2,6 +2,7 @@
 
 import os
 import json
+import base64
 import tempfile
 import threading
 import time
@@ -305,7 +306,12 @@ def afficher_montage(acces_initial):
 
 def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
-    st.set_page_config(page_title="VisioTrack", page_icon="📱", layout="wide",
+    # Utiliser une image transparente pour éviter le favicon Streamlit par défaut.
+    # Retirer simplement page_icon ferait apparaître le logo Streamlit.
+    favicon_transparent = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII="
+    )
+    st.set_page_config(page_title="VisioTrack", page_icon=favicon_transparent, layout="wide",
                        initial_sidebar_state="expanded")
     # Même propriété Analytics que la home ; une seule visite malgré les reruns.
     components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
