@@ -10,6 +10,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from detection import CATEGORIES, inventorier_sources, traiter_lot
+from montage import creer_montage
 
 
 @st.cache_resource
@@ -46,6 +47,85 @@ def afficher_resultats():
             with (repertoire / f"{nom}.csv").open("rb") as fichier:
                 st.download_button(libelle, fichier, f"visiotrack_{nom}.csv",
                                    mime="text/csv", on_click="ignore", width="stretch")
+
+
+
+def afficher_montage():
+    """Proposer quatre URL et produire un quadriptyque vidéo indépendant des CSV."""
+    st.subheader("Montage comparatif — quatre vidéos")
+    st.caption(
+        "Quatre fenêtres 2 × 2, rectangles de détection et compteurs des smartphones ; "
+        "sans titres ni audio. Le montage s'arrête à la fin de la vidéo la plus longue, "
+        "avec gel de la dernière image des vidéos plus courtes."
+    )
+    with st.form("montage_comparatif"):
+        colonnes = st.columns(2)
+        noms = ("Concert", "Manifestation", "Journalisme", "Tourisme")
+        urls_montage = []
+        for indice, nom in enumerate(noms):
+            with colonnes[indice % 2]:
+                urls_montage.append(st.text_input(
+                    f"URL {indice + 1} — {nom}", key=f"visiotrack_url_montage_{indice}",
+                    placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/..."
+                ))
+        frequence_montage = st.number_input(
+            "Images analysées par seconde (montage)", min_value=0.5,
+            max_value=15.0, value=5.0, step=0.5,
+            help="L'analyse de cinq images par seconde limite le temps de calcul. "
+                 "Les rectangles sont conservés entre deux images analysées."
+        )
+        lancer_montage = st.form_submit_button(
+            "Générer le montage MP4 (1920 × 1080)", type="primary"
+        )
+
+    if lancer_montage:
+        if any(not url.strip() for url in urls_montage):
+            st.error("Renseignez les quatre URL avant de générer le montage.")
+        elif not obtenir_verrou().acquire(blocking=False):
+            st.warning("Une analyse VisioTrack est déjà en cours sur ce serveur.")
+        else:
+            temporaire = None
+            try:
+                temporaire = tempfile.TemporaryDirectory(prefix="visiotrack-montage-")
+                barre = st.progress(0.0, text="Préparation des quatre vidéos…")
+
+                def actualiser_montage(numero, total, etape, avancement):
+                    """Signaler le téléchargement, l'analyse et le rendu final."""
+                    valeur = (numero - 1 + avancement) / total
+                    barre.progress(min(1.0, max(0.0, valeur)),
+                                   text=f"{etape} ({numero}/{total})")
+
+                with st.spinner("Création du quadriptyque…"):
+                    sortie, duree = creer_montage(
+                        urls_montage, temporaire.name, frequence_montage, actualiser_montage
+                    )
+                ancien = st.session_state.get("visiotrack_montage_exports")
+                st.session_state.visiotrack_montage_exports = temporaire
+                st.session_state.visiotrack_montage_duree = duree
+                temporaire = None
+                if ancien:
+                    ancien.cleanup()
+            except Exception as erreur:
+                st.error(f"Impossible de produire le quadriptyque : {erreur}")
+            finally:
+                if temporaire:
+                    temporaire.cleanup()
+                obtenir_verrou().release()
+
+    if "visiotrack_montage_exports" in st.session_state:
+        fichier = (Path(st.session_state.visiotrack_montage_exports.name)
+                   / "visiotrack_montage_4_fenetres.mp4")
+        if fichier.is_file():
+            st.success(
+                f"Montage créé — durée : {st.session_state.visiotrack_montage_duree:.1f} s "
+                "— format : MP4 1920 × 1080, 15 images/s."
+            )
+            with fichier.open("rb") as entree:
+                st.download_button(
+                    "Télécharger le montage MP4", entree,
+                    file_name="visiotrack_montage_4_fenetres.mp4",
+                    mime="video/mp4", on_click="ignore", width="stretch"
+                )
 
 
 def afficher_application():
@@ -107,6 +187,7 @@ def afficher_application():
                     temporaire.cleanup()
                 obtenir_verrou().release()
     afficher_resultats()
+    afficher_montage()
 
 
 if __name__ == "__main__":
