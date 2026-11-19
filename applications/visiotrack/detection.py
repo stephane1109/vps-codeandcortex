@@ -541,7 +541,7 @@ def plan_a_change(precedente, actuelle):
 
 
 def creer_video_annotee(chemin, observations, destination, duree,
-                       progression=lambda valeur: None):
+                       progression=lambda valeur: None, *, categories_compteur=None):
     """Encoder un MP4 H.264 lisible dans le navigateur, sans relancer YOLO.
 
     Les boîtes ne survivent pas à une rupture de plan détectée. Elles restent
@@ -602,7 +602,27 @@ def creer_video_annotee(chemin, observations, destination, duree,
                         reference_plan = miniature if detections else None
                     prochaine = json.loads(ligne) if (ligne := entree.readline()) else None
                 if numero_sortie / 25 < fin - 1e-8:
-                    pixels = dessiner_detections(image, detections).tobytes()
+                    apercu = dessiner_detections(image, detections)
+                    if categories_compteur:
+                        # Les compteurs reprennent les observations du même moteur YOLO
+                        # que les graphiques et les données CSV.
+                        compteurs = Counter(d["categorie_id"] for d in detections)
+                        for ligne_compteur, categorie in enumerate(categories_compteur):
+                            texte_compteur = (
+                                f"{CATEGORIES[categorie].capitalize()} : "
+                                f"{compteurs.get(categorie, 0)}"
+                            )
+                            position_y = 34 + ligne_compteur * 36
+                            largeur_texte = cv2.getTextSize(
+                                texte_compteur, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2
+                            )[0][0]
+                            cv2.rectangle(apercu, (8, position_y - 27),
+                                          (max(155, largeur_texte + 24), position_y + 9),
+                                          (0, 0, 0), -1)
+                            cv2.putText(apercu, texte_compteur, (16, position_y),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                                        (255, 255, 255), 2, cv2.LINE_AA)
+                    pixels = apercu.tobytes()
                     while numero_sortie / 25 < fin - 1e-8:
                         encodeur.stdin.write(pixels)
                         numero_sortie += 1
