@@ -13,7 +13,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from detection import CATEGORIES, colonnes_resultats, inventorier_sources, traiter_lot
-from montage import assembler_videos, creer_montage
+from montage import assembler_videos
 from ticket_gate import enforce_streamlit_access, renouveler_acces_analyse
 
 
@@ -222,212 +222,81 @@ def afficher_apercu(tableau, repertoire, identifiant=None):
 
 
 
-def afficher_montage(acces_initial):
-    """Analyser jusqu'à quatre URL puis générer un split seulement si demandé."""
-    st.subheader("Analyse comparative — 1 à 4 URL")
-    with st.form("montage_comparatif"):
-        colonnes_urls = st.columns(2)
-        urls_montage = []
-        for indice in range(4):
-            with colonnes_urls[indice % 2]:
-                urls_montage.append(st.text_input(
-                    f"URL {indice + 1}", key=f"visiotrack_url_montage_{indice}",
-                    placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/..."
-                ))
-        categories_montage = st.multiselect(
-            "Objets à détecter avec YOLO",
-            list(CATEGORIES),
-            default=[67],
-            format_func=lambda categorie: CATEGORIES[categorie].capitalize(),
-            help="Sélectionnez une ou plusieurs catégories, comme dans l'analyse principale."
-        )
-        frequence_montage = st.number_input(
-            "Images analysées par seconde (comparaison)", min_value=0.5,
-            max_value=15.0, value=5.0, step=0.5,
-            help="Cette fréquence d'analyse YOLO s'applique aux vidéos non encore analysées."
-        )
-        generer_split = st.checkbox(
-            "Générer une vidéo split (2, 3 ou 4 fenêtres)", value=False,
-            help="Option facultative. Deux URL : deux écrans côte à côte ; "
-                 "trois URL : trois écrans côte à côte ; "
-                 "quatre URL : quatre écrans en grille 2 × 2. "
-                 "Sans cette option, chaque vidéo reste consultable séparément."
-        )
-        lancer_montage = st.form_submit_button("Analyser les URL", type="primary")
+def generer_split_analyses(repertoire, resultats, urls):
+    """Assembler les aperçus de l'analyse classique sans télécharger les vidéos."""
+    if len(urls) not in (2, 3, 4):
+        raise ValueError("Sélectionnez deux, trois ou quatre URL distinctes.")
+    repertoire = Path(repertoire)
+    manifeste = repertoire / "apercus.json"
+    if not manifeste.is_file():
+        raise ValueError("Les vidéos annotées de cette analyse sont indisponibles.")
+    apercus = json.loads(manifeste.read_text(encoding="utf-8"))
+    correspondances = {
+        ligne["source"]: ligne["video_id"]
+        for ligne in resultats
+        if ligne.get("statut") == "ok" and ligne.get("source") in urls
+    }
+    chemins = []
+    for position, url in enumerate(urls, 1):
+        identifiant = correspondances.get(url)
+        if not identifiant:
+            raise ValueError(
+                f"URL {position} : l'analyse YOLO n'a pas réussi ; le split est impossible."
+            )
+        relatif = apercus.get(identifiant, {}).get("fichier")
+        if not relatif:
+            raise ValueError(f"URL {position} : l'aperçu annoté n'est pas disponible.")
+        chemin = repertoire / relatif
+        if not chemin.is_file():
+            raise ValueError(f"URL {position} : le fichier vidéo annoté est absent.")
+        chemins.append(chemin)
+    destination = repertoire / f"visiotrack_montage_{len(urls)}_fenetres.mp4"
+    duree = assembler_videos(chemins, destination)
+    return destination, duree
 
-    if lancer_montage:
-        urls_retenues = [adresse.strip() for adresse in urls_montage if adresse.strip()]
-        if not urls_retenues:
-            st.error("Renseignez au moins une URL avant de lancer l'analyse.")
-        elif not categories_montage:
-            st.error("Sélectionnez au moins un objet à détecter.")
-        elif generer_split and len(urls_retenues) < 2:
-            st.error("La vidéo split nécessite au moins deux URL. "
-                     "Pour analyser une seule vidéo, décochez cette option.")
-        elif not obtenir_verrou().acquire(blocking=False):
-            st.warning("Une analyse VisioTrack est déjà en cours sur ce serveur.")
-        else:
-            temporaire = None
-            try:
-                temporaire = tempfile.TemporaryDirectory(prefix="visiotrack-montage-")
-                barre = st.progress(0.0, text=f"Préparation de {len(urls_retenues)} vidéo(s)…")
-                dernier_renouvellement = 0.0
 
-                def actualiser_montage(numero, total, etape, avancement):
-                    """Conserver l'accès pendant les traitements et afficher leur progression."""
-                    nonlocal dernier_renouvellement
-                    maintenant = time.monotonic()
-                    if maintenant - dernier_renouvellement >= 30:
-                        if not renouveler_acces_analyse(acces_initial["ticket_id"]):
-                            st.error("L'accès n'est plus actif. Reprenez l'accès avant de relancer le montage.")
-                            st.stop()
-                        dernier_renouvellement = maintenant
-                    valeur = (numero - 1 + avancement) / total
-                    barre.progress(min(1.0, max(0.0, valeur)),
-                                   text=f"{etape} ({numero}/{total})")
-
-                # Réutiliser les analyses de cette session pour les mêmes URL.
-                # Le lecteur du module principal conserve déjà les MP4 annotés
-                # et la chronologie des effectifs, sans conserver les sources brutes.
-                reutilisations = {}
-                session_precedente = st.session_state.get("visiotrack_exports")
-                resultats_precedents = st.session_state.get("visiotrack_resultats", [])
-                if session_precedente is not None:
-                    repertoire_precedent = Path(session_precedente.name)
-                    manifeste_precedent = repertoire_precedent / "apercus.json"
-                    chronologie_precedente = repertoire_precedent / "chronologie.csv"
-                    if manifeste_precedent.is_file() and chronologie_precedente.is_file():
-                        apercus_precedents = json.loads(
-                            manifeste_precedent.read_text(encoding="utf-8")
+def afficher_split():
+    """Afficher le split facultatif sous les résultats de l'analyse principale."""
+    session = st.session_state.get("visiotrack_exports")
+    urls = st.session_state.get("visiotrack_split_urls", [])
+    if session is None or len(urls) not in (2, 3, 4):
+        return
+    repertoire = Path(session.name)
+    fichier = repertoire / f"visiotrack_montage_{len(urls)}_fenetres.mp4"
+    if not fichier.is_file():
+        if st.button(
+            f"Générer la vidéo split ({len(urls)} fenêtres)",
+            key="visiotrack_split_apres_analyse"
+        ):
+            if not obtenir_verrou().acquire(blocking=False):
+                st.warning("Une analyse est déjà en cours sur ce serveur.")
+            else:
+                try:
+                    with st.spinner("Assemblage des vidéos YOLO déjà annotées…"):
+                        _, duree = generer_split_analyses(
+                            repertoire,
+                            st.session_state.get("visiotrack_resultats", []),
+                            urls,
                         )
-                        urls_demandees = set(urls_retenues)
-                        categories_noms = {CATEGORIES[cle] for cle in categories_montage}
-                        for adresse in urls_demandees:
-                            lignes_url = [
-                                ligne for ligne in resultats_precedents
-                                if ligne.get("statut") == "ok"
-                                and ligne.get("source") == adresse
-                                and ligne.get("categorie") in categories_noms
-                            ]
-                            if {ligne["categorie"] for ligne in lignes_url} != categories_noms:
-                                continue
-                            identifiant = lignes_url[0]["video_id"]
-                            if any(ligne["video_id"] != identifiant for ligne in lignes_url):
-                                continue
-                            chemin_rel = apercus_precedents.get(identifiant, {}).get("fichier")
-                            if not chemin_rel:
-                                continue
-                            chemin_apercu = repertoire_precedent / chemin_rel
-                            if chemin_apercu.is_file():
-                                reutilisations[adresse] = {
-                                    "apercu": str(chemin_apercu),
-                                    "chronologie": str(chronologie_precedente),
-                                    "video_id": identifiant,
-                                    "resultat": lignes_url,
-                                }
-                if reutilisations:
-                    st.info(
-                        f"{len(reutilisations)} vidéo(s) déjà analysée(s) dans cette session "
-                        "seront réutilisées sans nouveau téléchargement."
-                    )
-                with st.spinner("Analyse des URL et création des vidéos annotées…"):
-                    sortie, duree = creer_montage(
-                        urls_retenues, temporaire.name, frequence_montage,
-                        actualiser_montage, categories=categories_montage,
-                        reutilisations=reutilisations,
-                        generer_split=generer_split,
-                    )
-                ancien = st.session_state.get("visiotrack_montage_exports")
-                st.session_state.visiotrack_montage_exports = temporaire
-                st.session_state.visiotrack_montage_duree = duree
-                st.session_state.visiotrack_montage_nombre = len(urls_retenues)
-                st.session_state.visiotrack_montage_split = generer_split
-                temporaire = None
-                if ancien:
-                    ancien.cleanup()
-            except Exception as erreur:
-                st.error(f"Impossible de terminer l’analyse comparative : {erreur}")
-            finally:
-                if temporaire:
-                    temporaire.cleanup()
-                obtenir_verrou().release()
-
-    if "visiotrack_montage_exports" in st.session_state:
-        repertoire = Path(st.session_state.visiotrack_montage_exports.name)
-        nombre_videos = st.session_state.get("visiotrack_montage_nombre", 4)
-        avec_split = st.session_state.get("visiotrack_montage_split", True)
-
-        # Une vidéo split peut aussi être produite après l'analyse,
-        # sans relancer YOLO ni télécharger une seconde fois les URL.
-        if nombre_videos >= 2 and not avec_split:
-            if st.button(
-                f"Générer une vidéo split des {nombre_videos} analyses existantes",
-                type="primary", key="visiotrack_split_depuis_analyses"
-            ):
-                if not obtenir_verrou().acquire(blocking=False):
-                    st.warning("Une analyse VisioTrack est déjà en cours.")
-                else:
-                    try:
-                        pistes = [
-                            repertoire / f"case_{indice}.mp4"
-                            for indice in range(1, nombre_videos + 1)
-                        ]
-                        sortie_split = (
-                            repertoire / f"visiotrack_montage_{nombre_videos}_fenetres.mp4"
-                        )
-                        with st.spinner("Assemblage des vidéos YOLO déjà analysées…"):
-                            duree_split = assembler_videos(pistes, sortie_split)
-                        st.session_state.visiotrack_montage_duree = duree_split
-                        st.session_state.visiotrack_montage_split = True
-                        avec_split = True
-                    except Exception as erreur:
-                        st.error(f"Impossible de produire la vidéo split : {erreur}")
-                    finally:
-                        obtenir_verrou().release()
-
-        if avec_split:
-            fichier_split = repertoire / f"visiotrack_montage_{nombre_videos}_fenetres.mp4"
-            if fichier_split.is_file():
-                st.subheader(f"Vidéo split — {nombre_videos} fenêtres")
-                st.video(str(fichier_split))
-                st.caption(
-                    f"Détections YOLO simultanées — durée : "
-                    f"{st.session_state.visiotrack_montage_duree:.1f} s. "
-                    "MP4 1920 × 1080, sans audio, dernière image figée."
-                )
-                with fichier_split.open("rb") as entree:
-                    st.download_button(
-                        "Télécharger la vidéo split MP4", entree,
-                        file_name=fichier_split.name, mime="video/mp4",
-                        on_click="ignore", width="stretch"
-                    )
-
-        st.subheader(f"Vidéos annotées — {nombre_videos} analyse(s) YOLO")
-        colonnes_apercus = st.columns(2)
-        for indice in range(1, nombre_videos + 1):
-            fichier_individuel = repertoire / f"case_{indice}.mp4"
-            if fichier_individuel.is_file():
-                with colonnes_apercus[(indice - 1) % 2]:
-                    st.caption(f"URL {indice}")
-                    st.video(str(fichier_individuel))
-                    with fichier_individuel.open("rb") as entree:
-                        st.download_button(
-                            f"Télécharger la vidéo annotée {indice}",
-                            entree, file_name=f"visiotrack_analyse_{indice}.mp4",
-                            mime="video/mp4", on_click="ignore",
-                            width="stretch", key=f"visiotrack_telecharger_analyse_{indice}"
-                        )
-
-        chemin_csv = repertoire / "visiotrack_montage_resultats.csv"
-        if chemin_csv.is_file():
-            st.subheader("Résultats des analyses YOLO")
-            st.dataframe(pd.read_csv(chemin_csv), hide_index=True, width="stretch")
-            with chemin_csv.open("rb") as entree:
-                st.download_button(
-                    "Télécharger les résultats des vidéos (CSV)",
-                    entree, file_name="visiotrack_montage_resultats.csv",
-                    mime="text/csv", on_click="ignore", width="stretch"
-                )
+                    st.session_state.visiotrack_split_duree = duree
+                except Exception as erreur:
+                    st.error(f"Impossible de générer la vidéo split : {erreur}")
+                finally:
+                    obtenir_verrou().release()
+    if fichier.is_file():
+        st.subheader(f"Vidéo split — {len(urls)} fenêtres")
+        st.video(str(fichier))
+        duree = st.session_state.get("visiotrack_split_duree")
+        if duree is not None:
+            st.caption(
+                f"Durée : {duree:.1f} s. MP4 1920 × 1080, sans audio."
+            )
+        with fichier.open("rb") as entree:
+            st.download_button(
+                "Télécharger la vidéo split MP4", entree,
+                file_name=fichier.name, mime="video/mp4",
+                on_click="ignore", width="stretch"
+            )
 
 
 def afficher_application():
@@ -459,6 +328,19 @@ def afficher_application():
             "https://www.tiktok.com/@ladepechedumidi/video/7691631006369058081"
             "?q=manifestation%20toulouse&t=1791983293656"), height=90,
             help="Une URL HTTPS par ligne.")
+        colonnes_urls = st.columns(2)
+        urls_supplementaires = []
+        for indice in range(4):
+            with colonnes_urls[indice % 2]:
+                urls_supplementaires.append(st.text_input(
+                    f"URL {indice + 1}", key=f"visiotrack_url_{indice}",
+                    placeholder="https://www.youtube.com/... ou https://www.tiktok.com/..."
+                ))
+        generer_split = st.checkbox(
+            "Générer une vidéo split (2, 3 ou 4 fenêtres)", value=False,
+            help="Option facultative pour les URL 1 à URL 4 renseignées. "
+                 "Le montage utilise les vidéos déjà analysées."
+        )
         fichiers = st.file_uploader("Fichiers MP4 ou archives ZIP", type=["mp4", "zip"],
                                     accept_multiple_files=True)
         categories = st.multiselect("Objets à détecter", list(CATEGORIES), default=[67],
@@ -479,8 +361,14 @@ def afficher_application():
     st.caption("À 1 image/s, une apparition brève peut être manquée et le suivi d'un téléphone peut être perdu. "
                "Les durées et le nombre d'objets distincts sont des estimations.")
     if lancer:
-        sources = inventorier_sources(fichiers, urls, dossier_serveur)
-        if not quantifier_temps and not compter_distincts:
+        urls_choisies = list(dict.fromkeys(
+            adresse.strip() for adresse in urls_supplementaires if adresse.strip()
+        ))
+        urls_a_analyser = "\n".join([urls, *urls_choisies])
+        sources = inventorier_sources(fichiers, urls_a_analyser, dossier_serveur)
+        if generer_split and len(urls_choisies) not in (2, 3, 4):
+            st.error("La vidéo split nécessite deux, trois ou quatre URL distinctes.")
+        elif not quantifier_temps and not compter_distincts:
             st.error("Cochez au moins une mesure à quantifier.")
         elif not categories or not sources:
             st.error("Ajoutez au moins une vidéo et sélectionnez un objet à détecter.")
@@ -509,17 +397,34 @@ def afficher_application():
                     barre_video.progress(valeur, text=nom)
 
                 with st.spinner("Analyse en cours…"):
-                    resultats = traiter_lot(sources, categories, frequence, temporaire.name,
-                                            actualiser_progression, quantifier_temps=quantifier_temps,
-                                            compter_distincts=compter_distincts)
+                    resultats = traiter_lot(
+                        sources, categories, frequence, temporaire.name,
+                        actualiser_progression, quantifier_temps=quantifier_temps,
+                        compter_distincts=compter_distincts,
+                        sources_compteurs=urls_choisies,
+                    )
                 ancien = st.session_state.get("visiotrack_exports")
                 st.session_state.visiotrack_exports = temporaire
                 st.session_state.visiotrack_resultats = resultats
                 st.session_state.visiotrack_mesures = {"quantifier_temps": quantifier_temps,
                                                       "compter_distincts": compter_distincts}
-                temporaire = None  # La session conserve les CSV et les aperçus annotés.
+                st.session_state.visiotrack_split_urls = urls_choisies
+                st.session_state.visiotrack_split_duree = None
+                temporaire = None  # Les aperçus, CSV et le split restent dans la session.
                 if ancien:
                     ancien.cleanup()
+                if generer_split:
+                    try:
+                        _, duree_split = generer_split_analyses(
+                            Path(st.session_state.visiotrack_exports.name),
+                            resultats, urls_choisies,
+                        )
+                        st.session_state.visiotrack_split_duree = duree_split
+                    except Exception as erreur_split:
+                        st.warning(
+                            f"L'analyse est terminée, mais le split n'a pas été créé : "
+                            f"{erreur_split}"
+                        )
             except Exception as erreur:
                 st.error(f"L'analyse n'a pas pu aboutir : {erreur}")
             finally:
@@ -527,7 +432,7 @@ def afficher_application():
                     temporaire.cleanup()
                 obtenir_verrou().release()
     afficher_resultats()
-    afficher_montage(acces_initial)
+    afficher_split()
     # L'iframe Analytics ne doit pas créer d'espacement avant le titre.
     components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
                     height=0, scrolling=False)
