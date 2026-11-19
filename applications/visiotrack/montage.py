@@ -112,6 +112,94 @@ def annoter_video(chemin_source, chemin_sortie, modele, frequence=5.0,
             Path(chemin_sortie).unlink(missing_ok=True)
 
 
+def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
+                            categorie, destination, progression=lambda valeur: None):
+    """Compléter un aperçu YOLO déjà calculé avec le compteur de sa chronologie."""
+    import cv2
+
+    if not Path(chemin_apercu).is_file() or not Path(chemin_chronologie).is_file():
+        raise ValueError("L'aperçu ou sa chronologie est indisponible.")
+
+    effectifs = []
+    with Path(chemin_chronologie).open("r", encoding="utf-8-sig", newline="") as fichier:
+        for ligne in csv.DictReader(fichier):
+            if ligne.get("video_id") == identifiant and ligne.get("categorie") == CATEGORIES[categorie]:
+                effectifs.append((float(ligne["horodatage_s"]), int(ligne["nombre_visible"])))
+    if not effectifs:
+        raise ValueError("Aucune chronologie pour la catégorie sélectionnée.")
+    effectifs.sort(key=lambda valeur: valeur[0])
+
+    capture = cv2.VideoCapture(str(chemin_apercu))
+    encodeur = None
+    reussi = False
+    try:
+        if not capture.isOpened():
+            raise ValueError("Impossible de lire l'aperçu YOLO existant.")
+        largeur = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        hauteur = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cadence = float(capture.get(cv2.CAP_PROP_FPS))
+        total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        if largeur <= 0 or hauteur <= 0 or not math.isfinite(cadence) or cadence <= 0:
+            raise ValueError("Métadonnées vidéo invalides.")
+        commande = [
+            "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", "bgr24",
+            "-video_size", f"{largeur}x{hauteur}", "-framerate", f"{cadence:.6f}",
+            "-i", "pipe:0", "-an", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            str(destination),
+        ]
+        encodeur = subprocess.Popen(
+            commande, stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        numero = 0
+        position = -1
+        while True:
+            lu, image = capture.read()
+            if not lu:
+                break
+            temps = numero / cadence
+            while position + 1 < len(effectifs) and effectifs[position + 1][0] <= temps + 1e-7:
+                position += 1
+            nombre = effectifs[position][1] if position >= 0 else 0
+            libelle = f"{CATEGORIES[categorie].capitalize()} : {nombre}"
+            largeur_texte = cv2.getTextSize(
+                libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2
+            )[0][0]
+            cv2.rectangle(
+                image, (8, 7), (min(largeur - 1, largeur_texte + 25), 44),
+                (0, 0, 0), -1
+            )
+            cv2.putText(
+                image, libelle, (16, 33), cv2.FONT_HERSHEY_SIMPLEX,
+                0.65, (255, 255, 255), 2, cv2.LINE_AA
+            )
+            encodeur.stdin.write(image.tobytes())
+            numero += 1
+            if total > 0 and numero % max(1, int(cadence)) == 0:
+                progression(min(numero / total, 0.999))
+        if not numero:
+            raise ValueError("Aucune image dans l'aperçu existant.")
+        encodeur.stdin.close()
+        if encodeur.wait() != 0:
+            raise ValueError("Échec de l'encodage de l'aperçu réutilisé.")
+        if not Path(destination).is_file() or Path(destination).stat().st_size == 0:
+            raise ValueError("L'aperçu avec compteur n'a pas été généré.")
+        reussi = True
+        progression(1.0)
+    finally:
+        capture.release()
+        if encodeur is not None:
+            if encodeur.stdin is not None and not encodeur.stdin.closed:
+                encodeur.stdin.close()
+            if encodeur.poll() is None:
+                encodeur.terminate()
+            encodeur.wait()
+        if not reussi:
+            Path(destination).unlink(missing_ok=True)
+
+
 def assembler_quatre_videos(chemins, sortie):
     """Réunir les quatre vidéos annotées en un seul lecteur 1920 × 1080."""
     if len(chemins) != 4:
@@ -153,7 +241,7 @@ def assembler_quatre_videos(chemins, sortie):
 
 
 def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
-                 categorie=67):
+                 categorie=67, reutilisations=None):
     """Analyser réellement les quatre vidéos avec VisioTrack puis assembler leurs annotations.
 
     Chaque URL utilise le même moteur YOLO, ByteTrack, la détection des
@@ -170,15 +258,40 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
 
     racine = Path(dossier)
     racine.mkdir(parents=True, exist_ok=True)
-    modele = charger_modele()
+    reutilisations = reutilisations or {}
+    modele = None
     chemins_annotes = []
     resultats = []
 
     for indice, url in enumerate(urls, 1):
+        adresse = url.strip()
+        destination = racine / f"case_{indice}.mp4"
+        reprise = reutilisations.get(adresse)
+        if reprise is not None:
+            try:
+                progression(indice, 5, f"Réutilisation de l'analyse URL {indice}", 0.0)
+                reutiliser_apercu_analyse(
+                    reprise["apercu"], reprise["chronologie"], reprise["video_id"],
+                    categorie, destination,
+                    lambda valeur: progression(
+                        indice, 5, f"Annotation du compteur URL {indice}", valeur
+                    ),
+                )
+                ligne = dict(reprise["resultat"])
+                ligne.update(video_id=f"v{indice:06d}", source=adresse)
+                resultats.append(ligne)
+                chemins_annotes.append(destination)
+                continue
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+                # Le téléchargement reste possible lorsque l'aperçu n'est plus lisible.
+                destination.unlink(missing_ok=True)
+
         progression(indice, 5, f"Téléchargement URL {indice}", 0.0)
         try:
+            if modele is None:
+                modele = charger_modele()
             with tempfile.TemporaryDirectory(prefix=f"source-{indice}-", dir=racine) as temporaire:
-                source = SourceVideo(url.strip(), "url", url.strip())
+                source = SourceVideo(adresse, "url", adresse)
                 chemin = preparer_video(source, temporaire)
                 video_id = f"v{indice:06d}"
                 lignes = analyser_video(
@@ -187,7 +300,6 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
                     lambda valeur: progression(indice, 5, f"Analyse YOLO URL {indice}", 0.7 * valeur),
                     quantifier_temps=True, compter_distincts=True,
                 )
-                destination = racine / f"case_{indice}.mp4"
                 creer_video_annotee(
                     chemin, Path(temporaire) / "observations.jsonl", destination,
                     lignes[0]["duree_totale_s"],
