@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from montage import annoter_video, assembler_quatre_videos, creer_montage
+from montage import annoter_video, assembler_quatre_videos, assembler_videos, creer_montage
 from detection import lire_metadonnees
 
 
@@ -49,6 +49,38 @@ class TestMontageComparatif(unittest.TestCase):
         self.assertGreater(detection.call_count, 0)
         # La bordure jaune du rectangle doit être distincte de la source rouge.
         self.assertGreater(int(image[60, 70, 1]), 100)
+
+    def test_split_deux_et_trois_ecrans(self):
+        """Vérifier les deux dispositions horizontales en 1920 × 1080."""
+        import json
+
+        for nombre in (2, 3):
+            with self.subTest(nombre=nombre):
+                sources = [
+                    self.creer_video(
+                        f"split_{nombre}_{indice}.mp4",
+                        ("red", "green", "blue")[indice],
+                        (0.6, 1.0, 1.4)[indice],
+                    )
+                    for indice in range(nombre)
+                ]
+                sortie = self.dossier / f"split_{nombre}.mp4"
+                duree = assembler_videos(sources, sortie)
+                duree_reelle, _ = lire_metadonnees(sortie)
+                self.assertAlmostEqual(duree, duree_reelle, delta=0.1)
+                controle = subprocess.run(
+                    [
+                        "ffprobe", "-v", "error", "-show_entries",
+                        "stream=codec_type,width,height", "-of", "json", str(sortie),
+                    ],
+                    capture_output=True, text=True, check=True,
+                )
+                pistes = json.loads(controle.stdout)["streams"]
+                self.assertEqual(len(pistes), 1)
+                self.assertEqual(pistes[0]["codec_type"], "video")
+                self.assertEqual(
+                    (pistes[0]["width"], pistes[0]["height"]), (1920, 1080)
+                )
 
     def test_quadriptyque_prolonge_videos_courtes(self):
         """Le montage dure autant que la plus longue piste et reste muet."""
@@ -134,6 +166,51 @@ class TestAnalyseQuatreUrls(unittest.TestCase):
             csv = (racine / "visiotrack_montage_resultats.csv").read_text(encoding="utf-8-sig")
             self.assertEqual(csv.count("v00000"), 4)
 
+
+    def test_analyse_sans_split_avec_deux_urls(self):
+        """Les deux URL sont analysées sans assembler leurs vidéos."""
+        with tempfile.TemporaryDirectory() as dossier:
+            racine = Path(dossier)
+            urls = [
+                "https://www.youtube.com/watch?v=video1",
+                "",
+                "https://www.youtube.com/watch?v=video3",
+                "",
+            ]
+            appels = []
+
+            def simuler_analyse(chemin, video_id, nom, categories, frequence,
+                               modele, repertoire, progression, **options):
+                appels.append(nom)
+                progression(1.0)
+                return [{
+                    "video_id": video_id, "source": nom, "statut": "ok",
+                    "categorie": "smartphone", "duree_totale_s": 1.0,
+                }]
+
+            def simuler_video(chemin, observations, destination, duree,
+                             progression, **options):
+                Path(destination).write_bytes(b"video annotee")
+                progression(1.0)
+
+            with (
+                patch("montage.charger_modele", return_value=object()),
+                patch("montage.preparer_video", return_value=racine / "source.mp4"),
+                patch("montage.analyser_video", side_effect=simuler_analyse),
+                patch("montage.creer_video_annotee", side_effect=simuler_video),
+                patch("montage.assembler_videos") as assemblage,
+            ):
+                sortie, duree = creer_montage(
+                    urls, racine, generer_split=False, categorie=67
+                )
+
+            self.assertIsNone(sortie)
+            self.assertIsNone(duree)
+            self.assertEqual(appels, [urls[0], urls[2]])
+            self.assertTrue((racine / "case_1.mp4").is_file())
+            self.assertTrue((racine / "case_2.mp4").is_file())
+            self.assertFalse((racine / "case_3.mp4").exists())
+            assemblage.assert_not_called()
 
     def test_reutilisation_une_url_sans_second_telechargement(self):
         """Une analyse précédente évite l'accès au réseau pour l'URL déjà traitée."""
