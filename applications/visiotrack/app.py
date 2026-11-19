@@ -383,7 +383,7 @@ def afficher_application():
         [data-testid="stMainBlockContainer"],
         .stMainBlockContainer,
         .main .block-container {
-            padding-top: 0.25rem !important;
+            padding-top: 1.25rem !important;
         }
         </style>
     """)
