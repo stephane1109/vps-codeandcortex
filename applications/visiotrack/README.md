@@ -17,6 +17,30 @@ et le lot continue. Les noms identiques restent distincts grâce à `video_id`.
 Les vidéos sans objet détecté figurent dans les résultats avec des valeurs nulles.
 Les vidéos en erreur ont des mesures vides, jamais des zéros trompeurs.
 
+
+## Montage comparatif à quatre fenêtres
+
+Le second formulaire de l'interface permet de saisir **quatre URL HTTPS distinctes**
+(YouTube ou TikTok) : concert, manifestation, journalisme, tourisme.
+Les champs identifient les sources dans l'interface ; aucun titre n'apparaît dans la vidéo.
+
+Le bouton « Générer le montage MP4 » télécharge et décode chaque source successivement,
+applique YOLO11n à la catégorie smartphone et produit une seule vidéo **1920 × 1080**,
+en grille **2 × 2**, à **15 images/s**. Chaque fenêtre affiche les cadres des
+smartphones détectés et un compteur « Smartphones : N ». Le fichier est silencieux.
+Les quatre vidéos démarrent au temps zéro, sans synchronisation sémantique des scènes.
+Le rendu dure autant que la vidéo la plus longue ; les fenêtres terminées
+conservent leur dernière image.
+
+Par défaut, la détection est actualisée cinq fois par seconde. Les cadres restent
+affichés entre deux détections : ce sont des approximations visuelles, non un suivi
+continu de l'utilisation effective du téléphone. Une fréquence supérieure accroît
+le temps de calcul CPU. Les vidéos privées, inaccessibles ou bloquées par les
+plateformes ne peuvent pas être montées. Les fichiers sources temporaires sont
+supprimés après chaque annotation ; le MP4 final est téléchargeable pendant la
+session Streamlit. Les trois exports CSV historiques restent disponibles dans
+le formulaire d'analyse distinct.
+
 ## Calculs et interprétation
 
 - YOLO11n fonctionne sur CPU, avec une taille d'inférence de 640 pixels et un seuil
