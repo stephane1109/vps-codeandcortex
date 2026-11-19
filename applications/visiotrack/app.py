@@ -223,13 +223,12 @@ def afficher_apercu(tableau, repertoire, identifiant=None):
 
 
 def afficher_montage(acces_initial):
-    """Générer un quadriptyque indépendant de l'analyse et des exports existants."""
-    st.subheader("Montage comparatif — quatre vidéos")
+    """Analyser jusqu'à quatre URL puis générer un split seulement si demandé."""
+    st.subheader("Analyse comparative — 1 à 4 URL")
     st.caption(
-        "Les quatre URL sont chacune analysées par YOLO et ByteTrack. "
-        "Le résultat s'affiche ci-dessous dans un lecteur unique : quatre vidéos annotées "
-        "en grille 2 × 2, avec rectangles et compteurs, sans titres ni audio. "
-        "Les vidéos courtes conservent leur dernière image."
+        "Renseignez librement une, deux, trois ou quatre URL. Chaque vidéo est analysée "
+        "par YOLO et ByteTrack. Vous pouvez ensuite obtenir une vidéo split : "
+        "deux ou trois fenêtres côte à côte, ou quatre fenêtres en grille 2 × 2."
     )
     with st.form("montage_comparatif"):
         colonnes_urls = st.columns(2)
@@ -245,28 +244,37 @@ def afficher_montage(acces_initial):
             list(CATEGORIES),
             index=67,
             format_func=lambda categorie: CATEGORIES[categorie].capitalize(),
-            help="Le smartphone est sélectionné par défaut. Les quatre vidéos "
-                 "sont analysées avec la même catégorie."
+            help="Le smartphone est sélectionné par défaut. Toutes les URL renseignées "
+                 "sont analysées avec cette catégorie."
         )
         frequence_montage = st.number_input(
-            "Images analysées par seconde (montage)", min_value=0.5,
+            "Images analysées par seconde (comparaison)", min_value=0.5,
             max_value=15.0, value=5.0, step=0.5,
-            help="La fréquence d'analyse YOLO est appliquée aux quatre vidéos."
+            help="Cette fréquence d'analyse YOLO s'applique aux vidéos non encore analysées."
         )
-        lancer_montage = st.form_submit_button(
-            "Générer le montage MP4 (1920 × 1080)", type="primary"
+        generer_split = st.checkbox(
+            "Générer une vidéo split (2, 3 ou 4 fenêtres)", value=False,
+            help="Option facultative. Deux URL : deux écrans côte à côte ; "
+                 "trois URL : trois écrans côte à côte ; "
+                 "quatre URL : quatre écrans en grille 2 × 2. "
+                 "Sans cette option, chaque vidéo reste consultable séparément."
         )
+        lancer_montage = st.form_submit_button("Analyser les URL", type="primary")
 
     if lancer_montage:
-        if any(not adresse.strip() for adresse in urls_montage):
-            st.error("Renseignez les quatre URL avant de lancer le montage.")
+        urls_retenues = [adresse.strip() for adresse in urls_montage if adresse.strip()]
+        if not urls_retenues:
+            st.error("Renseignez au moins une URL avant de lancer l'analyse.")
+        elif generer_split and len(urls_retenues) < 2:
+            st.error("La vidéo split nécessite au moins deux URL. "
+                     "Pour analyser une seule vidéo, décochez cette option.")
         elif not obtenir_verrou().acquire(blocking=False):
             st.warning("Une analyse VisioTrack est déjà en cours sur ce serveur.")
         else:
             temporaire = None
             try:
                 temporaire = tempfile.TemporaryDirectory(prefix="visiotrack-montage-")
-                barre = st.progress(0.0, text="Préparation des quatre vidéos…")
+                barre = st.progress(0.0, text=f"Préparation de {len(urls_retenues)} vidéo(s)…")
                 dernier_renouvellement = 0.0
 
                 def actualiser_montage(numero, total, etape, avancement):
@@ -296,7 +304,7 @@ def afficher_montage(acces_initial):
                         apercus_precedents = json.loads(
                             manifeste_precedent.read_text(encoding="utf-8")
                         )
-                        urls_demandees = {adresse.strip() for adresse in urls_montage}
+                        urls_demandees = set(urls_retenues)
                         for ligne in resultats_precedents:
                             if (ligne.get("statut") != "ok"
                                     or ligne.get("categorie") != CATEGORIES[categorie_montage]
@@ -319,20 +327,23 @@ def afficher_montage(acces_initial):
                         f"{len(reutilisations)} vidéo(s) déjà analysée(s) dans cette session "
                         "seront réutilisées sans nouveau téléchargement."
                     )
-                with st.spinner("Création du quadriptyque…"):
+                with st.spinner("Analyse des URL et création des vidéos annotées…"):
                     sortie, duree = creer_montage(
-                        urls_montage, temporaire.name, frequence_montage,
+                        urls_retenues, temporaire.name, frequence_montage,
                         actualiser_montage, categorie=categorie_montage,
-                        reutilisations=reutilisations
+                        reutilisations=reutilisations,
+                        generer_split=generer_split,
                     )
                 ancien = st.session_state.get("visiotrack_montage_exports")
                 st.session_state.visiotrack_montage_exports = temporaire
                 st.session_state.visiotrack_montage_duree = duree
+                st.session_state.visiotrack_montage_nombre = len(urls_retenues)
+                st.session_state.visiotrack_montage_split = generer_split
                 temporaire = None
                 if ancien:
                     ancien.cleanup()
             except Exception as erreur:
-                st.error(f"Impossible de produire le quadriptyque : {erreur}")
+                st.error(f"Impossible de terminer l’analyse comparative : {erreur}")
             finally:
                 if temporaire:
                     temporaire.cleanup()
@@ -340,33 +351,53 @@ def afficher_montage(acces_initial):
 
     if "visiotrack_montage_exports" in st.session_state:
         repertoire = Path(st.session_state.visiotrack_montage_exports.name)
-        fichier = repertoire / "visiotrack_montage_4_fenetres.mp4"
-        if fichier.is_file():
-            st.subheader("Résultat de la détection YOLO — quatre vidéos")
-            st.video(str(fichier))
-            st.caption(
-                f"Quatre vidéos analysées et annotées dans un lecteur unique. "
-                f"Durée : {st.session_state.visiotrack_montage_duree:.1f} s. "
-                "MP4 1920 × 1080, 15 images/s, sans audio."
-            )
-            with fichier.open("rb") as entree:
-                st.download_button(
-                    "Télécharger le montage MP4", entree,
-                    file_name="visiotrack_montage_4_fenetres.mp4",
-                    mime="video/mp4", on_click="ignore", width="stretch"
+        nombre_videos = st.session_state.get("visiotrack_montage_nombre", 4)
+        avec_split = st.session_state.get("visiotrack_montage_split", True)
+
+        if avec_split:
+            fichier_split = repertoire / f"visiotrack_montage_{nombre_videos}_fenetres.mp4"
+            if fichier_split.is_file():
+                st.subheader(f"Vidéo split — {nombre_videos} fenêtres")
+                st.video(str(fichier_split))
+                st.caption(
+                    f"Détections YOLO simultanées — durée : "
+                    f"{st.session_state.visiotrack_montage_duree:.1f} s. "
+                    "MP4 1920 × 1080, sans audio, dernière image figée."
                 )
-            chemin_csv = repertoire / "visiotrack_montage_resultats.csv"
-            if chemin_csv.is_file():
-                st.subheader("Résultats des quatre analyses YOLO")
-                st.dataframe(
-                    pd.read_csv(chemin_csv), hide_index=True, width="stretch"
-                )
-                with chemin_csv.open("rb") as entree:
+                with fichier_split.open("rb") as entree:
                     st.download_button(
-                        "Télécharger les résultats des quatre vidéos (CSV)",
-                        entree, file_name="visiotrack_montage_resultats.csv",
-                        mime="text/csv", on_click="ignore", width="stretch"
+                        "Télécharger la vidéo split MP4", entree,
+                        file_name=fichier_split.name, mime="video/mp4",
+                        on_click="ignore", width="stretch"
                     )
+
+        st.subheader(f"Vidéos annotées — {nombre_videos} analyse(s) YOLO")
+        colonnes_apercus = st.columns(2)
+        for indice in range(1, nombre_videos + 1):
+            fichier_individuel = repertoire / f"case_{indice}.mp4"
+            if fichier_individuel.is_file():
+                with colonnes_apercus[(indice - 1) % 2]:
+                    st.caption(f"URL {indice}")
+                    st.video(str(fichier_individuel))
+                    with fichier_individuel.open("rb") as entree:
+                        st.download_button(
+                            f"Télécharger la vidéo annotée {indice}",
+                            entree, file_name=f"visiotrack_analyse_{indice}.mp4",
+                            mime="video/mp4", on_click="ignore",
+                            width="stretch", key=f"visiotrack_telecharger_analyse_{indice}"
+                        )
+
+        chemin_csv = repertoire / "visiotrack_montage_resultats.csv"
+        if chemin_csv.is_file():
+            st.subheader("Résultats des analyses YOLO")
+            st.dataframe(pd.read_csv(chemin_csv), hide_index=True, width="stretch")
+            with chemin_csv.open("rb") as entree:
+                st.download_button(
+                    "Télécharger les résultats des vidéos (CSV)",
+                    entree, file_name="visiotrack_montage_resultats.csv",
+                    mime="text/csv", on_click="ignore", width="stretch"
+                )
+
 
 def afficher_application():
     """Construire les seuls réglages nécessaires à l'analyse."""
