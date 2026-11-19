@@ -6,43 +6,38 @@ utilisation effective. Le smartphone correspond à la classe COCO `cell phone` (
 qui peut aussi reconnaître d'autres téléphones portables.
 
 
-## Montage comparatif — quatre URL
+## Analyse comparative de une à quatre URL et vidéo split facultative
 
-Ce formulaire indépendant comporte **URL 1**, **URL 2**, **URL 3** et **URL 4**
-(sans nom de scène). Après le choix de l'objet à détecter (smartphone par défaut)
-et de la fréquence, les quatre vidéos passent **chacune dans le moteur YOLO/ByteTrack
-de VisioTrack**, exactement comme les analyses individuelles. Ce traitement
-comprend la détection, le suivi, les changements de plan et les mesures de visibilité.
+L'interface conserve quatre champs distincts **URL 1**, **URL 2**, **URL 3** et
+**URL 4**, tous facultatifs. Elle analyse uniquement les champs renseignés :
+une, deux, trois ou quatre vidéos, sans imposer quatre URL.
 
-L'interface montre ensuite **le résultat dans un seul lecteur vidéo intégré** :
-quatre vidéos avec cadres de détection et compteurs, en grille 2 × 2, synchronisées
-à leur début. Le MP4 final fait 1920 × 1080 pixels, 15 images/s, sans audio,
-sans titre de scène. La durée correspond à la vidéo la plus longue ; chaque
-vidéo plus courte conserve sa dernière image. Les rapports d'image des vidéos
-verticales et horizontales sont conservés par des bandes noires si nécessaire.
+L'utilisateur choisit la catégorie YOLO (smartphone par défaut) et la fréquence
+d'analyse, puis peut cocher **« Générer une vidéo split (2, 3 ou 4 fenêtres) »**.
+Cette case est décochée par défaut. Les analyses YOLO/ByteTrack individuelles
+produisent des vidéos annotées avec rectangles et compteurs, accessibles dans
+l'interface et téléchargeables individuellement. Un CSV rassemble leurs mesures.
 
-Le lecteur est visible directement dans la page, puis le montage MP4 peut être
-téléchargé. **Si une URL a déjà été analysée dans le module principal au cours
-de la même session Streamlit**, le montage réutilise automatiquement son aperçu
-annoté YOLO et sa chronologie, lorsque ces fichiers contiennent la catégorie
-demandée. Les rectangles proviennent de l'analyse précédente et le compteur
-est ajouté à partir des effectifs enregistrés : aucun second téléchargement
-n'est effectué pour cette URL, ce qui évite les erreurs HTTP intermittentes
-liées aux accès répétés aux plateformes. Les vidéos non encore analysées
-continuent à suivre le traitement ordinaire. La fréquence d'échantillonnage
-d'un résultat réutilisé reste celle de son analyse d'origine. Cette réutilisation
-ne concerne pas des sessions déjà terminées.
-Un tableau comparatif reprend les résultats YOLO de chacune des
-quatre URL et propose un fichier CSV supplémentaire. La fréquence d'analyse
-est réglable (5 images/s par défaut). Les rectangles peuvent rester approximatifs
-entre les images analysées ; leur affichage suit les observations du moteur et
-les changements de plan identifiés. La détection d'un smartphone ne prouve
-pas une activité de captation.
+Lorsque la case split est cochée, l'application assemble les vidéos annotées
+dans un seul MP4 1920 × 1080, sans audio ni titre : **2 vidéos : deux fenêtres
+côte à côte ; 3 vidéos : trois fenêtres côte à côte ; 4 vidéos : grille 2 × 2**.
+La vidéo la plus longue fixe la durée et les vidéos plus courtes conservent leur
+dernière image. Les rapports d'image sont préservés avec des bandes noires.
+Le split apparaît directement dans le lecteur intégré et peut être téléchargé.
 
-L'analyse standard, ses mesures, ses graphiques, ses aperçus et ses exports CSV
-ne sont pas modifiés. Les règles de contrôle d'accès et de renouvellement du ticket
-restent actives. Si une des URL est indisponible, le module affiche son numéro
-et la raison de l'échec au lieu de produire un montage incomplet.
+Lorsque l'utilisateur lance d'abord une analyse **sans split**, un bouton situé
+sous les résultats permet d'assembler ultérieurement les deux à quatre vidéos
+déjà annotées : **ni nouveau téléchargement ni seconde analyse YOLO**.
+De même, lorsqu'une URL a été analysée par le module d'analyse standard au
+cours de la même session Streamlit, la comparaison peut réutiliser son aperçu
+annoté et sa chronologie de détection, si la catégorie demandée est disponible.
+Les vidéos non encore disponibles suivent le circuit habituel. Un 403 sur leur
+premier téléchargement reste possible.
+
+Les vidéos sont analysées avec les mêmes fonctions YOLO/ByteTrack que dans le
+module historique. Les anciennes analyses, mesures, graphiques, aperçus, exports
+et contraintes d'accès ne sont pas supprimés. La détection d'un smartphone
+ne prouve pas que son porteur filme.
 
 ## Utilisation
 
