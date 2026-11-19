@@ -225,11 +225,6 @@ def afficher_apercu(tableau, repertoire, identifiant=None):
 def afficher_montage(acces_initial):
     """Analyser jusqu'à quatre URL puis générer un split seulement si demandé."""
     st.subheader("Analyse comparative — 1 à 4 URL")
-    st.caption(
-        "Renseignez librement une, deux, trois ou quatre URL. Chaque vidéo est analysée "
-        "par YOLO et ByteTrack. Vous pouvez ensuite obtenir une vidéo split : "
-        "deux ou trois fenêtres côte à côte, ou quatre fenêtres en grille 2 × 2."
-    )
     with st.form("montage_comparatif"):
         colonnes_urls = st.columns(2)
         urls_montage = []
