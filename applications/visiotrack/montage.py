@@ -114,20 +114,30 @@ def annoter_video(chemin_source, chemin_sortie, modele, frequence=5.0,
 
 def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
                             categorie, destination, progression=lambda valeur: None):
-    """Compléter un aperçu YOLO déjà calculé avec le compteur de sa chronologie."""
+    """Réutiliser les annotations YOLO et ajouter un compteur pour chaque objet choisi."""
     import cv2
 
+    categories = [categorie] if isinstance(categorie, int) else list(categorie)
+    if not categories or any(cle not in CATEGORIES for cle in categories):
+        raise ValueError("Sélectionnez au moins un objet YOLO valide.")
     if not Path(chemin_apercu).is_file() or not Path(chemin_chronologie).is_file():
         raise ValueError("L'aperçu ou sa chronologie est indisponible.")
 
-    effectifs = []
+    effectifs = {cle: [] for cle in categories}
+    noms_classes = {CATEGORIES[cle]: cle for cle in categories}
     with Path(chemin_chronologie).open("r", encoding="utf-8-sig", newline="") as fichier:
         for ligne in csv.DictReader(fichier):
-            if ligne.get("video_id") == identifiant and ligne.get("categorie") == CATEGORIES[categorie]:
-                effectifs.append((float(ligne["horodatage_s"]), int(ligne["nombre_visible"])))
-    if not effectifs:
-        raise ValueError("Aucune chronologie pour la catégorie sélectionnée.")
-    effectifs.sort(key=lambda valeur: valeur[0])
+            if ligne.get("video_id") != identifiant:
+                continue
+            cle = noms_classes.get(ligne.get("categorie"))
+            if cle is not None:
+                effectifs[cle].append(
+                    (float(ligne["horodatage_s"]), int(ligne["nombre_visible"]))
+                )
+    if any(not valeurs for valeurs in effectifs.values()):
+        raise ValueError("La chronologie de certains objets sélectionnés est absente.")
+    for valeurs in effectifs.values():
+        valeurs.sort(key=lambda element: element[0])
 
     capture = cv2.VideoCapture(str(chemin_apercu))
     encodeur = None
@@ -140,7 +150,8 @@ def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
         cadence = float(capture.get(cv2.CAP_PROP_FPS))
         total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         if largeur <= 0 or hauteur <= 0 or not math.isfinite(cadence) or cadence <= 0:
-            raise ValueError("Métadonnées vidéo invalides.")
+            raise ValueError("Métadonnées de l'aperçu invalides.")
+
         commande = [
             "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "bgr24",
@@ -154,27 +165,36 @@ def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         numero = 0
-        position = -1
+        positions = {cle: -1 for cle in categories}
         while True:
             lu, image = capture.read()
             if not lu:
                 break
             temps = numero / cadence
-            while position + 1 < len(effectifs) and effectifs[position + 1][0] <= temps + 1e-7:
-                position += 1
-            nombre = effectifs[position][1] if position >= 0 else 0
-            libelle = f"{CATEGORIES[categorie].capitalize()} : {nombre}"
-            largeur_texte = cv2.getTextSize(
-                libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2
-            )[0][0]
-            cv2.rectangle(
-                image, (8, 7), (min(largeur - 1, largeur_texte + 25), 44),
-                (0, 0, 0), -1
-            )
-            cv2.putText(
-                image, libelle, (16, 33), cv2.FONT_HERSHEY_SIMPLEX,
-                0.65, (255, 255, 255), 2, cv2.LINE_AA
-            )
+            for rang, cle in enumerate(categories):
+                valeurs = effectifs[cle]
+                position = positions[cle]
+                while position + 1 < len(valeurs) and valeurs[position + 1][0] <= temps + 1e-7:
+                    position += 1
+                positions[cle] = position
+                nombre = valeurs[position][1] if position >= 0 else 0
+                libelle = f"{CATEGORIES[cle].capitalize()} : {nombre}"
+                largeur_texte = cv2.getTextSize(
+                    libelle, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2
+                )[0][0]
+                haut = 7 + rang * 38
+                bas = haut + 37
+                if bas > hauteur:
+                    continue
+                cv2.rectangle(
+                    image, (8, haut),
+                    (min(largeur - 1, max(155, largeur_texte + 25)), bas),
+                    (0, 0, 0), -1
+                )
+                cv2.putText(
+                    image, libelle, (16, haut + 26), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65, (255, 255, 255), 2, cv2.LINE_AA
+                )
             encodeur.stdin.write(image.tobytes())
             numero += 1
             if total > 0 and numero % max(1, int(cadence)) == 0:
@@ -185,7 +205,7 @@ def reutiliser_apercu_analyse(chemin_apercu, chemin_chronologie, identifiant,
         if encodeur.wait() != 0:
             raise ValueError("Échec de l'encodage de l'aperçu réutilisé.")
         if not Path(destination).is_file() or Path(destination).stat().st_size == 0:
-            raise ValueError("L'aperçu avec compteur n'a pas été généré.")
+            raise ValueError("L'aperçu avec compteurs n'a pas été généré.")
         reussi = True
         progression(1.0)
     finally:
@@ -259,7 +279,7 @@ def assembler_quatre_videos(chemins, sortie):
 
 
 def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
-                 categorie=67, reutilisations=None, generer_split=True):
+                 categorie=67, reutilisations=None, generer_split=True, categories=None):
     """Analyser une à quatre URL et produire une vidéo split seulement sur demande.
 
     Les quatre champs URL sont facultatifs : seuls ceux renseignés sont analysés.
@@ -271,8 +291,11 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
         raise ValueError("Renseignez entre une et quatre URL vidéo.")
     if generer_split and len(adresses) < 2:
         raise ValueError("Une vidéo split nécessite au moins deux URL.")
-    if categorie not in CATEGORIES:
-        raise ValueError("Sélectionnez une catégorie YOLO valide.")
+    categories_choisies = [categorie] if categories is None else list(categories)
+    if not categories_choisies or any(cle not in CATEGORIES for cle in categories_choisies):
+        raise ValueError("Sélectionnez au moins un objet YOLO valide.")
+    if len(categories_choisies) != len(set(categories_choisies)):
+        raise ValueError("Ne sélectionnez pas plusieurs fois le même objet.")
     if not math.isfinite(frequence) or not 0 < frequence <= 30:
         raise ValueError("La fréquence d'analyse doit être comprise entre 0 et 30 images/s.")
     for adresse in adresses:
@@ -294,14 +317,22 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
                 progression(indice, total_etapes, f"Réutilisation de l'analyse URL {indice}", 0.0)
                 reutiliser_apercu_analyse(
                     reprise["apercu"], reprise["chronologie"], reprise["video_id"],
-                    categorie, destination,
+                    categories_choisies, destination,
                     lambda valeur: progression(
                         indice, total_etapes, f"Compteur URL {indice}", valeur
                     ),
                 )
-                ligne = dict(reprise["resultat"])
-                ligne.update(video_id=f"v{indice:06d}", source=adresse)
-                resultats.append(ligne)
+                anciennes_lignes = reprise["resultat"]
+                if isinstance(anciennes_lignes, dict):
+                    anciennes_lignes = [anciennes_lignes]
+                for ancienne_ligne in anciennes_lignes:
+                    if ancienne_ligne.get("categorie") not in [
+                        CATEGORIES[cle] for cle in categories_choisies
+                    ]:
+                        continue
+                    ligne = dict(ancienne_ligne)
+                    ligne.update(video_id=f"v{indice:06d}", source=adresse)
+                    resultats.append(ligne)
                 chemins_annotes.append(destination)
                 continue
             except (OSError, ValueError, KeyError, subprocess.SubprocessError):
@@ -319,7 +350,7 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
                 chemin = preparer_video(source, temporaire)
                 video_id = f"v{indice:06d}"
                 lignes = analyser_video(
-                    chemin, video_id, adresse, [categorie], frequence, modele,
+                    chemin, video_id, adresse, categories_choisies, frequence, modele,
                     temporaire,
                     lambda valeur: progression(
                         indice, total_etapes, f"Analyse YOLO URL {indice}", 0.7 * valeur
@@ -332,7 +363,7 @@ def creer_montage(urls, dossier, frequence=5.0, progression=lambda *args: None,
                     lambda valeur: progression(
                         indice, total_etapes, f"Vidéo annotée URL {indice}", 0.7 + valeur * 0.3
                     ),
-                    categories_compteur=[categorie],
+                    categories_compteur=categories_choisies,
                 )
                 chemins_annotes.append(destination)
                 resultats.extend(lignes)
