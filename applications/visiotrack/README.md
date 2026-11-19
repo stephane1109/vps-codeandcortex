@@ -8,26 +8,31 @@ qui peut aussi reconnaître d'autres téléphones portables.
 
 ## Montage comparatif — quatre URL
 
-Un formulaire indépendant permet de saisir **URL 1**, **URL 2**, **URL 3**
-et **URL 4**, sans nom de scène prédéfini. Il accepte quatre URL publiques
-HTTPS YouTube ou TikTok, selon les mêmes règles d'import que l'analyse existante.
+Ce formulaire indépendant comporte **URL 1**, **URL 2**, **URL 3** et **URL 4**
+(sans nom de scène). Après le choix de l'objet à détecter (smartphone par défaut)
+et de la fréquence, les quatre vidéos passent **chacune dans le moteur YOLO/ByteTrack
+de VisioTrack**, exactement comme les analyses individuelles. Ce traitement
+comprend la détection, le suivi, les changements de plan et les mesures de visibilité.
 
-L'option « Générer le montage MP4 » produit un quadriptyque silencieux
-**1920 × 1080**, en grille **2 × 2**, à **15 images/s**. Chaque fenêtre
-affiche les rectangles de détection des smartphones et un compteur,
-sans titre de scène. Les quatre vidéos démarrent à leur début ; le montage
-se termine à la fin de la vidéo la plus longue, tandis que les vidéos plus
-courtes conservent leur dernière image.
+L'interface montre ensuite **le résultat dans un seul lecteur vidéo intégré** :
+quatre vidéos avec cadres de détection et compteurs, en grille 2 × 2, synchronisées
+à leur début. Le MP4 final fait 1920 × 1080 pixels, 15 images/s, sans audio,
+sans titre de scène. La durée correspond à la vidéo la plus longue ; chaque
+vidéo plus courte conserve sa dernière image. Les rapports d'image des vidéos
+verticales et horizontales sont conservés par des bandes noires si nécessaire.
 
-La détection est recalculée cinq fois par seconde par défaut. Entre deux
-analyses, les rectangles restent affichés et peuvent être approximatifs ;
-la présence d'un smartphone ne prouve pas qu'une personne filme.
-Le résultat MP4 est téléchargeable pendant la session.
+Le lecteur est visible directement dans la page, puis le montage MP4 peut être
+téléchargé. Un tableau comparatif reprend les résultats YOLO de chacune des
+quatre URL et propose un fichier CSV supplémentaire. La fréquence d'analyse
+est réglable (5 images/s par défaut). Les rectangles peuvent rester approximatifs
+entre les images analysées ; leur affichage suit les observations du moteur et
+les changements de plan identifiés. La détection d'un smartphone ne prouve
+pas une activité de captation.
 
-Cette fonction conserve les mesures, graphiques, aperçus et exports CSV
-existants. Les règles d'accès et de renouvellement du ticket restent actives.
-Les sources indisponibles ou restreintes par les plateformes ne peuvent pas
-être incluses dans le montage.
+L'analyse standard, ses mesures, ses graphiques, ses aperçus et ses exports CSV
+ne sont pas modifiés. Les règles de contrôle d'accès et de renouvellement du ticket
+restent actives. Si une des URL est indisponible, le module affiche son numéro
+et la raison de l'échec au lieu de produire un montage incomplet.
 
 ## Utilisation
 
