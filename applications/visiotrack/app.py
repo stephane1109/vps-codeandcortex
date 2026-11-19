@@ -282,10 +282,48 @@ def afficher_montage(acces_initial):
                     barre.progress(min(1.0, max(0.0, valeur)),
                                    text=f"{etape} ({numero}/{total})")
 
+                # Réutiliser les analyses de cette session pour les mêmes URL.
+                # Le lecteur du module principal conserve déjà les MP4 annotés
+                # et la chronologie des effectifs, sans conserver les sources brutes.
+                reutilisations = {}
+                session_precedente = st.session_state.get("visiotrack_exports")
+                resultats_precedents = st.session_state.get("visiotrack_resultats", [])
+                if session_precedente is not None:
+                    repertoire_precedent = Path(session_precedente.name)
+                    manifeste_precedent = repertoire_precedent / "apercus.json"
+                    chronologie_precedente = repertoire_precedent / "chronologie.csv"
+                    if manifeste_precedent.is_file() and chronologie_precedente.is_file():
+                        apercus_precedents = json.loads(
+                            manifeste_precedent.read_text(encoding="utf-8")
+                        )
+                        urls_demandees = {adresse.strip() for adresse in urls_montage}
+                        for ligne in resultats_precedents:
+                            if (ligne.get("statut") != "ok"
+                                    or ligne.get("categorie") != CATEGORIES[categorie_montage]
+                                    or ligne.get("source") not in urls_demandees):
+                                continue
+                            identifiant = ligne["video_id"]
+                            chemin_rel = apercus_precedents.get(identifiant, {}).get("fichier")
+                            if not chemin_rel:
+                                continue
+                            chemin_apercu = repertoire_precedent / chemin_rel
+                            if chemin_apercu.is_file():
+                                reutilisations[ligne["source"]] = {
+                                    "apercu": str(chemin_apercu),
+                                    "chronologie": str(chronologie_precedente),
+                                    "video_id": identifiant,
+                                    "resultat": ligne,
+                                }
+                if reutilisations:
+                    st.info(
+                        f"{len(reutilisations)} vidéo(s) déjà analysée(s) dans cette session "
+                        "seront réutilisées sans nouveau téléchargement."
+                    )
                 with st.spinner("Création du quadriptyque…"):
                     sortie, duree = creer_montage(
                         urls_montage, temporaire.name, frequence_montage,
-                        actualiser_montage, categorie=categorie_montage
+                        actualiser_montage, categorie=categorie_montage,
+                        reutilisations=reutilisations
                     )
                 ancien = st.session_state.get("visiotrack_montage_exports")
                 st.session_state.visiotrack_montage_exports = temporaire
