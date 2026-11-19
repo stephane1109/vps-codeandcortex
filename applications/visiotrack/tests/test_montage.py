@@ -167,6 +167,52 @@ class TestAnalyseQuatreUrls(unittest.TestCase):
             self.assertEqual(csv.count("v00000"), 4)
 
 
+    def test_plusieurs_objets_yolo_dans_l_analyse_comparative(self):
+        """Transmettre les catégories smartphone et personne à chaque vidéo."""
+        with tempfile.TemporaryDirectory() as dossier:
+            racine = Path(dossier)
+            urls = ["https://www.youtube.com/watch?v=abc123"]
+            appels = []
+            compteurs = []
+
+            def simuler_analyse(chemin, video_id, nom, categories, frequence,
+                               modele, repertoire, progression, **options):
+                appels.append(list(categories))
+                progression(1.0)
+                return [
+                    {
+                        "video_id": video_id, "source": nom, "statut": "ok",
+                        "categorie": nom_classe, "duree_totale_s": 1.0,
+                    }
+                    for nom_classe in ("smartphone", "personne")
+                ]
+
+            def simuler_apercu(chemin, observations, destination, duree,
+                              progression, **options):
+                compteurs.append(options["categories_compteur"])
+                Path(destination).write_bytes(b"apercu annote")
+                progression(1.0)
+
+            with (
+                patch("montage.charger_modele", return_value=object()),
+                patch("montage.preparer_video", return_value=racine / "source.mp4"),
+                patch("montage.analyser_video", side_effect=simuler_analyse),
+                patch("montage.creer_video_annotee", side_effect=simuler_apercu),
+            ):
+                sortie, duree = creer_montage(
+                    urls, racine, categories=[67, 0], generer_split=False
+                )
+
+            self.assertIsNone(sortie)
+            self.assertIsNone(duree)
+            self.assertEqual(appels, [[67, 0]])
+            self.assertEqual(compteurs, [[67, 0]])
+            contenu = (racine / "visiotrack_montage_resultats.csv").read_text(
+                encoding="utf-8-sig"
+            )
+            self.assertIn("smartphone", contenu)
+            self.assertIn("personne", contenu)
+
     def test_analyse_sans_split_avec_deux_urls(self):
         """Les deux URL sont analysées sans assembler leurs vidéos."""
         with tempfile.TemporaryDirectory() as dossier:
