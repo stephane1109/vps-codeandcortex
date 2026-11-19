@@ -339,13 +339,20 @@ def afficher_application():
     )
     st.set_page_config(page_title="VisioTrack", page_icon=favicon_transparent, layout="wide",
                        initial_sidebar_state="expanded")
-    # Même propriété Analytics que la home ; une seule visite malgré les reruns.
-    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
-                    height=0, scrolling=False)
-    # Réserver un accès avant de permettre les imports ou l'analyse.
-    acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
+    # Supprimer l'espacement supérieur de Streamlit sans toucher aux autres marges.
+    st.html("""
+        <style>
+        [data-testid="stMainBlockContainer"],
+        .stMainBlockContainer,
+        .main .block-container {
+            padding-top: 0.25rem !important;
+        }
+        </style>
+    """)
     st.title("VisioTrack")
     st.caption("version 19-11-2026")
+    # Réserver un accès avant de permettre les imports ou l'analyse.
+    acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
 
     with st.form("analyse"):
         urls = st.text_area("URL YouTube ou TikTok", placeholder=(
@@ -421,6 +428,9 @@ def afficher_application():
                 obtenir_verrou().release()
     afficher_resultats()
     afficher_montage(acces_initial)
+    # L'iframe Analytics ne doit pas créer d'espacement avant le titre.
+    components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                    height=0, scrolling=False)
 
 
 if __name__ == "__main__":
