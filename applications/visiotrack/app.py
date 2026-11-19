@@ -13,7 +13,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from detection import CATEGORIES, colonnes_resultats, inventorier_sources, traiter_lot
-from montage import creer_montage
+from montage import assembler_videos, creer_montage
 from ticket_gate import enforce_streamlit_access, renouveler_acces_analyse
 
 
@@ -353,6 +353,34 @@ def afficher_montage(acces_initial):
         repertoire = Path(st.session_state.visiotrack_montage_exports.name)
         nombre_videos = st.session_state.get("visiotrack_montage_nombre", 4)
         avec_split = st.session_state.get("visiotrack_montage_split", True)
+
+        # Une vidéo split peut aussi être produite après l'analyse,
+        # sans relancer YOLO ni télécharger une seconde fois les URL.
+        if nombre_videos >= 2 and not avec_split:
+            if st.button(
+                f"Générer une vidéo split des {nombre_videos} analyses existantes",
+                type="primary", key="visiotrack_split_depuis_analyses"
+            ):
+                if not obtenir_verrou().acquire(blocking=False):
+                    st.warning("Une analyse VisioTrack est déjà en cours.")
+                else:
+                    try:
+                        pistes = [
+                            repertoire / f"case_{indice}.mp4"
+                            for indice in range(1, nombre_videos + 1)
+                        ]
+                        sortie_split = (
+                            repertoire / f"visiotrack_montage_{nombre_videos}_fenetres.mp4"
+                        )
+                        with st.spinner("Assemblage des vidéos YOLO déjà analysées…"):
+                            duree_split = assembler_videos(pistes, sortie_split)
+                        st.session_state.visiotrack_montage_duree = duree_split
+                        st.session_state.visiotrack_montage_split = True
+                        avec_split = True
+                    except Exception as erreur:
+                        st.error(f"Impossible de produire la vidéo split : {erreur}")
+                    finally:
+                        obtenir_verrou().release()
 
         if avec_split:
             fichier_split = repertoire / f"visiotrack_montage_{nombre_videos}_fenetres.mp4"
