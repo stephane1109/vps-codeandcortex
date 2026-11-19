@@ -791,12 +791,15 @@ def analyser_video(chemin, video_id, nom, categories, frequence, modele,
 
 
 def traiter_lot(sources, categories, frequence, dossier, progression=lambda *args: None, *,
-                quantifier_temps=True, compter_distincts=False):
+                quantifier_temps=True, compter_distincts=False,
+                sources_compteurs=None):
     """Traiter un fichier à la fois et continuer après une erreur individuelle."""
     from contextlib import ExitStack
 
     if not quantifier_temps and not compter_distincts:
         raise ValueError("Cochez au moins une mesure à quantifier.")
+    # Ajouter les compteurs seulement aux URL intégrées à la comparaison.
+    sources_compteurs = set(sources_compteurs or ())
     modele = charger_modele()
     resultats = []
     apercus = {}
@@ -832,7 +835,14 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
                             lignes[0]["duree_totale_s"],
                             lambda valeur: progression(numero, len(sources),
                                                        f"Création de l'aperçu : {source.nom}",
-                                                       0.7 + valeur * 0.3))
+                                                       0.7 + valeur * 0.3),
+                            categories_compteur=(
+                                categories if (
+                                    sources_compteurs
+                                    and source.type == "url"
+                                    and source.nom in sources_compteurs
+                                ) else None
+                            ))
                         apercus[video_id] = {"fichier": f"apercus/{video_id}.mp4"}
                     except Exception:
                         # Un échec d'encodage ne remet pas en cause les mesures CSV.
