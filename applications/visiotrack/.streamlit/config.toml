@@ -1,0 +1,11 @@
+# Thème clair de VisioTrack : fond blanc pour la page et la barre latérale.
+[theme]
+base = "light"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F7F7F7"
+textColor = "#171717"
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F7F7F7"
+textColor = "#171717"
