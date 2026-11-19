@@ -234,13 +234,12 @@ def afficher_montage(acces_initial):
                     f"URL {indice + 1}", key=f"visiotrack_url_montage_{indice}",
                     placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/..."
                 ))
-        categorie_montage = st.selectbox(
-            "Objet à détecter avec YOLO",
+        categories_montage = st.multiselect(
+            "Objets à détecter avec YOLO",
             list(CATEGORIES),
-            index=67,
+            default=[67],
             format_func=lambda categorie: CATEGORIES[categorie].capitalize(),
-            help="Le smartphone est sélectionné par défaut. Toutes les URL renseignées "
-                 "sont analysées avec cette catégorie."
+            help="Sélectionnez une ou plusieurs catégories, comme dans l'analyse principale."
         )
         frequence_montage = st.number_input(
             "Images analysées par seconde (comparaison)", min_value=0.5,
@@ -260,6 +259,8 @@ def afficher_montage(acces_initial):
         urls_retenues = [adresse.strip() for adresse in urls_montage if adresse.strip()]
         if not urls_retenues:
             st.error("Renseignez au moins une URL avant de lancer l'analyse.")
+        elif not categories_montage:
+            st.error("Sélectionnez au moins un objet à détecter.")
         elif generer_split and len(urls_retenues) < 2:
             st.error("La vidéo split nécessite au moins deux URL. "
                      "Pour analyser une seule vidéo, décochez cette option.")
@@ -300,22 +301,29 @@ def afficher_montage(acces_initial):
                             manifeste_precedent.read_text(encoding="utf-8")
                         )
                         urls_demandees = set(urls_retenues)
-                        for ligne in resultats_precedents:
-                            if (ligne.get("statut") != "ok"
-                                    or ligne.get("categorie") != CATEGORIES[categorie_montage]
-                                    or ligne.get("source") not in urls_demandees):
+                        categories_noms = {CATEGORIES[cle] for cle in categories_montage}
+                        for adresse in urls_demandees:
+                            lignes_url = [
+                                ligne for ligne in resultats_precedents
+                                if ligne.get("statut") == "ok"
+                                and ligne.get("source") == adresse
+                                and ligne.get("categorie") in categories_noms
+                            ]
+                            if {ligne["categorie"] for ligne in lignes_url} != categories_noms:
                                 continue
-                            identifiant = ligne["video_id"]
+                            identifiant = lignes_url[0]["video_id"]
+                            if any(ligne["video_id"] != identifiant for ligne in lignes_url):
+                                continue
                             chemin_rel = apercus_precedents.get(identifiant, {}).get("fichier")
                             if not chemin_rel:
                                 continue
                             chemin_apercu = repertoire_precedent / chemin_rel
                             if chemin_apercu.is_file():
-                                reutilisations[ligne["source"]] = {
+                                reutilisations[adresse] = {
                                     "apercu": str(chemin_apercu),
                                     "chronologie": str(chronologie_precedente),
                                     "video_id": identifiant,
-                                    "resultat": ligne,
+                                    "resultat": lignes_url,
                                 }
                 if reutilisations:
                     st.info(
@@ -325,7 +333,7 @@ def afficher_montage(acces_initial):
                 with st.spinner("Analyse des URL et création des vidéos annotées…"):
                     sortie, duree = creer_montage(
                         urls_retenues, temporaire.name, frequence_montage,
-                        actualiser_montage, categorie=categorie_montage,
+                        actualiser_montage, categories=categories_montage,
                         reutilisations=reutilisations,
                         generer_split=generer_split,
                     )
