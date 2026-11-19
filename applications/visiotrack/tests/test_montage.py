@@ -135,6 +135,85 @@ class TestAnalyseQuatreUrls(unittest.TestCase):
             self.assertEqual(csv.count("v00000"), 4)
 
 
+    def test_reutilisation_une_url_sans_second_telechargement(self):
+        """Une analyse précédente évite l'accès au réseau pour l'URL déjà traitée."""
+        with tempfile.TemporaryDirectory() as dossier:
+            racine = Path(dossier)
+            urls = [f"https://www.youtube.com/watch?v=video{i}" for i in range(1, 5)]
+            precedent = racine / "apercu_initial.mp4"
+            chronologie = racine / "chronologie.csv"
+            precedent.write_bytes(b"apercu YOLO deja calcule")
+            chronologie.write_text(
+                "video_id,horodatage_s,categorie,nombre_visible,nombre_distincts_cumule\n"
+                "v000008,0.0,smartphone,1,1\n",
+                encoding="utf-8"
+            )
+            existants = {
+                urls[0]: {
+                    "apercu": str(precedent),
+                    "chronologie": str(chronologie),
+                    "video_id": "v000008",
+                    "resultat": {
+                        "video_id": "v000008", "source": urls[0], "statut": "ok",
+                        "categorie": "smartphone", "duree_totale_s": 2.0,
+                        "images_analysees": 2, "frequence_demandee_ips": 1.0,
+                    },
+                }
+            }
+            telechargements = []
+            analyses = []
+
+            def simuler_reprise(chemin_apercu, chemin_chronologie, identifiant,
+                               categorie, destination, progression):
+                Path(destination).write_bytes(b"apercu reutilise")
+                progression(1.0)
+
+            def simuler_telechargement(source, repertoire):
+                telechargements.append(source.contenu)
+                return racine / "source.mp4"
+
+            def simuler_analyse(chemin, video_id, nom, categories, frequence,
+                               modele, repertoire, progression, **options):
+                analyses.append(nom)
+                progression(1.0)
+                return [{
+                    "video_id": video_id, "source": nom, "statut": "ok",
+                    "categorie": "smartphone", "duree_totale_s": 2.0,
+                }]
+
+            def simuler_apercu(chemin, observations, destination, duree,
+                              progression, **options):
+                Path(destination).write_bytes(b"annotation neuve")
+                progression(1.0)
+
+            def simuler_assemblage(chemins, sortie):
+                self.assertEqual(len(chemins), 4)
+                Path(sortie).write_bytes(b"montage")
+                return 2.0
+
+            with (
+                patch("montage.reutiliser_apercu_analyse", side_effect=simuler_reprise),
+                patch("montage.preparer_video", side_effect=simuler_telechargement),
+                patch("montage.charger_modele", return_value=object()),
+                patch("montage.analyser_video", side_effect=simuler_analyse),
+                patch("montage.creer_video_annotee", side_effect=simuler_apercu),
+                patch("montage.assembler_quatre_videos", side_effect=simuler_assemblage),
+            ):
+                sortie, duree = creer_montage(
+                    urls, racine, categorie=67, reutilisations=existants
+                )
+
+            self.assertTrue(sortie.is_file())
+            self.assertEqual(duree, 2.0)
+            self.assertEqual(telechargements, urls[1:])
+            self.assertEqual(analyses, urls[1:])
+            fichier_csv = (racine / "visiotrack_montage_resultats.csv").read_text(
+                encoding="utf-8-sig"
+            )
+            self.assertIn("v000001", fichier_csv)
+            self.assertIn("v000004", fichier_csv)
+
+
 
 if __name__ == "__main__":
     unittest.main()
