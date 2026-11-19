@@ -5,6 +5,30 @@ des 79 autres catégories COCO dans des lots de vidéos. Elle n'infère pas leur
 utilisation effective. Le smartphone correspond à la classe COCO `cell phone` (67),
 qui peut aussi reconnaître d'autres téléphones portables.
 
+
+## Montage comparatif — quatre URL
+
+Un formulaire indépendant permet de saisir **URL 1**, **URL 2**, **URL 3**
+et **URL 4**, sans nom de scène prédéfini. Il accepte quatre URL publiques
+HTTPS YouTube ou TikTok, selon les mêmes règles d'import que l'analyse existante.
+
+L'option « Générer le montage MP4 » produit un quadriptyque silencieux
+**1920 × 1080**, en grille **2 × 2**, à **15 images/s**. Chaque fenêtre
+affiche les rectangles de détection des smartphones et un compteur,
+sans titre de scène. Les quatre vidéos démarrent à leur début ; le montage
+se termine à la fin de la vidéo la plus longue, tandis que les vidéos plus
+courtes conservent leur dernière image.
+
+La détection est recalculée cinq fois par seconde par défaut. Entre deux
+analyses, les rectangles restent affichés et peuvent être approximatifs ;
+la présence d'un smartphone ne prouve pas qu'une personne filme.
+Le résultat MP4 est téléchargeable pendant la session.
+
+Cette fonction conserve les mesures, graphiques, aperçus et exports CSV
+existants. Les règles d'accès et de renouvellement du ticket restent actives.
+Les sources indisponibles ou restreintes par les plateformes ne peuvent pas
+être incluses dans le montage.
+
 ## Utilisation
 
 1. Ajouter des URL HTTPS YouTube/TikTok, plusieurs MP4 ou des ZIP contenant des MP4.
