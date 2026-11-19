@@ -6,38 +6,35 @@ utilisation effective. Le smartphone correspond à la classe COCO `cell phone` (
 qui peut aussi reconnaître d'autres téléphones portables.
 
 
-## Analyse comparative de une à quatre URL et vidéo split facultative
+## Analyse classique et vidéo split facultative
 
-L'interface conserve quatre champs distincts **URL 1**, **URL 2**, **URL 3** et
-**URL 4**, tous facultatifs. Elle analyse uniquement les champs renseignés :
-une, deux, trois ou quatre vidéos, sans imposer quatre URL.
+Le formulaire principal « URL YouTube ou TikTok » conserve son champ de
+saisie multilignes, ses fichiers MP4/ZIP, son choix des objets YOLO et de
+la fréquence, ainsi que toutes les mesures et les exports existants.
 
-L'utilisateur choisit la catégorie YOLO (smartphone par défaut) et la fréquence
-d'analyse, puis peut cocher **« Générer une vidéo split (2, 3 ou 4 fenêtres) »**.
-Cette case est décochée par défaut. Les analyses YOLO/ByteTrack individuelles
-produisent des vidéos annotées avec rectangles et compteurs, accessibles dans
-l'interface et téléchargeables individuellement. Un CSV rassemble leurs mesures.
+Quatre champs supplémentaires, **URL 1**, **URL 2**, **URL 3** et **URL 4**,
+sont intégrés directement dans ce même formulaire. Ils sont facultatifs :
+seuls les champs renseignés sont ajoutés au lot de l'analyse classique,
+sans être téléchargés ou analysés une seconde fois. Les URL identiques
+ne sont traitées qu'une fois dans le lot.
 
-Lorsque la case split est cochée, l'application assemble les vidéos annotées
-dans un seul MP4 1920 × 1080, sans audio ni titre : **2 vidéos : deux fenêtres
-côte à côte ; 3 vidéos : trois fenêtres côte à côte ; 4 vidéos : grille 2 × 2**.
-La vidéo la plus longue fixe la durée et les vidéos plus courtes conservent leur
-dernière image. Les rapports d'image sont préservés avec des bandes noires.
-Le split apparaît directement dans le lecteur intégré et peut être téléchargé.
+La case « Générer une vidéo split (2, 3 ou 4 fenêtres) » est facultative
+et décochée par défaut. Si elle est cochée, deux à quatre URL distinctes
+doivent être renseignées dans les champs numérotés. Après l'analyse YOLO
+habituelle, le système réunit **les aperçus annotés déjà produits**.
+Avec deux ou trois vidéos, les fenêtres sont côte à côte ; avec quatre,
+elles forment une grille 2 × 2. Le MP4 est silencieux, en 1920 × 1080,
+sans titre de scène. Sa durée suit la vidéo la plus longue et les vidéos
+courtes conservent leur dernière image. Les formats verticaux et
+horizontaux sont préservés avec des bandes noires si nécessaire.
 
-Lorsque l'utilisateur lance d'abord une analyse **sans split**, un bouton situé
-sous les résultats permet d'assembler ultérieurement les deux à quatre vidéos
-déjà annotées : **ni nouveau téléchargement ni seconde analyse YOLO**.
-De même, lorsqu'une URL a été analysée par le module d'analyse standard au
-cours de la même session Streamlit, la comparaison peut réutiliser son aperçu
-annoté et sa chronologie de détection, si la catégorie demandée est disponible.
-Les vidéos non encore disponibles suivent le circuit habituel. Un 403 sur leur
-premier téléchargement reste possible.
-
-Les vidéos sont analysées avec les mêmes fonctions YOLO/ByteTrack que dans le
-module historique. Les anciennes analyses, mesures, graphiques, aperçus, exports
-et contraintes d'accès ne sont pas supprimés. La détection d'un smartphone
-ne prouve pas que son porteur filme.
+Le split s'affiche directement sous les résultats habituels et peut être
+téléchargé. Si la case n'a pas été cochée au départ, un bouton permet
+de le créer ultérieurement à partir des aperçus de la même session,
+sans nouvelle analyse YOLO ni téléchargement. Les vidéos provenant des
+quatre champs sont annotées avec des rectangles et des compteurs pour
+les catégories choisies. Le CSV, les graphiques et les autres aperçus
+suivent toujours le fonctionnement historique de VisioTrack.
 
 ## Utilisation
 
