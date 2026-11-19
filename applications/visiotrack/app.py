@@ -60,12 +60,11 @@ def afficher_montage():
     )
     with st.form("montage_comparatif"):
         colonnes = st.columns(2)
-        noms = ("Concert", "Manifestation", "Journalisme", "Tourisme")
         urls_montage = []
-        for indice, nom in enumerate(noms):
+        for indice in range(4):
             with colonnes[indice % 2]:
                 urls_montage.append(st.text_input(
-                    f"URL {indice + 1} — {nom}", key=f"visiotrack_url_montage_{indice}",
+                    f"URL {indice + 1}", key=f"visiotrack_url_montage_{indice}",
                     placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/..."
                 ))
         frequence_montage = st.number_input(
