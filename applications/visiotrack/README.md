@@ -8,37 +8,36 @@ qui peut aussi reconnaître d'autres téléphones portables.
 
 ## Analyse classique et vidéo split facultative
 
-Le formulaire principal « URL YouTube ou TikTok » conserve son champ de
-saisie multilignes, ses fichiers MP4/ZIP, son choix des objets YOLO et de
-la fréquence, ainsi que toutes les mesures et les exports existants.
-
-Quatre champs supplémentaires, **URL 1**, **URL 2**, **URL 3** et **URL 4**,
-sont intégrés directement dans ce même formulaire. Ils sont facultatifs :
-seuls les champs renseignés sont ajoutés au lot de l'analyse classique,
-sans être téléchargés ou analysés une seconde fois. Les URL identiques
-ne sont traitées qu'une fois dans le lot.
+Le formulaire d'analyse principal contient quatre champs URL verticaux,
+**URL 1**, **URL 2**, **URL 3** et **URL 4**, tous facultatifs. Il n'existe
+plus de zone de saisie URL supplémentaire : un seul champ rempli suffit
+pour analyser une vidéo. Les champs vides sont ignorés et les URL
+identiques ne sont traitées qu'une fois. Les imports MP4/ZIP et le dossier
+serveur configuré restent utilisables, de même que la sélection multiple
+des objets YOLO, la fréquence et les mesures existantes.
 
 La case « Générer une vidéo split (2, 3 ou 4 fenêtres) » est facultative
-et décochée par défaut. Si elle est cochée, deux à quatre URL distinctes
-doivent être renseignées dans les champs numérotés. Après l'analyse YOLO
-habituelle, le système réunit **les aperçus annotés déjà produits**.
-Avec deux ou trois vidéos, les fenêtres sont côte à côte ; avec quatre,
-elles forment une grille 2 × 2. Le MP4 est silencieux, en 1920 × 1080,
-sans titre de scène. Sa durée suit la vidéo la plus longue et les vidéos
-courtes conservent leur dernière image. Les formats verticaux et
-horizontaux sont préservés avec des bandes noires si nécessaire.
+et décochée par défaut. Deux URL différentes renseignées dans n'importe
+lesquels des quatre champs suffisent pour un split à deux écrans ;
+trois URL produisent trois fenêtres côte à côte et quatre URL produisent
+une grille 2 × 2. Le nombre de champs remplis est vérifié après suppression
+des champs vides et des doublons. L'analyse utilise toujours le même
+moteur YOLO/ByteTrack et les mêmes aperçus individuels.
 
-Le split s'affiche directement sous les résultats habituels et peut être
-téléchargé. Si la case n'a pas été cochée au départ, un bouton permet
-de le créer ultérieurement à partir des aperçus de la même session,
-sans nouvelle analyse YOLO ni téléchargement. Les vidéos provenant des
-quatre champs sont annotées avec des rectangles et des compteurs pour
-les catégories choisies. Le CSV, les graphiques et les autres aperçus
-suivent toujours le fonctionnement historique de VisioTrack.
+Après l'analyse, le système assemble les aperçus annotés déjà produits.
+Le MP4 final est silencieux, en 1920 × 1080, sans titre de scène, et sa
+durée suit la plus longue des vidéos ; les autres conservent leur dernière
+image. Les proportions des médias sont respectées avec des bandes noires.
+
+Le split est présenté sous les résultats et téléchargeable. Un bouton
+permet aussi de le produire ultérieurement au cours de la même session,
+sans nouveau téléchargement ni nouvelle analyse YOLO. Les graphiques,
+les résultats CSV et leurs info-bulles restent disponibles. La section
+dépliable « Légende des colonnes (?) » a été supprimée.
 
 ## Utilisation
 
-1. Ajouter des URL HTTPS YouTube/TikTok, plusieurs MP4 ou des ZIP contenant des MP4.
+1. Renseigner une à quatre URL HTTPS YouTube/TikTok dans les champs numérotés, ou importer des MP4/ZIP.
 2. Choisir les catégories (smartphone par défaut) et la fréquence (1 image/s).
 3. Cocher **Quantifier le temps à l'image**, **Quantifier le nombre d'objets distincts
    aperçus**, ou les deux. Les deux mesures sont cochées par défaut. Le comptage porte
