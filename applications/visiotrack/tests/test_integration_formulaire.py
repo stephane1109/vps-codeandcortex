@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app import generer_split_analyses
+from app import generer_split_analyses, preparer_urls_saisies
+from detection import inventorier_sources
 
 
 class TestSplitAnalysePrincipale(unittest.TestCase):
@@ -72,6 +73,41 @@ class TestSplitAnalysePrincipale(unittest.TestCase):
             ]
             with self.assertRaisesRegex(ValueError, "URL 1"):
                 generer_split_analyses(racine, resultats, urls)
+
+
+class TestChampsUrl(unittest.TestCase):
+    """Vérifier que les quatre champs alimentent une analyse unique."""
+
+    def test_deux_url_split_avec_deux_champs_vides(self):
+        """URL 1 et URL 2 suffisent, sans ancien champ principal."""
+        url_1 = "https://www.youtube.com/watch?v=video1"
+        url_2 = "https://www.youtube.com/watch?v=video2"
+        adresses = preparer_urls_saisies([url_1, url_2, "", ""])
+        self.assertEqual(len(adresses), 2)
+        self.assertIn(len(adresses), (2, 3, 4))
+        sources = inventorier_sources([], "\n".join(adresses))
+        self.assertEqual(len(sources), 2)
+        self.assertEqual([source.contenu for source in sources], [url_1, url_2])
+
+    def test_les_champs_non_consecutifs_sont_acceptes(self):
+        """URL 1 et URL 4 doivent suffire pour deux fenêtres."""
+        adresses = preparer_urls_saisies([
+            "  https://www.youtube.com/watch?v=video1  ",
+            "",
+            "",
+            "https://www.youtube.com/watch?v=video4",
+        ])
+        self.assertEqual(len(adresses), 2)
+        self.assertEqual(adresses[0], "https://www.youtube.com/watch?v=video1")
+        self.assertEqual(adresses[1], "https://www.youtube.com/watch?v=video4")
+
+    def test_url_unique_et_doublons(self):
+        """Une seule URL est analysable ; les répétitions sont ignorées."""
+        url = "https://www.youtube.com/watch?v=video1"
+        self.assertEqual(preparer_urls_saisies([url, "", "", ""]), [url])
+        self.assertEqual(preparer_urls_saisies([url, "", url, ""]), [url])
+        self.assertEqual(preparer_urls_saisies(["", "", "", ""]), [])
+
 
 
 if __name__ == "__main__":
