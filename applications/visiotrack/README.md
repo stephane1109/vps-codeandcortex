@@ -31,9 +31,18 @@ image. Les proportions des médias sont respectées avec des bandes noires.
 
 Le split est présenté sous les résultats et téléchargeable. Un bouton
 permet aussi de le produire ultérieurement au cours de la même session,
-sans nouveau téléchargement ni nouvelle analyse YOLO. Les graphiques,
-les résultats CSV et leurs info-bulles restent disponibles. La section
-dépliable « Légende des colonnes (?) » a été supprimée.
+sans nouveau téléchargement ni nouvelle analyse YOLO. Un tableau de suivi
+montre l'état de chacune des URL renseignées, son identifiant vidéo, son
+statut et, en cas d'échec, le message d'erreur conservé par le moteur.
+Les aperçus annotés des URL sont affichés ensemble, en plus du lecteur
+classique. L'assemblage se base sur les identifiants du lot, même si
+des fichiers MP4 ou ZIP sont importés dans le même traitement. Lorsqu'une
+analyse YOLO réussit mais que l'encodage avec compteur échoue, l'application
+réessaie de produire un aperçu sans compteur ; la raison d'un éventuel
+échec résiduel est affichée. Le split exige des aperçus vidéo valides
+pour chacune de ses deux à quatre URL. Les graphiques, les résultats CSV
+et leurs info-bulles restent disponibles. La section dépliable
+« Légende des colonnes (?) » a été supprimée.
 
 ## Utilisation
 
