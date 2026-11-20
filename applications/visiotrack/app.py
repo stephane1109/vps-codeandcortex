@@ -225,46 +225,128 @@ def preparer_urls_saisies(champs):
     ))
 
 
-def generer_split_analyses(repertoire, resultats, urls):
-    """Assembler les aperçus de l'analyse classique sans télécharger les vidéos."""
+def associer_identifiants_urls(sources, urls):
+    """Associer chaque URL au numéro attribué par le traitement séquentiel."""
+    adresses = set(urls)
+    return {
+        source.contenu: f"v{numero:06d}"
+        for numero, source in enumerate(sources, 1)
+        if source.type == "url" and source.contenu in adresses
+    }
+
+
+def etablir_bilan_urls(repertoire, resultats, urls, associations=None):
+    """Distinguer une analyse en erreur d'un aperçu manquant pour chaque URL."""
+    repertoire = Path(repertoire)
+    manifeste = repertoire / "apercus.json"
+    apercus = (
+        json.loads(manifeste.read_text(encoding="utf-8"))
+        if manifeste.is_file() else {}
+    )
+    associations = associations or {}
+    bilans = []
+    for position, adresse in enumerate(urls, 1):
+        identifiant = associations.get(adresse)
+        # Les anciens lots sans association explicite restent compatibles.
+        if identifiant is None:
+            correspondances = [
+                ligne.get("video_id") for ligne in resultats
+                if ligne.get("source") == adresse
+            ]
+            identifiant = correspondances[0] if correspondances else None
+        lignes = [
+            ligne for ligne in resultats
+            if identifiant is not None and ligne.get("video_id") == identifiant
+        ]
+        erreurs = [
+            ligne for ligne in lignes if ligne.get("statut") != "ok"
+        ]
+        chemin = None
+        if not lignes:
+            statut = "Non analysée"
+            detail = "Aucun résultat enregistré pour cette URL."
+        elif erreurs:
+            statut = "Erreur"
+            detail = str(erreurs[0].get("erreur") or "Échec de l'analyse.").strip()
+        else:
+            apercu = apercus.get(identifiant, {})
+            relatif = apercu.get("fichier")
+            chemin_possible = repertoire / relatif if relatif else None
+            if chemin_possible is None or not chemin_possible.is_file():
+                statut = "Aperçu indisponible"
+                detail = str(
+                    apercu.get("erreur")
+                    or "YOLO a terminé son analyse, mais la vidéo annotée n'a pas été générée."
+                )
+            else:
+                statut = "Prête"
+                detail = ""
+                chemin = chemin_possible
+        bilans.append({
+            "numero": position, "url": adresse,
+            "video_id": identifiant or "",
+            "statut": statut, "detail": detail, "chemin": chemin,
+        })
+    return bilans
+
+
+def generer_split_analyses(repertoire, resultats, urls, associations=None):
+    """Assembler les aperçus du lot sans refaire de téléchargement ou de YOLO."""
     if len(urls) not in (2, 3, 4):
         raise ValueError("Sélectionnez deux, trois ou quatre URL distinctes.")
     repertoire = Path(repertoire)
-    manifeste = repertoire / "apercus.json"
-    if not manifeste.is_file():
-        raise ValueError("Les vidéos annotées de cette analyse sont indisponibles.")
-    apercus = json.loads(manifeste.read_text(encoding="utf-8"))
-    correspondances = {
-        ligne["source"]: ligne["video_id"]
-        for ligne in resultats
-        if ligne.get("statut") == "ok" and ligne.get("source") in urls
-    }
+    bilans = etablir_bilan_urls(repertoire, resultats, urls, associations)
     chemins = []
-    for position, url in enumerate(urls, 1):
-        identifiant = correspondances.get(url)
-        if not identifiant:
+    for bilan in bilans:
+        if bilan["statut"] != "Prête":
             raise ValueError(
-                f"URL {position} : l'analyse YOLO n'a pas réussi ; le split est impossible."
+                f"URL {bilan['numero']} — {bilan['statut']} : {bilan['detail']}"
             )
-        relatif = apercus.get(identifiant, {}).get("fichier")
-        if not relatif:
-            raise ValueError(f"URL {position} : l'aperçu annoté n'est pas disponible.")
-        chemin = repertoire / relatif
-        if not chemin.is_file():
-            raise ValueError(f"URL {position} : le fichier vidéo annoté est absent.")
-        chemins.append(chemin)
+        chemins.append(bilan["chemin"])
     destination = repertoire / f"visiotrack_montage_{len(urls)}_fenetres.mp4"
     duree = assembler_videos(chemins, destination)
     return destination, duree
 
 
 def afficher_split():
-    """Afficher le split facultatif sous les résultats de l'analyse principale."""
+    """Afficher le bilan de toutes les URL et leur éventuel montage commun."""
     session = st.session_state.get("visiotrack_exports")
     urls = st.session_state.get("visiotrack_split_urls", [])
-    if session is None or len(urls) not in (2, 3, 4):
+    if session is None or not urls:
         return
     repertoire = Path(session.name)
+    resultats = st.session_state.get("visiotrack_resultats", [])
+    associations = st.session_state.get("visiotrack_split_associations", {})
+    bilans = etablir_bilan_urls(repertoire, resultats, urls, associations)
+
+    st.subheader("État des URL analysées")
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "Champ": f"URL {bilan['numero']}",
+                "Vidéo": bilan["video_id"],
+                "Statut": bilan["statut"],
+                "Erreur ou précision": bilan["detail"],
+                "Adresse": bilan["url"],
+            }
+            for bilan in bilans
+        ]),
+        hide_index=True, width="stretch",
+    )
+
+    if len(bilans) >= 2:
+        st.subheader("Aperçus des URL analysées")
+        colonnes = st.columns(2)
+        for bilan in bilans:
+            with colonnes[(bilan["numero"] - 1) % 2]:
+                st.caption(f"URL {bilan['numero']} — {bilan['statut']}")
+                if bilan["chemin"] is not None:
+                    st.video(str(bilan["chemin"]), width=360)
+                else:
+                    st.warning(bilan["detail"])
+
+    if len(urls) not in (2, 3, 4):
+        return
     fichier = repertoire / f"visiotrack_montage_{len(urls)}_fenetres.mp4"
     if not fichier.is_file():
         if st.button(
@@ -277,9 +359,7 @@ def afficher_split():
                 try:
                     with st.spinner("Assemblage des vidéos YOLO déjà annotées…"):
                         _, duree = generer_split_analyses(
-                            repertoire,
-                            st.session_state.get("visiotrack_resultats", []),
-                            urls,
+                            repertoire, resultats, urls, associations,
                         )
                     st.session_state.visiotrack_split_duree = duree
                 except Exception as erreur:
@@ -291,9 +371,7 @@ def afficher_split():
         st.video(str(fichier))
         duree = st.session_state.get("visiotrack_split_duree")
         if duree is not None:
-            st.caption(
-                f"Durée : {duree:.1f} s. MP4 1920 × 1080, sans audio."
-            )
+            st.caption(f"Durée : {duree:.1f} s. MP4 1920 × 1080, sans audio.")
         with fichier.open("rb") as entree:
             st.download_button(
                 "Télécharger la vidéo split MP4", entree,
@@ -363,6 +441,7 @@ def afficher_application():
         sources = inventorier_sources(
             fichiers, "\n".join(urls_choisies), dossier_serveur
         )
+        associations_urls = associer_identifiants_urls(sources, urls_choisies)
         if generer_split and len(urls_choisies) not in (2, 3, 4):
             st.error(
                 "Pour générer une vidéo split, renseignez deux, trois ou quatre "
@@ -409,6 +488,7 @@ def afficher_application():
                 st.session_state.visiotrack_mesures = {"quantifier_temps": quantifier_temps,
                                                       "compter_distincts": compter_distincts}
                 st.session_state.visiotrack_split_urls = urls_choisies
+                st.session_state.visiotrack_split_associations = associations_urls
                 st.session_state.visiotrack_split_duree = None
                 temporaire = None  # Les aperçus, CSV et le split restent dans la session.
                 if ancien:
@@ -417,7 +497,7 @@ def afficher_application():
                     try:
                         _, duree_split = generer_split_analyses(
                             Path(st.session_state.visiotrack_exports.name),
-                            resultats, urls_choisies,
+                            resultats, urls_choisies, associations_urls,
                         )
                         st.session_state.visiotrack_split_duree = duree_split
                     except Exception as erreur_split:
