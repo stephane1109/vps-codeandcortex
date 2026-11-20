@@ -828,25 +828,58 @@ def traiter_lot(sources, categories, frequence, dossier, progression=lambda *arg
                     for nom in ("intervalles", "detections", "visibilite_objets", "chronologie"):
                         with (Path(temporaire) / f"{nom}.csv").open(encoding="utf-8-sig", newline="") as entree:
                             sorties[nom].writerows(csv.DictReader(entree))
-                    try:
+                    chemin_apercu = Path(dossier) / "apercus" / f"{video_id}.mp4"
+                    chemin_observations = Path(temporaire) / "observations.jsonl"
+                    veut_compteurs = (
+                        bool(sources_compteurs)
+                        and source.type == "url"
+                        and source.nom in sources_compteurs
+                    )
+
+                    def produire_apercu(categories_a_afficher):
+                        """Encoder l'aperçu en conservant le même résultat YOLO."""
                         creer_video_annotee(
-                            chemin, Path(temporaire) / "observations.jsonl",
-                            Path(dossier) / "apercus" / f"{video_id}.mp4",
+                            chemin, chemin_observations, chemin_apercu,
                             lignes[0]["duree_totale_s"],
-                            lambda valeur: progression(numero, len(sources),
-                                                       f"Création de l'aperçu : {source.nom}",
-                                                       0.7 + valeur * 0.3),
-                            categories_compteur=(
-                                categories if (
-                                    sources_compteurs
-                                    and source.type == "url"
-                                    and source.nom in sources_compteurs
-                                ) else None
-                            ))
+                            lambda valeur: progression(
+                                numero, len(sources),
+                                f"Création de l'aperçu : {source.nom}",
+                                0.7 + valeur * 0.3
+                            ),
+                            categories_compteur=categories_a_afficher,
+                        )
+
+                    try:
+                        produire_apercu(categories if veut_compteurs else None)
                         apercus[video_id] = {"fichier": f"apercus/{video_id}.mp4"}
-                    except Exception:
-                        # Un échec d'encodage ne remet pas en cause les mesures CSV.
-                        apercus[video_id] = {"erreur": "L'aperçu vidéo n'a pas pu être créé. Les mesures restent disponibles."}
+                    except Exception as erreur_apercu:
+                        # Si seul l'ajout des compteurs échoue, réencoder sans eux.
+                        # Les détections YOLO et les résultats CSV restent inchangés.
+                        if veut_compteurs:
+                            try:
+                                produire_apercu(None)
+                                apercus[video_id] = {
+                                    "fichier": f"apercus/{video_id}.mp4",
+                                    "avertissement": (
+                                        "Vidéo annotée disponible sans compteur intégré "
+                                        f"({erreur_apercu})."
+                                    ),
+                                }
+                            except Exception as erreur_repli:
+                                apercus[video_id] = {
+                                    "erreur": (
+                                        "L'analyse YOLO a réussi, mais l'aperçu vidéo "
+                                        f"n'a pas pu être encodé : {erreur_repli}"
+                                    )
+                                }
+                        else:
+                            # L'échec de la vidéo ne supprime jamais les mesures CSV.
+                            apercus[video_id] = {
+                                "erreur": (
+                                    "L'analyse YOLO a réussi, mais l'aperçu vidéo "
+                                    f"n'a pas pu être encodé : {erreur_apercu}"
+                                )
+                            }
             except Exception as erreur:
                 lignes = [{"video_id": video_id, "source": texte_csv(source.nom),
                            "statut": "erreur", "erreur": texte_csv(str(erreur)),
