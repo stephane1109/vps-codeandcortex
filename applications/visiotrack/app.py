@@ -34,7 +34,7 @@ def afficher_resultats():
     succes = tableau[tableau.statut == "ok"].video_id.nunique()
     erreurs = tableau[tableau.statut == "erreur"].video_id.nunique()
     st.caption(f"{succes} vidéo(s) analysée(s) · {erreurs} erreur(s). Une ligne par vidéo et catégorie.")
-    # Les mêmes explications alimentent les info-bulles et la légende dépliable.
+    # Les informations complémentaires restent accessibles dans les info-bulles des colonnes.
     colonnes = {
         "video_id": st.column_config.Column("Identifiant", help=(
             "Identifiant attribué à la vidéo dans ce lot, par exemple v000001. "
@@ -82,10 +82,6 @@ def afficher_resultats():
     if choix["compter_distincts"]:
         st.caption("Le nombre distinct est une estimation par suivi : le même téléphone peut être recompté "
                    "après une coupe ou une disparition. Il n'est pas reconnu avec certitude d'un plan à l'autre.")
-    with st.expander("Légende des colonnes (?)"):
-        st.caption("Ces explications sont aussi disponibles en survolant les en-têtes du tableau.")
-        st.table([{"Colonne": configuration["label"], "Signification": configuration["help"]}
-                  for configuration in colonnes.values()])
     repertoire = Path(st.session_state.visiotrack_exports.name)
     identifiant = afficher_graphiques(tableau, choix, repertoire)
     afficher_apercu(tableau, repertoire, identifiant)
@@ -222,6 +218,13 @@ def afficher_apercu(tableau, repertoire, identifiant=None):
 
 
 
+def preparer_urls_saisies(champs):
+    """Retenir les URL renseignées dans leur ordre, sans doublons ni champs vides."""
+    return list(dict.fromkeys(
+        adresse.strip() for adresse in champs if adresse and adresse.strip()
+    ))
+
+
 def generer_split_analyses(repertoire, resultats, urls):
     """Assembler les aperçus de l'analyse classique sans télécharger les vidéos."""
     if len(urls) not in (2, 3, 4):
@@ -324,18 +327,13 @@ def afficher_application():
     acces_initial = enforce_streamlit_access("visiotrack", "VisioTrack")
 
     with st.form("analyse"):
-        urls = st.text_area("URL YouTube ou TikTok", placeholder=(
-            "https://www.tiktok.com/@ladepechedumidi/video/7691631006369058081"
-            "?q=manifestation%20toulouse&t=1791983293656"), height=90,
-            help="Une URL HTTPS par ligne.")
-        colonnes_urls = st.columns(2)
-        urls_supplementaires = []
+        # Un seul groupe de quatre URL facultatives, disposées verticalement.
+        urls_saisies = []
         for indice in range(4):
-            with colonnes_urls[indice % 2]:
-                urls_supplementaires.append(st.text_input(
-                    f"URL {indice + 1}", key=f"visiotrack_url_{indice}",
-                    placeholder="https://www.youtube.com/... ou https://www.tiktok.com/..."
-                ))
+            urls_saisies.append(st.text_input(
+                f"URL {indice + 1}", key=f"visiotrack_url_{indice}",
+                placeholder="https://www.youtube.com/... ou https://www.tiktok.com/..."
+            ))
         generer_split = st.checkbox(
             "Générer une vidéo split (2, 3 ou 4 fenêtres)", value=False,
             help="Option facultative pour les URL 1 à URL 4 renseignées. "
@@ -361,13 +359,15 @@ def afficher_application():
     st.caption("À 1 image/s, une apparition brève peut être manquée et le suivi d'un téléphone peut être perdu. "
                "Les durées et le nombre d'objets distincts sont des estimations.")
     if lancer:
-        urls_choisies = list(dict.fromkeys(
-            adresse.strip() for adresse in urls_supplementaires if adresse.strip()
-        ))
-        urls_a_analyser = "\n".join([urls, *urls_choisies])
-        sources = inventorier_sources(fichiers, urls_a_analyser, dossier_serveur)
+        urls_choisies = preparer_urls_saisies(urls_saisies)
+        sources = inventorier_sources(
+            fichiers, "\n".join(urls_choisies), dossier_serveur
+        )
         if generer_split and len(urls_choisies) not in (2, 3, 4):
-            st.error("La vidéo split nécessite deux, trois ou quatre URL distinctes.")
+            st.error(
+                "Pour générer une vidéo split, renseignez deux, trois ou quatre "
+                "URL différentes dans les champs URL 1 à URL 4."
+            )
         elif not quantifier_temps and not compter_distincts:
             st.error("Cochez au moins une mesure à quantifier.")
         elif not categories or not sources:
