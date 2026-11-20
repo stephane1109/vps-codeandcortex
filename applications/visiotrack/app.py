@@ -280,7 +280,7 @@ def etablir_bilan_urls(repertoire, resultats, urls, associations=None):
                 )
             else:
                 statut = "Prête"
-                detail = ""
+                detail = str(apercu.get("avertissement", ""))
                 chemin = chemin_possible
         bilans.append({
             "numero": position, "url": adresse,
