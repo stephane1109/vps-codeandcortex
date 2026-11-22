@@ -1,0 +1,31 @@
+"""Client de l’API privée ; aucune donnée utilisateur dans un cache partagé."""
+import os
+import httpx
+
+
+def appeler_api(chemin, session, autorisation="", donnees=None, cookie_historique="", *, contenu_binaire=False):
+    cookies = "scraptiktok_session=" + session
+    if cookie_historique:
+        cookies += "; scraptiktok_historique=" + cookie_historique
+    entetes = {"Cookie":cookies, "X-ScrapTikTok":"1"}
+    if autorisation: entetes["Authorization"] = autorisation
+    adresse = os.getenv("SCRAPTIKTOK_API_URL", "http://127.0.0.1:8501")
+    try:
+        # Une restauration ZIP vérifiée peut prendre plus de temps
+        # qu'une requête de collecte courante : ne pas couper l'import.
+        delai = (
+            120 if chemin.endswith("/restaurer-zip")
+            else 100 if (chemin.startswith("/api/decouverte-territoriale/")
+                         and chemin.endswith("/poursuivre"))
+            else 15
+        )
+        with httpx.Client(timeout=delai, trust_env=False) as client:
+            resultat = client.request("GET" if donnees is None else "POST", adresse + chemin, headers=entetes, json=donnees)
+    except httpx.HTTPError as erreur:
+        raise RuntimeError("Le moteur de collecte ne répond pas. Réessayez dans un instant.") from erreur
+    if resultat.is_error:
+        try: detail = resultat.json().get("detail")
+        except ValueError: detail = None
+        if isinstance(detail,list): detail = " / ".join(d.get("msg", "Valeur incorrecte").removeprefix("Value error, ") for d in detail)
+        raise RuntimeError(detail or "La requête n’a pas pu aboutir.")
+    return resultat.content if contenu_binaire else resultat.json()

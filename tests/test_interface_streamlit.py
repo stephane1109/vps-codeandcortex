@@ -1,0 +1,520 @@
+"""Formulaire Streamlit, sélection des médias et conservation des filtres."""
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+from streamlit.testing.v1 import AppTest
+from collecte.presse import charger_inventaire
+from webapp import StartRequest
+
+class TestsInterface(unittest.TestCase):
+    def test_historique_30_jours_distinct_de_postgres_et_sqlite(self):
+        """La période de rétention locale ne qualifie pas PostgreSQL."""
+        source = (Path(__file__).resolve().parents[1] /
+                  "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn("Historique temporaire — collectes et analyses", source)
+        self.assertIn(
+            "Cette durée ne s'applique PAS à PostgreSQL", source)
+        self.assertIn(
+            "n'ont pas d'expiration automatique dans ScrapTikTok", source)
+        self.assertIn(
+            "téléchargez le ZIP d'une collecte, extrayez corpus.sqlite3", source)
+        self.assertNotIn("Aucune analyse enregistrée.", source)
+
+
+    def test_case_arobase_reactive_et_transmise_au_lancement(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/sauvegardes': return {'sauvegardes': []}
+            if chemin == '/api/collecte/limites':
+                return {'maximum_publications_par_source': 1000, 'maximum_sources_par_collecte': 29,
+                        'maximum_commentaires_par_video': 500}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise RuntimeError('API non utilisée dans ce test : ' + chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session': 'a'*64}, headers={})), \
+             patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertTrue(page.checkbox(key='export_profil_sans_arobase').value)
+            self.assertFalse(any(c.label == 'Contenu généré par IA ?' for c in page.checkbox))
+            self.assertTrue(any(c.label == 'Texte généré par IA' for c in page.checkbox))
+            for sans_arobase in (False, True):
+                page.checkbox(key='export_profil_sans_arobase').set_value(sans_arobase).run()
+                self.assertFalse(page.exception)
+                self.assertEqual(page.session_state['export_profil_sans_arobase'], sans_arobase)
+                page.text_input(key='hashtag').set_value('manifestation')
+                next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(envois[-1]['supprimer_arobase_profil'], sans_arobase)
+
+    def test_research_officielle_preselectionnee_pour_les_trois_sources(self):
+        """Le moteur officiel est choisi par défaut, sans verrouiller la radio."""
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session':
+                return {'job': None}
+            if chemin == '/api/presse':
+                return {'medias': charger_inventaire()}
+            raise RuntimeError(chemin)
+
+        with (
+            patch('streamlit.context', SimpleNamespace(
+                cookies={'scraptiktok_session': 'a' * 64}, headers={})),
+            patch('interface.client.appeler_api', side_effect=repondre),
+        ):
+            page = AppTest.from_file(str(
+                Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='hashtag_moteur').value, 'research')
+            self.assertEqual(page.session_state['presse_moteur'], 'research')
+            self.assertEqual(page.session_state['profil_moteur'], 'research')
+            page.radio(key='source').set_value('presse').run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='presse_moteur').value, 'research')
+            page.radio(key='presse_moteur').set_value('api').run()
+            self.assertEqual(page.radio(key='presse_moteur').value, 'api')
+            page.radio(key='source').set_value('comptes').run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.radio(key='profil_moteur').value, 'research')
+            page.radio(key='source').set_value('presse').run()
+            self.assertEqual(page.radio(key='presse_moteur').value, 'api')
+
+    def test_nouveau_formulaire_variables_et_recodages_precoches(self):
+        """Les mesures et leurs recodages restent distincts et cochés par défaut."""
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None, **options):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise RuntimeError(chemin)
+
+        with patch('streamlit.context', SimpleNamespace(
+                cookies={'scraptiktok_session': 'a'*64}, headers={})), \
+             patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(
+                Path(__file__).resolve().parents[1] / 'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            for variable in ('date', 'profil', 'id', 'region_code',
+                             'is_verified', 'vues', 'likes', 'commentaires',
+                             'partages', 'favoris', 'duree'):
+                self.assertTrue(page.checkbox(key='txt_' + variable).value,
+                                variable)
+            for variable in ('vues', 'likes', 'commentaires',
+                             'partages', 'favoris', 'duree'):
+                self.assertTrue(page.checkbox(key='txt_classe_' + variable).value,
+                                variable)
+            self.assertTrue(page.checkbox(key='txt_hashtags').value)
+            # L'option de ZIP progressif est retirée du formulaire.
+            self.assertFalse(any(
+                case.label.startswith("Sauvegarde progressive")
+                for case in page.checkbox))
+            for cle in (
+                    'collecter_commentaires', 'collecter_reponses',
+                    'collecter_follower_count', 'follower_count_illustratif',
+                    'abonnes_classe_illustratif', 'txt_taux_engagement_brut',
+                    'txt_taux_engagement_classe', 'export_profil_sans_arobase',
+                    'inclure_texte_genere_ia'):
+                self.assertTrue(page.checkbox(key=cle).value, cle)
+            self.assertEqual(
+                page.checkbox(key='txt_classe_favoris').label.split(' : ')[0],
+                'Favoris')
+            # Une ancienne valeur enregistrée ne doit jamais réactiver le ZIP.
+            page.session_state['sauvegarde_progressive'] = True
+            page.run()
+            self.assertFalse(page.exception)
+            self.assertFalse(page.session_state['sauvegarde_progressive'])
+            page.text_input(key='hashtag').set_value('manifestation')
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertFalse(envois[-1]['sauvegarde_progressive'])
+            self.assertEqual(envois[-1]['variables_classes_txt'],
+                             ['vues', 'likes', 'commentaires', 'partages',
+                              'favoris', 'duree'])
+            self.assertIn('duree', envois[-1]['variables_txt'])
+            self.assertIn('date', envois[-1]['variables_txt'])
+            # La méthode Research sélectionnée par défaut conserve ces champs.
+            self.assertIn('region_code', envois[-1]['variables_txt'])
+            self.assertIn('is_verified', envois[-1]['variables_txt'])
+
+    def test_partages_commentaires_et_hashtags_transmis_independamment(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.checkbox(key='txt_partages').label, 'Partages : valeur numérique réelle')
+            self.assertEqual(page.checkbox(key='txt_commentaires').label, 'Commentaires : valeur numérique réelle')
+            self.assertEqual(page.checkbox(key='txt_favoris').label, 'Favoris : valeur numérique réelle')
+            self.assertEqual(page.checkbox(key='txt_hashtags').label, 'Hashtags sous le texte')
+            self.assertFalse(any(c.label == 'Nombre de republications' for c in page.checkbox))
+            page.text_input(key='hashtag').set_value('#manifestation')
+            for variable in ('date', 'profil', 'id', 'vues', 'likes', 'duree'):
+                page.checkbox(key='txt_'+variable).uncheck()
+            for variable in ('partages', 'commentaires', 'favoris', 'hashtags'):
+                page.checkbox(key='txt_'+variable).check()
+            page.checkbox(key='collecter_reponses').check()
+            page.checkbox(key='collecter_commentaires').uncheck()
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]['variables_txt'], ['partages', 'commentaires', 'favoris', 'hashtags'])
+            self.assertFalse(envois[-1]['collecter_commentaires'])
+            self.assertFalse(envois[-1]['collecter_reponses'])
+            self.assertEqual(StartRequest(**envois[-1]).variables_txt, ['partages', 'commentaires', 'favoris', 'hashtags'])
+
+    def test_interface_distingue_les_deux_moteurs_et_ne_bascule_pas_apres_429(self):
+        """La méthode Presse reste un choix explicite : un 429 ne change pas le moteur."""
+        source = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("API web TikTok (secUid)", source)
+        self.assertIn("Grille du profil (Selenium, comme les hashtags)", source)
+        self.assertIn("Les hashtags utilisent le navigateur", source)
+        self.assertIn("ScrapTikTok n'enchaîne pas automatiquement", source)
+        self.assertIn('key="presse_moteur"', source)
+
+    def test_formulaire_et_selection_complete_des_medias(self):
+        def repondre(chemin,*a,**kw):
+            if chemin=='/api/session': return {'job':None}
+            if chemin=='/api/configuration': return {'video_disponible':False}
+            if chemin=='/api/presse': return {'medias':charger_inventaire()}
+            raise AssertionError(chemin)
+        with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
+            page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual([onglet.label for onglet in page.tabs], ['Collecte','Multimodale','Corpus fusionné','Aide'])
+            self.assertFalse(any('vidéo' in e.label.lower() for e in page.expander))
+            self.assertFalse(any(c.key in {'comparer_sha256','comparer_sequences'} for c in page.checkbox))
+            self.assertFalse(any(b.label=='Comparer les vidéos' for b in page.button))
+            page.radio(key='source').set_value('comptes').run()
+            self.assertFalse(page.exception)
+            page.text_input(key='comptes').set_value('@lemondefr').run()
+            page.radio(key='source').set_value('presse').run()
+            self.assertTrue(any('Le Monde' in c.label for c in page.checkbox))
+            page.checkbox(key='media_lemonde').check().run()
+            self.assertEqual(page.session_state['medias'], ['lemonde'])
+            page.radio(key='source').set_value('hashtags').run()
+            page.radio(key='source').set_value('presse').run()
+            self.assertTrue(page.checkbox(key='media_lemonde').value)
+            page.button(key='tous_medias').click().run()
+            identifiants = [m['id'] for m in charger_inventaire()]
+            self.assertEqual(page.session_state['medias'], identifiants)
+            self.assertTrue(all(page.checkbox(key='media_'+m).value for m in identifiants))
+            self.assertEqual(len(StartRequest(hashtag="test", source_collecte='presse',medias=page.session_state['medias']).sources),len(identifiants))
+            page.checkbox(key='media_lemonde').uncheck().run()
+            self.assertEqual(len(page.session_state['medias']),len(identifiants)-1)
+            page.radio(key='source').set_value('hashtags').run()
+            page.radio(key='source').set_value('presse').run()
+            self.assertFalse(page.checkbox(key='media_lemonde').value)
+            self.assertTrue(page.checkbox(key='media_politis_fr').value)
+            page.radio(key='source').set_value('hashtags').run()
+            self.assertFalse(page.exception)
+            page.date_input(key='date_debut').set_value('2026-10-01').run()
+            self.assertFalse(page.exception)
+    def test_catalogue_actualise_et_envoi_de_tous_les_medias_sans_ancien_hashtag(self):
+        inventaire = charger_inventaire()
+        catalogue = inventaire[:1]
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': catalogue}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+            page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            page.text_input(key='hashtag').set_value('filtre_ancien')
+            next(b for b in page.button if b.label=='Lancer la collecte').click().run()
+            catalogue = inventaire
+            page.radio(key='source').set_value('presse').run()
+            self.assertEqual(sum(c.key.startswith('media_') for c in page.checkbox),len(inventaire))
+            self.assertEqual(page.text_input(key='hashtag_comptes').value,'')
+            page.button(key='tous_medias').click().run()
+            next(b for b in page.button if b.label=='Lancer la collecte').click().run()
+            self.assertEqual(len(envois), 1, "Aucune collecte de médias sans hashtag ne doit être envoyée")
+            self.assertTrue(any('au moins un hashtag' in erreur.value for erreur in page.error))
+            page.text_input(key='hashtag_comptes').set_value('presse')
+            next(b for b in page.button if b.label=='Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]['medias'],[m['id'] for m in inventaire])
+            self.assertEqual(envois[-1]['hashtag'],'presse')
+            self.assertEqual(len(StartRequest(**envois[-1]).sources),len(inventaire))
+            page.radio(key='source').set_value('hashtags').run()
+            self.assertEqual(page.text_input(key='hashtag').value,'filtre_ancien')
+
+    def test_seuls_les_medias_coches_sont_envoyes_apres_tout_cocher(self):
+        inventaire = [m for m in charger_inventaire() if m["id"] in ("lemonde", "franceinfo")]
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == "/api/session": return {"job": None}
+            if chemin == "/api/presse": return {"medias": inventaire}
+            if chemin == "/api/jobs":
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch("streamlit.context", SimpleNamespace(cookies={"scraptiktok_session": "a"*64}, headers={})), patch("interface.client.appeler_api", side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "streamlit_app.py")).run()
+            page.radio(key='source').set_value('presse').run()
+            page.button(key="tous_medias").click().run()
+            page.checkbox(key="media_franceinfo").uncheck().run()
+            page.text_input(key="hashtag_comptes").set_value("test")
+            next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+            self.assertFalse(page.exception)
+            self.assertEqual(envois[-1]["source_collecte"], "presse")
+            self.assertEqual(envois[-1]["medias"], ["lemonde"])
+            self.assertEqual([s["compte"] for s in StartRequest(**envois[-1]).sources], ["lemondefr"])
+
+    def test_presse_transmet_deux_hashtags_et_le_choix_et_ou(self):
+        envois = []
+        def repondre(chemin, session, autorisation, donnees=None):
+            if chemin == '/api/session': return {'job': None}
+            if chemin == '/api/presse': return {'medias': charger_inventaire()}
+            if chemin == '/api/jobs':
+                envois.append(donnees)
+                return {}
+            raise AssertionError(chemin)
+        with patch('streamlit.context', SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+            page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+            self.assertTrue(page.checkbox(key='txt_date').value)
+            self.assertTrue(page.checkbox(key='txt_profil').value)
+            self.assertTrue(page.checkbox(key='txt_id').value)
+            page.radio(key='source').set_value('presse').run()
+            page.button(key='tous_medias').click().run()
+            for operateur in ('AND', 'OR'):
+                page.text_input(key='hashtag_comptes').set_value('#GRÈVE')
+                page.text_input(key='second_hashtag_comptes').set_value('#école')
+                page.radio(key='operator').set_value(operateur)
+                page.checkbox(key='collecter_commentaires').check()
+                page.checkbox(key='collecter_reponses').check()
+                page.checkbox(key='txt_date').check()
+                page.checkbox(key='txt_profil').uncheck()
+                page.checkbox(key='txt_id').uncheck()
+                page.checkbox(key='txt_hashtags').uncheck()
+                for variable in ('vues', 'likes', 'commentaires',
+                                 'partages', 'favoris', 'duree'):
+                    page.checkbox(key='txt_' + variable).uncheck()
+                next(b for b in page.button if b.label == 'Lancer la collecte').click().run()
+                self.assertFalse(page.exception)
+                requete = StartRequest(**envois[-1])
+                self.assertEqual(requete.hashtags, ['GRÈVE', 'école'])
+                self.assertEqual(requete.operator, operateur)
+                self.assertEqual(len(requete.sources), len(charger_inventaire()))
+                self.assertTrue(envois[-1]['collecter_commentaires'])
+                self.assertEqual(envois[-1]['variables_txt'], ['date'])
+            nombre_envois = len(envois)
+            page.date_input(key='date_debut').set_value('2026-10-01')
+            page.date_input(key='date_fin').set_value('2026-10-09')
+            next(b for b in page.button if b.label == 'Effacer la période').click().run()
+            self.assertFalse(page.exception)
+            self.assertIsNone(page.date_input(key='date_debut').value)
+            self.assertIsNone(page.date_input(key='date_fin').value)
+            self.assertEqual(len(envois), nombre_envois)
+
+    def test_sha_et_orb_sont_effectivement_optionnels(self):
+        a={'id':'1','sha256':'idem','images':[]}; b={**a,'id':'2'}
+        seuils=charger_seuils()
+        self.assertEqual(comparer_videos(a,b,seuils,options={'comparer_sequences':False})['type'],'fichier_identique')
+        sans=comparer_videos(a,b,seuils,options={'comparer_sha256':False,'comparer_sequences':False})
+        self.assertEqual(sans['type'],'comparaison_sequences_desactivee')
+        self.assertFalse(sans['methodes']['sha256'])
+        self.assertIsNone(sans['confiance'])
+        self.assertEqual(comparer_videos(a,b,seuils,options={'comparer_sha256':False})['type'],'indetermine')
+        self.assertFalse(OptionsVideo(comparer_sequences=False).comparer_sequences)
+
+    def test_etape_navigateur_streamlit(self):
+        import tempfile
+        from webapp import Job, StartRequest
+        with tempfile.TemporaryDirectory() as d:
+            tache=Job('a'*64,StartRequest(hashtag='test'),Path(d))
+            tache.update(status='attention')
+            def repondre(chemin,*a,**kw):
+                if chemin=='/api/session': return {'job':tache.snapshot()}
+                if chemin=='/api/configuration': return {'video_disponible':False}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.startswith('/api/jobs/'): return tache.snapshot()
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                self.assertTrue(any('Vérifiez TikTok' in i.value for i in page.info))
+
+    def test_resultats_affichent_compteurs_et_commentaires(self):
+        import tempfile
+        from webapp import Job
+        from collecte.engagement import extraire_engagement
+        with tempfile.TemporaryDirectory() as d:
+            tache = Job('a'*64, StartRequest(hashtag='test', collecter_commentaires=True), Path(d))
+            tache.records.append({'id':'1', 'author':'media', 'url':'https://www.tiktok.com/@media/video/1',
+                'description':'Oui !', 'langue_detection':'unknown',
+                'engagement':extraire_engagement({'stats':{'diggCount':0,'commentCount':12}})})
+            tache.commentaires.append({'publication_id':'1','texte':'Bravo'})
+            tache.update(busy=False, status='completed')
+            def repondre(chemin,*a,**kw):
+                if chemin=='/api/session': return {'job':tache.snapshot()}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.startswith('/api/jobs/'): return tache.snapshot()
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                tableau = page.dataframe[0].value
+                self.assertEqual(tableau.iloc[0]['Likes'], '0')
+                self.assertEqual(tableau.iloc[0]['Nombre de commentaires'], '12')
+                self.assertEqual(tableau.iloc[0]['Vues'], 'Indisponible')
+                self.assertEqual(tableau.iloc[0]['Langue'], 'Indéterminée')
+                self.assertTrue(page.checkbox(key='collecter_commentaires').value)
+                self.assertTrue(any('1 texte(s) de commentaires' in m.value for m in page.markdown))
+
+    def test_reprise_des_variables_independantes(self):
+        import tempfile
+        from webapp import Job
+        for variables in ([], ['id'], ['date','profil'], ['date','profil','id']):
+            with self.subTest(variables=variables), tempfile.TemporaryDirectory() as dossier:
+                tache = Job('a'*64, StartRequest(hashtag='test', variables_txt=variables), Path(dossier))
+                tache.update(busy=False, status='completed')
+                def repondre(chemin,*a,**kw):
+                    if chemin=='/api/session': return {'job':tache.snapshot()}
+                    if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                    if chemin.startswith('/api/jobs/'): return tache.snapshot()
+                    raise AssertionError(chemin)
+                with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})), patch('interface.client.appeler_api',side_effect=repondre):
+                    page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                    self.assertFalse(page.exception)
+                    for variable in ('date','profil','id'):
+                        self.assertEqual(page.checkbox(key='txt_'+variable).value, variable in variables)
+
+    def test_liberer_acces_depuis_barre_laterale_conserve_la_collecte(self):
+        import tempfile
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as dossier:
+            tache = Job('a'*64, StartRequest(hashtag='actualite'), Path(dossier))
+            tache.update(status='attention')
+            tache.video_busy = True
+            appels = []
+            def repondre(chemin, *a, **kw):
+                if chemin == '/api/session': return {'job': tache.snapshot()}
+                if chemin == '/api/presse': return {'medias': charger_inventaire()}
+                if chemin == f'/api/jobs/{tache.id}/stop':
+                    appels.append(chemin)
+                    tache.update(busy=False, status='stopped')
+                    return {'ok': True}
+                if chemin == f'/api/jobs/{tache.id}/video/stop':
+                    appels.append(chemin)
+                    tache.video_busy = False
+                    return {'ok': True}
+                if chemin == f'/api/jobs/{tache.id}': return tache.snapshot()
+                raise AssertionError(chemin)
+            statut = {"enabled": True, "statut": "actif", "active": 1, "max_active": 8,
+                      "heartbeat_ms": 300000, "message": ""}
+            def liberer(*args, **kwargs):
+                statut["statut"] = "released"
+                return True
+            with patch('ticket_gate.keep_ticket_alive', side_effect=lambda *a: dict(statut)), patch('ticket_gate.release_ticket_for_session', side_effect=liberer), patch('streamlit.context' , SimpleNamespace(cookies={'scraptiktok_session':'a'*64}, headers={})), patch('interface.client.appeler_api', side_effect=repondre):
+                page = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                self.assertEqual(page.sidebar.button(key='liberer_acces').label, "Libérer l'accès")
+                page.sidebar.button(key='liberer_acces').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(appels, [f'/api/jobs/{tache.id}/stop', f'/api/jobs/{tache.id}/video/stop'])
+                self.assertEqual(page.session_state['collecte']['id'], tache.id)
+                self.assertTrue(any(b.label == "Reprendre l'accès" for b in page.sidebar.button))
+                self.assertTrue(any('Accès libéré' in message.value for message in page.sidebar.info))
+
+    def test_aucun_onglet_de_similarite_video(self):
+        source = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
+        self.assertNotIn('st.subheader("Vidéos similaires")', source)
+        self.assertNotIn("videos-similaires", source)
+        self.assertNotIn("miniatures-dino", source)
+        self.assertIn('with onglet_multimodale:', source)
+
+    def test_collecte_presse_terminee_reste_accessible_apres_rechargement(self):
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as d:
+            job=Job('a'*64,StartRequest(source_collecte='presse',medias=['lemonde']),Path(d))
+            job.update(busy=False,status='completed',archive_prete=True)
+            instantane=job.snapshot()
+            def repondre(chemin, session, autorisation, donnees=None):
+                if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/collecte/limites':
+                    return {'maximum_publications_par_source':1000,
+                            'maximum_sources_par_collecte':29,
+                            'maximum_commentaires_par_video':500,
+                            'budget_api_presse':{}}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin=='/api/presse/limitation': return {'actif':False}
+                if chemin=='/healthz': return {'version_presse':'test'}
+                if chemin==f'/api/jobs/{job.id}': return instantane
+                if chemin==f'/api/jobs/{job.id}/desordre':
+                    return {'disponible':True,'publications_collectees':2,
+                            'mp4_locaux':0,'mp4_manquants':2,
+                            'mp4_telechargeables':2,'etat':{'statut':'non_lance'},
+                            'indicateurs':[],'sans_resultat':[],
+                            'annotations_violence':{},'correlations':[]}
+                raise AssertionError(chemin)
+            with (
+                patch('streamlit.context',SimpleNamespace(
+                    cookies={'scraptiktok_session':'a'*64},headers={})),
+                patch('interface.client.appeler_api',side_effect=repondre),
+            ):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/
+                                           'streamlit_app.py')).run()
+            self.assertFalse(page.exception)
+            self.assertEqual(page.session_state['collecte']['source_collecte'],'presse')
+            self.assertIn('Multimodale',[t.label for t in page.tabs])
+
+    def test_onglet_desordre_et_croisement_likes(self):
+        import tempfile
+        from webapp import Job
+        with tempfile.TemporaryDirectory() as d:
+            job=Job('a'*64,StartRequest(hashtag='test',enrichir=True),Path(d))
+            job.update(busy=False,status='completed',archive_prete=True)
+            instantane={**job.snapshot(),'video_disponible':False}
+            envois=[]
+            def repondre(chemin,session,autorisation,donnees=None):
+                if chemin=='/api/session': return {'job':instantane}
+                if chemin=='/api/presse': return {'medias':charger_inventaire()}
+                if chemin.endswith('/desordre'):
+                    if donnees is not None:
+                        envois.append(donnees);return instantane
+                    return {'disponible':True,'publications_collectees':10,'mp4_locaux':0,'mp4_manquants':10,'mp4_telechargeables':10,'etat':{'statut':'termine'},
+                        'indicateurs':[{'publication_id':str(i),'indice_desordre':i*10,'likes':i*100,'vues':1000,'likes_pour_1000_vues':i*100} for i in (1,2,3)],
+                        'correlations':[{'indicateur':'indice_desordre','engagement':'likes','rho':1.,'n':3,'p':.3333,'p_ajustee_bh':.5}]}
+                if chemin.startswith('/api/jobs/'): return instantane
+                raise AssertionError(chemin)
+            with patch('streamlit.context',SimpleNamespace(cookies={'scraptiktok_session':'a'*64},headers={})),patch('interface.client.appeler_api',side_effect=repondre):
+                page=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'streamlit_app.py')).run()
+                self.assertFalse(page.exception)
+                self.assertIn('Multimodale',[t.label for t in page.tabs])
+                page.checkbox(key='debug_collecte_active').check().run()
+                self.assertFalse(page.exception)
+                self.assertTrue(any('cause_arret' in element.value for element in page.json))
+                self.assertEqual(page.selectbox(key='desordre_y').value,'likes')
+                tableaux=[element.value for element in page.dataframe if 'numero_video' in element.value.columns]
+                self.assertEqual(tableaux[0].columns[0],'numero_video')
+                self.assertEqual(list(tableaux[0]['numero_video']),[1,2,3])
+                self.assertTrue(any('3 vidéo(s) représentée(s)' in element.value for element in page.caption))
+                self.assertTrue(any('Spearman' in element.value for element in page.markdown))
+                statistiques=[element for element in page.metric if element.label in ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée')]
+                self.assertEqual(len(statistiques),4)
+                self.assertTrue(all(element.proto.help for element in statistiques))
+                self.assertTrue(page.button(key='lancer_desordre').disabled)
+                page.checkbox(key='activer_desordre').check().run()
+                page.button(key='lancer_desordre').click().run()
+                self.assertFalse(page.exception)
+                self.assertEqual(envois[-1]['frequence'],10.)
+                self.assertTrue(envois[-1]['telecharger_manquants'])
+                page.selectbox(key='desordre_y').set_value('likes_pour_1000_vues').run()
+                self.assertFalse(page.exception)

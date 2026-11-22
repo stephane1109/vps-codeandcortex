@@ -1,0 +1,76 @@
+name: ScrapTikTok - Inventaire des comptes Presse
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "config/comptes_presse.json"
+      - "tests/test_groupes_presse.py"
+      - "tests/test_presse_research_sans_limite_medias.py"
+      - "webapp.py"
+      - "tests/test_categories_presse_illustratives.py"
+      - "streamlit_app.py"
+      - "corpus/publications_csv.py"
+      - "corpus/construction.py"
+      - "collecte/presse.py"
+      - "collecte/suivi_sources.py"
+      - "tests/test_suivi_sources.py"
+      - "tests/test_ordre_medias_interface.py"
+      - "collecte/reprise_collecte.py"
+      - "tests/test_reprise_collecte.py"
+      - "stockage/historique_analyses.py"
+      - "stockage/postgres_consultation.py"
+      - "tests/test_postgres_consultation.py"
+      - "interface/passerelle.py"
+      - "tests/test_passerelle.py"
+      - "collecte/researchapi.py"
+      - "tests/test_research_erreur_serveur.py"
+      - "tests/test_recuperation_collecte.py"
+      - "tests/test_fin_collecte_sans_reinitialisation.py"
+      - "stockage/collectes_research.py"
+      - "collecte/suivi_hashtags.py"
+      - "interface/reprise_hashtags_ui.py"
+      - "tests/test_reprise_hashtags.py"
+      - "collecte/profils_medias.py"
+      - "connect_htag.py"
+      - ".github/workflows/inventaire-presse.yml"
+  workflow_dispatch:
+
+jobs:
+  inventaire-presse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances des tests
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier le JSON et la syntaxe Python
+        run: |
+          python -m json.tool config/comptes_presse.json >/dev/null
+          python -m compileall -q collecte/presse.py collecte/suivi_sources.py webapp.py streamlit_app.py tests/test_groupes_presse.py tests/test_presse_research_sans_limite_medias.py tests/test_suivi_sources.py tests/test_ordre_medias_interface.py collecte/reprise_collecte.py tests/test_reprise_collecte.py stockage/historique_analyses.py stockage/postgres_consultation.py tests/test_postgres_consultation.py interface/passerelle.py tests/test_passerelle.py collecte/researchapi.py tests/test_research_erreur_serveur.py tests/test_recuperation_collecte.py tests/test_fin_collecte_sans_reinitialisation.py collecte/suivi_hashtags.py interface/reprise_hashtags_ui.py tests/test_reprise_hashtags.py connect_htag.py
+      - name: Tester les regroupements des comptes Presse
+        run: python -m unittest discover -s tests -p test_groupes_presse.py -v
+      - name: Tester les médias restants et l'absence de plafond Research
+        run: python -m unittest discover -s tests -p test_presse_research_sans_limite_medias.py -v
+      - name: Tester les catégories dans les exports
+        run: python -m unittest discover -s tests -p test_categories_presse_illustratives.py -v
+      - name: Tester le bilan et la reprise des médias
+        run: python -m unittest discover -s tests -p test_suivi_sources.py -v
+      - name: Vérifier l'ordre visuel et le parcours de collecte
+        run: python -m unittest discover -s tests -p test_ordre_medias_interface.py -v
+      - name: Vérifier la reprise du même corpus
+        run: python -m unittest discover -s tests -p test_reprise_collecte.py -v
+      - name: Vérifier le maintien du corpus PostgreSQL lors des reprises
+        run: python -m unittest discover -s tests -p test_postgres_consultation.py -v
+      - name: Vérifier le relais des fichiers CSV vers Streamlit
+        run: python -m unittest discover -s tests -p test_passerelle.py -v
+      - name: Vérifier la poursuite des médias après HTTP 500 Research
+        run: python -m unittest discover -s tests -p test_research_erreur_serveur.py -v
+      - name: Vérifier la récupération après reconnexion Streamlit
+        run: python -m unittest discover -s tests -p test_recuperation_collecte.py -v
+      - name: Vérifier le maintien des résultats en fin de collecte et limit=null
+        run: python -m unittest discover -s tests -p test_fin_collecte_sans_reinitialisation.py -v
+      - name: Vérifier les variables et la reprise des collectes Hashtags Research
+        run: python -m unittest discover -s tests -p test_reprise_hashtags.py -v

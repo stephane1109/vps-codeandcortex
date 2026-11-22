@@ -1,0 +1,243 @@
+"""Parcours Selenium anonyme propre au mode Hashtags."""
+from urllib.parse import quote
+import copy
+import math
+
+from collecte.session_navigateur import SessionNavigateur
+from connect_presse import ConnexionPresse
+from scraptiktok import normalize_hashtag, canonical_post
+
+
+class ConnexionHashtag(ConnexionPresse):
+    mode = "hashtags"
+
+    def preparer_sources(self, parametres):
+        """Conserver les hashtags saisis, sans restriction de compte."""
+        from collecte.hashtags import variantes_hashtag
+        demandes = tuple(dict.fromkeys(normalize_hashtag(h) for h in parametres.hashtags))
+        if not demandes:
+            raise ValueError("Renseignez au moins un hashtag.")
+        # Les pages proposées par TikTok sont explorées avec un budget borné.
+        # Chaque vidéo sera revérifiée à partir de ses hashtags réels.
+        sources = []
+        vus = set()
+        self._ids_par_hashtag = {demande: set() for demande in demandes}
+        self._ids_globaux = set()
+        # Le nombre demandé concerne l'ensemble du corpus. Plusieurs hashtags
+        # se partagent ce budget en ET comme en OU (la règle intervient après
+        # lecture des légendes). Les variantes utilisent le quota de leur tag.
+        nombre_demandes = len(demandes)
+        # Avec un filtre de dates, explorer davantage de candidats que le nombre
+        # de résultats demandé ; seules les dates vérifiées seront retenues.
+        limite_demandee = (None if self.arguments.limit is None else
+                           getattr(parametres, "limit", self.arguments.limit))
+        self._budget_decouverte = (None if limite_demandee is None else
+                                  min(limite_demandee * 5, 500)
+                                  if (getattr(parametres, "date_debut", None)
+                                      or getattr(parametres, "date_fin", None))
+                                  else limite_demandee)
+        if getattr(parametres, "test_research_10_publications", False):
+            # Ne pas élargir la découverte à cinquante candidats avec les dates.
+            self._budget_decouverte = 10
+        self._quota_hashtag = {
+            demande: (None if self._budget_decouverte is None else
+                     self._budget_decouverte // nombre_demandes
+                     + int(rang < self._budget_decouverte % nombre_demandes))
+            for rang, demande in enumerate(demandes)
+        }
+        for hashtag in demandes:
+            variantes = variantes_hashtag(
+                hashtag, avec_accents=getattr(parametres, "variantes_accents", False))
+            # Supprimer les doublons entre recherches sans perdre le tag initial.
+            distinctes = []
+            for variante in variantes:
+                cle = variante.casefold()
+                if cle not in vus:
+                    vus.add(cle)
+                    distinctes.append(variante)
+            variantes = distinctes
+            for rang, variante in enumerate(variantes):
+                sources.append({
+                    "hashtag": variante, "hashtag_demande": hashtag,
+                    "variantes_restantes": len(variantes) - rang,
+                })
+        self.hashtags = tuple(s["hashtag"] for s in sources)
+        self.configurer_moteur(parametres, getattr(parametres, "hashtag_moteur", "navigateur"))
+        # Lorsque seuls les hashtags exacts comptent, Research peut faire
+        # directement une requête ET : inutile de parcourir leur union.
+        self._recherche_et_stricte = (
+            self.moteur_collecte == "research"
+            and getattr(parametres, "operator", "OR") == "AND"
+            and len(demandes) > 1
+            # En mode groupes, chaque source garde son curseur autonome ;
+            # une requête ET sur les six graphies serait impossible.
+            and not getattr(parametres, "groupes_hashtags", [])
+            and not getattr(parametres, "rechercher_dans_texte", False)
+            and not getattr(parametres, "variantes_accents", False))
+        self._hashtags_et = demandes if self._recherche_et_stricte else ()
+        self._region_research = (
+            "FR" if getattr(parametres, "region_fr_research", False) else None)
+        self._recherche_et_executee = False
+        self.positions_reprise_research = {}
+        self.maximum_candidats_segment = None
+        self.maximum_requetes_segment = None
+        self.enchainement_automatique = False
+        if self._recherche_et_stricte:
+            # La requête unique dispose du budget global et non d'une
+            # fraction réservée artificiellement à chaque hashtag.
+            self._quota_hashtag = {
+                demande: self._budget_decouverte for demande in demandes}
+        self._cache_profils = set()
+        self._metadonnees_profils = {}
+        self._limite_profils_api = 10
+        return sources
+
+    def ouvrir(self):
+        """Seule la Research API recherche directement un hashtag sans navigateur."""
+        if self.moteur_collecte in {"tikhub", "gallerydl"}:
+            super().ouvrir()
+            return SessionNavigateur.ouvrir(self)
+        return super().ouvrir()
+
+    def _lire_profil_par_moteur(self, compte):
+        """Enrichir via l'API au plus dix comptes distincts par collecte."""
+        if compte in self._cache_profils or len(self._cache_profils) >= self._limite_profils_api:
+            return
+        self._cache_profils.add(compte)
+        rapport = {}
+        if self.moteur_collecte == "tikhub":
+            self.tikhub_client.decouvrir(compte, rapport)
+        elif self.moteur_collecte == "gallerydl":
+            self.gallerydl_client.decouvrir(compte, rapport)
+        else:
+            from collecte.presse_api import collecter_videos_presse_api
+            collecter_videos_presse_api(
+                compte, min(self.arguments.limit, 100), rapport,
+                check=self.verifier)
+        self._metadonnees_profils.update(rapport.get("metadonnees_api") or {})
+
+    def lire_publication(self, url):
+        """Recherche hybride : découverte par hashtag, métadonnées par profil."""
+        if self.moteur_collecte not in {"api", "gallerydl", "tikhub"}:
+            return SessionNavigateur.lire_publication(self, url)
+        identite = canonical_post(url)
+        if identite is None:
+            raise ValueError("URL de publication invalide.")
+        identifiant, _, compte = identite
+        self._lire_profil_par_moteur(compte)
+        fiche = self._metadonnees_profils.get(identifiant)
+        if not isinstance(fiche, dict) or fiche.get("author", "").casefold() != compte.casefold():
+            resultat = SessionNavigateur.lire_publication(self, url)
+            resultat["source"] = "selenium_secours_hashtag"
+            return resultat
+        resultat = dict(fiche)
+        if self.resume_research:
+            if self.moteur_collecte == "tikhub":
+                resultat.update(self.tikhub_client.lire_resume(url))
+            else:
+                lecture = SessionNavigateur.lire_publication(self, url)
+                for champ in ("resume_ia_tiktok", "statut_resume_ia",
+                              "source_resume_ia", "titre_ia_tiktok",
+                              "article_ia_tiktok", "mots_cles_ia_tiktok"):
+                    if champ in lecture:
+                        resultat[champ] = lecture[champ]
+        return resultat
+
+
+    def decouvrir(self, source, rapport, *, contexte="", progression=None):
+        """Ouvrir la page du hashtag et employer son défilement existant."""
+        from collecte.hashtags import collecter_hashtag
+
+        hashtag = normalize_hashtag(source["hashtag"])
+        if hashtag not in getattr(self, "hashtags", ()):
+            raise ValueError("Ce hashtag ne fait pas partie de la recherche.")
+        rapport["hashtag_url"] = "https://www.tiktok.com/tag/" + quote(hashtag)
+        if (self.moteur_collecte == "research"
+                and getattr(self, "_recherche_et_stricte", False)
+                and self._recherche_et_executee):
+            rapport.update(
+                discovered_urls=[],
+                discovery_stop="recherche_et_deja_effectuee",
+                bilan_recherche=(
+                    "Les hashtags sont déjà couverts par la recherche "
+                    "Research conjointe ET ; aucune requête supplémentaire."))
+            return []
+        demande = source.get("hashtag_demande", hashtag)
+        retenus = self._ids_par_hashtag.setdefault(demande, set())
+        objectif_tag = self._quota_hashtag.get(demande, self.arguments.limit)
+        restant = (None if objectif_tag is None else
+                   max(0, min(objectif_tag - len(retenus),
+                              self._budget_decouverte - len(self._ids_globaux))))
+        if restant == 0:
+            rapport.update(discovered_urls=[], discovery_stop="objectif_hashtag_atteint",
+                           objectif_hashtag_initial=objectif_tag,
+                           retenues_hashtag_initial=len(retenus),
+                           bilan_recherche="Objectif global ou quota du hashtag déjà atteint.")
+            return []
+
+        # Partager l'objectif du hashtag saisi entre les variantes ; l'option
+        # accents ne multiplie jamais le nombre total de vidéos du corpus.
+        nombre_variantes = max(1, source.get("variantes_restantes", 1))
+        arguments = copy.copy(self.arguments)
+        arguments.limit = (None if restant is None else
+                           min(restant, max(1, math.ceil(restant / nombre_variantes))))
+        if self.moteur_collecte == "research":
+            from collecte.presse_research import collecter_videos_presse_research
+            requete_conjointe = getattr(self, "_recherche_et_stricte", False)
+            trouves = collecter_videos_presse_research(
+                None, arguments.limit, rapport,
+                hashtag=None if requete_conjointe else hashtag,
+                hashtags=list(self._hashtags_et) if requete_conjointe else None,
+                operateur="AND",
+                debut=self.research_debut, fin=self.research_fin,
+                check=self.verifier, progress=progression,
+                credentiels=self.research_credentiels,
+                exclusions=self.hashtags_exclus,
+                filtre_region=self._region_research,
+                maximum_candidats=self.maximum_candidats_segment,
+                maximum_requetes=self.maximum_requetes_segment,
+                enchainement_automatique=self.enchainement_automatique,
+                position_reprise=self.positions_reprise_research.get(
+                    "#" + hashtag))
+            if requete_conjointe:
+                self._recherche_et_executee = True
+            # Filtrer immédiatement les métadonnées officielles avant de
+            # consommer le budget de vidéos distinctes à traiter.
+            valider = getattr(self, "valider_fiche_hashtags_research", None)
+            if valider is not None:
+                fiches = rapport.get("metadonnees_api") or {}
+                conformes = []
+                hors_criteres = 0
+                sans_metadonnees = 0
+                for lien in trouves:
+                    identite = canonical_post(lien)
+                    fiche = fiches.get(str(identite[0])) if identite else None
+                    if not isinstance(fiche, dict):
+                        sans_metadonnees += 1
+                    elif not valider(fiche):
+                        hors_criteres += 1
+                    else:
+                        conformes.append(lien)
+                trouves = conformes
+                rapport["ecartes_combinaison_hashtags"] = hors_criteres
+                rapport["ecartes_metadonnees_absentes"] = sans_metadonnees
+        else:
+            trouves = collecter_hashtag(
+                self.obtenir_navigateur(), arguments, rapport,
+                **SessionNavigateur.options_decouverte(
+                    self, rapport, contexte, progression))
+        nouveaux = []
+        for adresse in trouves:
+            identite = canonical_post(adresse)
+            if (identite and identite[0] not in self._ids_globaux
+                    and (objectif_tag is None or len(retenus) < objectif_tag)
+                    and (self._budget_decouverte is None
+                         or len(self._ids_globaux) < self._budget_decouverte)):
+                retenus.add(identite[0])
+                self._ids_globaux.add(identite[0])
+                nouveaux.append(identite[1])
+        rapport["discovered_urls"] = nouveaux
+        rapport["objectif_hashtag_initial"] = objectif_tag
+        rapport["objectif_total_collecte"] = self._budget_decouverte
+        rapport["retenues_hashtag_initial"] = len(retenus)
+        return nouveaux

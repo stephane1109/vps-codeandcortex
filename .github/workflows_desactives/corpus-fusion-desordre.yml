@@ -1,0 +1,35 @@
+name: ScrapTikTok - Fusion corpus de Désordre visuel
+on:
+  push:
+    paths:
+      - analyse_desordre/corpus_fusion.py
+      - webapp.py
+      - streamlit_app.py
+      - tests/test_corpus_fusion_desordre.py
+      - .github/workflows/corpus-fusion-desordre.yml
+  pull_request:
+    paths:
+      - analyse_desordre/corpus_fusion.py
+      - webapp.py
+      - streamlit_app.py
+      - tests/test_corpus_fusion_desordre.py
+      - .github/workflows/corpus-fusion-desordre.yml
+
+jobs:
+  verifier-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Syntaxe
+        run: python -m compileall -q analyse_desordre/corpus_fusion.py webapp.py streamlit_app.py tests/test_corpus_fusion_desordre.py
+      - name: Test export fusion import et historique
+        run: python -m unittest discover -s tests -p test_corpus_fusion_desordre.py -v
+      - name: Vérifier les annotations et l'historique existants
+        run: |
+          python -m unittest discover -s tests -p test_codages_personnalises.py -v
+          python -m unittest discover -s tests -p test_historique_desordre_sauvegarde.py -v

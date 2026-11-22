@@ -1,0 +1,132 @@
+"""Inventaire éditorial explicite et sélection de médias."""
+import json
+from pathlib import Path
+import unicodedata
+
+from .verification_comptes import normaliser_compte
+CONFIG = Path(__file__).resolve().parents[1] / "config"
+
+def charger_inventaire(chemin=None):
+    donnees = json.loads(Path(chemin or CONFIG / "comptes_presse.json").read_text(encoding="utf-8"))
+    comptes = donnees["comptes"]
+    identifiants = set()
+    noms_comptes = set()
+    categories = {
+        "presse_nationale", "presse_regionale",
+        "presse_independante", "autres_medias",
+    }
+    for compte in comptes:
+        compte["compte"] = normaliser_compte(compte["compte"])
+        if compte["id"] in identifiants:
+            raise ValueError("Identifiant de média dupliqué dans l’inventaire.")
+        if compte["compte"] in noms_comptes:
+            raise ValueError("Compte TikTok dupliqué dans l’inventaire.")
+        if compte.get("categorie") not in categories:
+            raise ValueError("Catégorie éditoriale inconnue dans l’inventaire.")
+        identifiants.add(compte["id"])
+        noms_comptes.add(compte["compte"])
+    return comptes
+
+def cle_tri_media(media):
+    """Trier les noms affichés alphabétiquement, sans accent ni différence de casse."""
+    def normaliser_texte(texte):
+        texte = unicodedata.normalize("NFKD", str(texte or ""))
+        return "".join(caractere for caractere in texte
+                       if not unicodedata.combining(caractere)).casefold().strip()
+
+    return (normaliser_texte(media.get("nom")),
+            normaliser_texte(media.get("compte")),
+            normaliser_texte(media.get("id")))
+
+
+
+def ordre_affichage_medias(catalogue):
+    """Restituer l'ordre visible des cases Presse et médias dans Streamlit."""
+    elements = list(catalogue.values()) if isinstance(catalogue, dict) else list(catalogue)
+    categories = ("presse_nationale", "presse_regionale",
+                  "presse_independante", "autres_medias")
+    groupes_nationaux = ("television_nationale", "presse_ecrite_nationale", "autres")
+    resultats = []
+    for categorie in categories:
+        comptes = sorted(
+            (media for media in elements if media.get("categorie") == categorie),
+            key=cle_tri_media,
+        )
+        if categorie != "presse_nationale":
+            resultats.extend(media["id"] for media in comptes)
+            continue
+        for groupe in groupes_nationaux:
+            for media in comptes:
+                sous_categorie = media.get("sous_categorie")
+                if (sous_categorie == groupe if groupe != "autres"
+                        else sous_categorie not in groupes_nationaux[:2]):
+                    resultats.append(media["id"])
+    return resultats
+
+
+def filtrer_medias_archives(parametres, inventaire=None):
+    """Conserver les anciens corpus tout en écartant les comptes retirés du catalogue.
+
+    Cette migration s'applique exclusivement aux paramètres des archives :
+    le contrôle strict des nouvelles collectes reste inchangé.
+    """
+    copie = dict(parametres)
+    if copie.get("source_collecte") != "presse":
+        return copie
+    autorises = {
+        media["id"] for media in (
+            inventaire if inventaire is not None else charger_inventaire())
+    }
+    copie["medias"] = [
+        identifiant for identifiant in copie.get("medias", [])
+        if identifiant in autorises
+    ]
+    return copie
+
+
+def selectionner_medias(identifiants, inventaire=None):
+    table = {m["id"]: m for m in (inventaire if inventaire is not None else charger_inventaire())}
+    if any(i not in table for i in identifiants):
+        raise ValueError("Média absent de l’inventaire.")
+    return [table[i] for i in dict.fromkeys(identifiants)]
+
+# Codage disjonctif des comptes connus, commun au TXT, aux CSV et aux collectes.
+# Une absence de correspondance est une donnée manquante, et non un zéro.
+from functools import lru_cache
+
+CODES_CATEGORIES_PRESSE = {
+    "presse_nationale": "presse_nationale",
+    "presse_regionale": "presse_regio_dpt",
+    "presse_independante": "presse_indep",
+    "autres_medias": "presse_autre",
+}
+
+
+@lru_cache(maxsize=1)
+def index_categories_presse():
+    """Associer les identifiants TikTok aux catégories de l'inventaire officiel local."""
+    return {media["compte"].casefold(): media["categorie"]
+            for media in charger_inventaire()}
+
+
+def categorie_presse_publication(publication):
+    """Déterminer la catégorie à partir de l'auteur réel, quel que soit le mode."""
+    if not isinstance(publication, dict):
+        return None
+    auteur = publication.get("author") or publication.get("profil")
+    if not isinstance(auteur, str) or not auteur.strip():
+        return None
+    categorie = index_categories_presse().get(auteur.strip().lstrip("@").casefold())
+    return categorie if categorie in CODES_CATEGORIES_PRESSE else None
+
+
+def code_presse_publication(publication):
+    """Renvoyer l'unique variable illustrative IRaMuTeQ applicable."""
+    return CODES_CATEGORIES_PRESSE.get(categorie_presse_publication(publication))
+
+
+def colonnes_categories_presse(publication):
+    """Produire une colonne par catégorie : 1 si présente, 0 sinon, vide si inconnue."""
+    code = code_presse_publication(publication)
+    return {variable: (int(variable == code) if code else None)
+            for variable in CODES_CATEGORIES_PRESSE.values()}

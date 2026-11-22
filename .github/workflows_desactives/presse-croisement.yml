@@ -1,0 +1,31 @@
+name: ScrapTikTok - Croisement médias et hashtag
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_presse_croisement.py"
+      - ".github/workflows/presse-croisement.yml"
+  workflow_dispatch:
+
+jobs:
+  croisement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q webapp.py streamlit_app.py tests/test_presse_croisement.py
+      - name: Tester le croisement avec un hashtag
+        run: python -m unittest discover -s tests -p test_presse_croisement.py -v
+      - name: Vérifier la conservation des méthodes Presse
+        run: |
+          python -m unittest discover -s tests -p test_presse_isolation_version.py -v
+          python -m unittest discover -s tests -p test_presse_tikhub.py -v
+          python -m unittest discover -s tests -p test_presse_gallerydl.py -v

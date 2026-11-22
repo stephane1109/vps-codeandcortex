@@ -1,0 +1,6 @@
+# Dépendances propres au module autonome, sans modification des dépendances de ScrapTikTok.
+numpy>=1.26,<3
+opencv-python-headless>=4.10,<5
+pandas>=2.2,<3
+scipy>=1.12,<2
+matplotlib>=3.8,<4

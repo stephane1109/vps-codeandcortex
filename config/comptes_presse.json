@@ -1,0 +1,916 @@
+{
+  "version": 19,
+  "comptes": [
+    {
+      "id": "lemonde",
+      "nom": "Le Monde",
+      "compte": "lemondefr",
+      "categorie": "presse_nationale",
+      "source": "https://www.lemonde.fr/le-monde-et-vous/article/2023/10/29/mille-et-une-manieres-de-profiter-du-monde_6197214_6065879.html",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "franceinfo",
+      "nom": "franceinfo",
+      "compte": "franceinfo",
+      "categorie": "presse_nationale",
+      "source": "https://www.radiofrance.com/presse/franceinfo-les-coulisses-de-linfo?page=1",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "television_nationale"
+    },
+    {
+      "id": "leparisien",
+      "nom": "Le Parisien",
+      "compte": "leparisien",
+      "categorie": "presse_regionale",
+      "source": "https://www.leparisien.fr/video/programme/crime-story/podcast-qui-a-vole-le-monet-impression-soleil-levant-22-19-11-2025-EFREGIOUDFA6TCI47A5SLRNSAU.php",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "20minutes",
+      "nom": "20 Minutes",
+      "compte": "20minutesfrance",
+      "categorie": "presse_nationale",
+      "source": "https://www.20minutes.fr/",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "brut",
+      "nom": "Brut",
+      "compte": "brutofficiel",
+      "categorie": "presse_independante",
+      "source": "https://www.brut.media/fr",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "huffpost",
+      "nom": "Le HuffPost",
+      "compte": "lehuffpostfr",
+      "categorie": "presse_independante",
+      "source": "https://www.huffingtonpost.fr/",
+      "statut": "reference_editoriale",
+      "consulte_le": "2026-10-09"
+    },
+    {
+      "id": "parismatch",
+      "nom": "Paris Match",
+      "compte": "parismatch",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parismatch",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "cquoilinfo",
+      "nom": "C quoi l’info",
+      "compte": "cquoilinfo",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cquoilinfo"
+    },
+    {
+      "id": "m6info_",
+      "nom": "M6 Info",
+      "compte": "m6info_",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@m6info_",
+      "sous_categorie": "television_nationale"
+    },
+    {
+      "id": "hugodecrypte",
+      "nom": "HugoDécrypte",
+      "compte": "hugodecrypte",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@hugodecrypte"
+    },
+    {
+      "id": "lavoixdunord",
+      "nom": "La Voix du Nord",
+      "compte": "lavoixdunord",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lavoixdunord"
+    },
+    {
+      "id": "bfmtv",
+      "nom": "BFMTV",
+      "compte": "bfmtv",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@bfmtv",
+      "sous_categorie": "television_nationale"
+    },
+    {
+      "id": "tf1info",
+      "nom": "TF1 Info",
+      "compte": "tf1info",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@tf1info",
+      "sous_categorie": "television_nationale"
+    },
+    {
+      "id": "le_progres_",
+      "nom": "Le Progrès",
+      "compte": "le_progres_",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@le_progres_"
+    },
+    {
+      "id": "reporterre_media",
+      "nom": "Reporterre",
+      "compte": "reporterre_media",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@reporterre_media"
+    },
+    {
+      "id": "actufrancereelle",
+      "nom": "Actu France Réelle",
+      "compte": "actufrancereelle",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actufrancereelle"
+    },
+    {
+      "id": "le20hfrancetelevisions",
+      "nom": "Le 20h France Télévisions",
+      "compte": "le20hfrancetelevisions",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@le20hfrancetelevisions",
+      "sous_categorie": "television_nationale"
+    },
+    {
+      "id": "flashinfosoff",
+      "nom": "Flash Infos",
+      "compte": "flashinfosoff",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@flashinfosoff"
+    },
+    {
+      "id": "ladepechedumidi",
+      "nom": "La Dépêche du Midi",
+      "compte": "ladepechedumidi",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ladepechedumidi"
+    },
+    {
+      "id": "rtl_officiel",
+      "nom": "RTL",
+      "compte": "rtl.officiel",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@rtl.officiel",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "streetpress",
+      "nom": "StreetPress",
+      "compte": "streetpress_",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@streetpress_"
+    },
+    {
+      "id": "lapressedelamanche",
+      "nom": "La Presse de la Manche",
+      "compte": "lapressedelamanche",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lapressedelamanche"
+    },
+    {
+      "id": "clpress",
+      "nom": "CLPRESS",
+      "compte": "clpress",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@clpress"
+    },
+    {
+      "id": "lanouvellerepublique",
+      "nom": "La Nouvelle République",
+      "compte": "lanouvellerepublique",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lanouvellerepublique"
+    },
+    {
+      "id": "sofino",
+      "nom": "Sofino",
+      "compte": ".sofino",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@.sofino"
+    },
+    {
+      "id": "abacapress",
+      "nom": "Abaca Press",
+      "compte": "abacapress",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@abacapress"
+    },
+    {
+      "id": "politis_fr",
+      "nom": "Politis",
+      "compte": "politis_fr",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@politis_fr",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "mediapartfr",
+      "nom": "Mediapart",
+      "compte": "mediapartfr",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@mediapartfr",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "angersinfo",
+      "nom": "Angers Info",
+      "compte": "angersinfo",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@angersinfo"
+    },
+    {
+      "id": "actucaen",
+      "nom": "Actu Caen",
+      "compte": "actucaen",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actucaen"
+    },
+    {
+      "id": "actubordeaux",
+      "nom": "Actu Bordeaux",
+      "compte": "actubordeaux",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actubordeaux"
+    },
+    {
+      "id": "actu_fr_officiel",
+      "nom": "Actu.fr",
+      "compte": "actu.fr.officiel",
+      "categorie": "presse_regionale",
+      "source": "https://apps.apple.com/fr/app/actu/id1574151598",
+      "statut": "reference_editoriale",
+      "url": "https://www.tiktok.com/@actu.fr.officiel",
+      "note": "Compte TikTok mentionné par actu.fr dans sa fiche d'application officielle"
+    },
+    {
+      "id": "actulyon",
+      "nom": "Actu Lyon",
+      "compte": "actulyon",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actulyon"
+    },
+    {
+      "id": "actutoulouse",
+      "nom": "Actu Toulouse",
+      "compte": "actutoulouse",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actutoulouse"
+    },
+    {
+      "id": "lefigaro",
+      "nom": "Le Figaro",
+      "compte": "lefigaro",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lefigaro",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "valeursactuelles",
+      "nom": "Valeurs actuelles",
+      "compte": "valeursactuelles",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@valeursactuelles",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "liberation_fr",
+      "nom": "Libération",
+      "compte": "liberation.fr",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@liberation.fr",
+      "sous_categorie": "presse_ecrite_nationale"
+    },
+    {
+      "id": "loopsider",
+      "nom": "Loopsider",
+      "compte": "loopsider",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@loopsider"
+    },
+    {
+      "id": "lejournaldefrance",
+      "nom": "Le Journal de France",
+      "compte": "lejournaldefrance",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lejournaldefrance"
+    },
+    {
+      "id": "actu_paris",
+      "nom": "Actu Paris",
+      "compte": "actu.paris",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@actu.paris"
+    },
+    {
+      "id": "ledauphinelibere",
+      "nom": "Le Dauphiné libéré",
+      "compte": "ledauphinelibere",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ledauphinelibere"
+    },
+    {
+      "id": "letelegramme",
+      "nom": "Le Télégramme",
+      "compte": "letelegramme",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@letelegramme"
+    },
+    {
+      "id": "ouestfrance",
+      "nom": "Ouest-France",
+      "compte": "ouestfrance",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@ouestfrance"
+    },
+    {
+      "id": "journalsudouest",
+      "nom": "Sud Ouest",
+      "compte": "journalsudouest",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@journalsudouest"
+    },
+    {
+      "id": "lamontagne_fr",
+      "nom": "La Montagne",
+      "compte": "lamontagne_fr",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lamontagne_fr"
+    },
+    {
+      "id": "midilibre",
+      "nom": "Midi Libre",
+      "compte": "midilibre",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@midilibre"
+    },
+    {
+      "id": "lindependant_officiel",
+      "nom": "L'Indépendant",
+      "compte": "lindependant_officiel",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lindependant_officiel"
+    },
+    {
+      "id": "nice_matin",
+      "nom": "Nice-Matin",
+      "compte": "nice_matin",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@nice_matin"
+    },
+    {
+      "id": "parisnormandieofficiel",
+      "nom": "Paris-Normandie",
+      "compte": "parisnormandieofficiel",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parisnormandieofficiel"
+    },
+    {
+      "id": "corsematin",
+      "nom": "Corse Matin",
+      "compte": "corsematin",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@corsematin"
+    },
+    {
+      "id": "lestrepublicain",
+      "nom": "L'Est Républicain",
+      "compte": "lestrepublicain",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lestrepublicain"
+    },
+    {
+      "id": "lalsacefr",
+      "nom": "L'Alsace",
+      "compte": "lalsacefr",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lalsacefr",
+      "note": "Compte L'Alsace communiqué pour DNA ; l'identité avec Dernières Nouvelles d'Alsace n'est pas établie."
+    },
+    {
+      "id": "france_tv",
+      "nom": "France Télévisions — france.tv",
+      "compte": "france.tv",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "https://www.francetvpro.fr/contenu-de-presse/2341672",
+      "statut": "reference_editoriale",
+      "url": "https://www.tiktok.com/@france.tv"
+    },
+    {
+      "id": "lci",
+      "nom": "LCI",
+      "compte": "lci",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lci"
+    },
+    {
+      "id": "cnewsofficiel",
+      "nom": "CNews",
+      "compte": "cnews",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cnews"
+    },
+    {
+      "id": "artefr",
+      "nom": "Arte",
+      "compte": "artefr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@artefr"
+    },
+    {
+      "id": "lequipe",
+      "nom": "L'Équipe",
+      "compte": "lequipe",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lequipe"
+    },
+    {
+      "id": "lesechos",
+      "nom": "Les Échos",
+      "compte": "lesechos",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lesechos"
+    },
+    {
+      "id": "lobs",
+      "nom": "L'Obs",
+      "compte": "lobs",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lobs",
+      "note": "Lien fourni vers @bfmtv : le compte TikTok reste à vérifier."
+    },
+    {
+      "id": "lepoint_fr",
+      "nom": "Le Point",
+      "compte": "lepointfr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lepointfr"
+    },
+    {
+      "id": "marianne_lemag",
+      "nom": "Marianne",
+      "compte": "mariannelemag",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@mariannelemag"
+    },
+    {
+      "id": "lhumanitefr",
+      "nom": "L'Humanité",
+      "compte": "lhumanitefr",
+      "categorie": "presse_nationale",
+      "sous_categorie": "presse_ecrite_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lhumanitefr"
+    },
+    {
+      "id": "iuzdrmqevnu",
+      "nom": "L’info en 60 secondes",
+      "compte": "iuzdrmqevnu",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@iuzdrmqevnu"
+    },
+    {
+      "id": "camdiafr",
+      "nom": "Camdia FR",
+      "compte": "camdiafr",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@camdiafr",
+      "note": "Statut éditorial à confirmer"
+    },
+    {
+      "id": "noahdecrypte",
+      "nom": "Noah Décrypte",
+      "compte": "noahdecrypte",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@noahdecrypte"
+    },
+    {
+      "id": "marc_verdenet",
+      "nom": "Marc Verdenet",
+      "compte": "marc.verdenet",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@marc.verdenet"
+    },
+    {
+      "id": "france24",
+      "nom": "France 24",
+      "compte": "france24",
+      "categorie": "presse_nationale",
+      "sous_categorie": "television_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france24"
+    },
+    {
+      "id": "france3occitanie",
+      "nom": "France 3 Occitanie",
+      "compte": "france3occitanie",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3occitanie"
+    },
+    {
+      "id": "france3nouvelleaquitaine",
+      "nom": "France 3 Nouvelle-Aquitaine",
+      "compte": "france3nouvelleaquitaine",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3nouvelleaquitaine"
+    },
+    {
+      "id": "france3grandest",
+      "nom": "France 3 Grand Est",
+      "compte": "france3grandest",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3grandest"
+    },
+    {
+      "id": "france3bretagne",
+      "nom": "France 3 Bretagne",
+      "compte": "france3bretagne",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3bretagne"
+    },
+    {
+      "id": "france3bfc",
+      "nom": "France 3 Bourgogne-Franche-Comté",
+      "compte": "france3bfc",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3bfc"
+    },
+    {
+      "id": "france3normandie",
+      "nom": "France 3 Normandie",
+      "compte": "france3normandie",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3normandie"
+    },
+    {
+      "id": "f3cvdl",
+      "nom": "France 3 Centre-Val de Loire",
+      "compte": "f3cvdl",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@f3cvdl"
+    },
+    {
+      "id": "france3hautsdefrance",
+      "nom": "France 3 Hauts-de-France",
+      "compte": "france3hautsdefrance",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3hautsdefrance"
+    },
+    {
+      "id": "france3paris_idf",
+      "nom": "France 3 Paris Île-de-France",
+      "compte": "france3paris_idf",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3paris_idf"
+    },
+    {
+      "id": "france3pdl",
+      "nom": "France 3 Pays de la Loire",
+      "compte": "france3pdl",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3pdl"
+    },
+    {
+      "id": "france3paca",
+      "nom": "France 3 Provence-Alpes-Côte d’Azur",
+      "compte": "france3paca",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france3paca"
+    },
+    {
+      "id": "france_3_aura",
+      "nom": "France 3 Auvergne-Rhône-Alpes",
+      "compte": "france_3_aura",
+      "categorie": "presse_regionale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@france_3_aura"
+    },
+    {
+      "id": "basta_media",
+      "nom": "Basta!",
+      "compte": "basta_media",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@basta_media"
+    },
+    {
+      "id": "blast_officiel",
+      "nom": "Blast",
+      "compte": "blast_officiel",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@blast_officiel"
+    },
+    {
+      "id": "lemediatv",
+      "nom": "Le Média",
+      "compte": "lemediatv",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lemediatv"
+    },
+    {
+      "id": "climax_media",
+      "nom": "Climax",
+      "compte": "climax_media",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@climax_media"
+    },
+    {
+      "id": "contre_attaque",
+      "nom": "Contre Attaque",
+      "compte": "contre_attaque",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@contre_attaque"
+    },
+    {
+      "id": "frustrationmagazine",
+      "nom": "Frustration Magazine",
+      "compte": "frustrationmag",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@frustrationmag"
+    },
+    {
+      "id": "au_poste",
+      "nom": "Au Poste",
+      "compte": "au.poste",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@au.poste"
+    },
+    {
+      "id": "revpermanente",
+      "nom": "Révolution Permanente",
+      "compte": "revpermanente",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@revpermanente"
+    },
+    {
+      "id": "altereco_",
+      "nom": "AlterEco",
+      "compte": "altereco_",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@altereco_"
+    },
+    {
+      "id": "clementlanot",
+      "nom": "Clément Lanot",
+      "compte": "clementlanot",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@clementlanot"
+    },
+    {
+      "id": "remybuisine",
+      "nom": "Rémy Buisine",
+      "compte": "remybuisine",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@remybuisine"
+    },
+    {
+      "id": "lereporterindependant",
+      "nom": "Le Reporter Indépendant",
+      "compte": "lereporterindependant",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lereporterindependant"
+    },
+    {
+      "id": "complementdenquete_off",
+      "nom": "Complément d'enquête",
+      "compte": "complementdenquete_off",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@complementdenquete_off"
+    },
+    {
+      "id": "cedric_canton",
+      "nom": "Cédric Canton",
+      "compte": "cedric.canton",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@cedric.canton"
+    },
+    {
+      "id": "va_plus",
+      "nom": "VA Plus",
+      "compte": "va.plus",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@va.plus"
+    },
+    {
+      "id": "immersion_docs",
+      "nom": "Immersion Docs",
+      "compte": "immersion.docs",
+      "categorie": "presse_independante",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@immersion.docs"
+    },
+    {
+      "id": "lejournaldeboudene",
+      "nom": "Le Journal de Boudène",
+      "compte": "lejournaldeboudene",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@lejournaldeboudene"
+    },
+    {
+      "id": "parisreportage",
+      "nom": "Paris Reportage",
+      "compte": "parisreportage",
+      "categorie": "autres_medias",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@parisreportage"
+    },
+    {
+      "id": "franceculture",
+      "nom": "France Culture",
+      "compte": "franceculture",
+      "categorie": "presse_nationale",
+      "source": "fourni_par_utilisateur",
+      "statut": "declare_utilisateur",
+      "url": "https://www.tiktok.com/@franceculture"
+    }
+  ]
+}

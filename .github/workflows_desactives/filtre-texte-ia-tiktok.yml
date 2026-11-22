@@ -1,0 +1,28 @@
+name: ScrapTikTok - Filtre des résumés IA TikTok
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_filtre_texte_ia_tiktok.py"
+      - ".github/workflows/filtre-texte-ia-tiktok.yml"
+  workflow_dispatch:
+
+jobs:
+  filtrage-resumes-ia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe
+        run: python -m compileall -q webapp.py streamlit_app.py tests/test_filtre_texte_ia_tiktok.py
+      - name: Vérifier les conditions de sélection IA
+        run: python -m unittest discover -s tests -p test_filtre_texte_ia_tiktok.py -v
+      - name: Vérifier les corpus IA existants
+        run: python -m unittest discover -s tests -p test_resume_ia.py -v

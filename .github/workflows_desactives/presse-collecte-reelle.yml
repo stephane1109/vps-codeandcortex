@@ -1,0 +1,193 @@
+name: ScrapTikTok - Collecte reelle TikTok Presse
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - ".github/workflows/presse-collecte-reelle.yml"
+  workflow_dispatch:
+
+jobs:
+  gallerydl:
+    name: Collecte reelle gallery-dl - lemondefr
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer gallery-dl
+        run: python -m pip install "gallery-dl>=1.31,<2"
+      - name: Lire les vraies publications TikTok, sans simulation
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          import time
+          from urllib.parse import urlparse
+          cmd = [
+              sys.executable, "-m", "collecte.gallerydl_liste",
+              "--compte", "lemondefr", "--limite", "3", "--delai", "6",
+          ]
+          debut = time.monotonic()
+          try:
+              resultat = subprocess.run(
+                  cmd, capture_output=True, text=True, encoding="utf-8",
+                  errors="replace", timeout=55, check=False,
+              )
+          except subprocess.TimeoutExpired as exc:
+              contenu = exc.stderr or b""
+              if isinstance(contenu, bytes):
+                  contenu = contenu.decode("utf-8", errors="replace")
+              etapes = [ligne for ligne in contenu.splitlines() if ligne.startswith("ETAPE:")]
+              print("RESULTAT=ECHEC_TIMEOUT")
+              print("ETAPES=", etapes[-6:])
+              print("DUREE_S=", round(time.monotonic()-debut, 1))
+              raise SystemExit(1)
+          etapes = [ligne for ligne in resultat.stderr.splitlines() if ligne.startswith(("ETAPE:", "ERREUR:"))]
+          print("CODE_RETOUR=", resultat.returncode)
+          print("ETAPES=", etapes[-8:])
+          print("DUREE_S=", round(time.monotonic()-debut, 1))
+          if resultat.returncode:
+              print("RESULTAT=ECHEC_EXTRACTEUR")
+              raise SystemExit(1)
+          try:
+              lignes = json.loads(resultat.stdout)
+          except ValueError:
+              print("RESULTAT=ECHEC_JSON")
+              raise SystemExit(1)
+          publications = []
+          for ligne in lignes:
+              if isinstance(ligne, list) and len(ligne) >= 3 and ligne[0] == 2 and isinstance(ligne[2], dict):
+                  item = ligne[2]
+                  auteur = item.get("author") or {}
+                  nom = str(auteur.get("uniqueId") or "").casefold()
+                  identifiant = str(item.get("id") or "")
+                  if nom == "lemondefr" and identifiant.isdecimal():
+                      publications.append({
+                          "url": f"https://www.tiktok.com/@lemondefr/video/{identifiant}",
+                          "description_presente": bool(item.get("desc")),
+                          "compteurs_presents": bool(item.get("stats")),
+                      })
+          print("LIENS_VERIFIES=", len(publications))
+          for item in publications[:3]:
+              print("VIDEO=", json.dumps(item, ensure_ascii=False))
+          if not publications:
+              print("RESULTAT=ECHEC_AUCUNE_PUBLICATION")
+              raise SystemExit(1)
+          print("RESULTAT=SUCCES")
+          PY
+
+  ytdlp:
+    name: Controle reel alternatif yt-dlp - lemondefr
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer yt-dlp
+        run: python -m pip install "yt-dlp>=2025.1,<2027"
+      - name: Recuperer les vraies references du compte via yt-dlp
+        run: |
+          python - <<'PY'
+          import json, subprocess, sys, time
+          cmd = [
+              sys.executable, "-m", "yt_dlp",
+              "--flat-playlist", "--playlist-end", "3",
+              "--socket-timeout", "7", "--retries", "0",
+              "--extractor-retries", "0", "-J",
+              "https://www.tiktok.com/@lemondefr"
+          ]
+          debut = time.monotonic()
+          try:
+              resultat = subprocess.run(cmd, capture_output=True, text=True, timeout=55, check=False)
+          except subprocess.TimeoutExpired:
+              print("RESULTAT=ECHEC_TIMEOUT")
+              print("DUREE_S=", round(time.monotonic()-debut, 1))
+              raise SystemExit(1)
+          print("CODE_RETOUR=", resultat.returncode)
+          print("DUREE_S=", round(time.monotonic()-debut, 1))
+          try:
+              donnees = json.loads(resultat.stdout)
+          except ValueError:
+              donnees = {}
+          liens = []
+          for item in donnees.get("entries") or []:
+              if not isinstance(item, dict):
+                  continue
+              vid = str(item.get("id") or "")
+              if vid.isdecimal():
+                  liens.append(f"https://www.tiktok.com/@lemondefr/video/{vid}")
+          print("LIENS=", len(liens))
+          for lien in liens[:3]:
+              print("VIDEO=", lien)
+          # Ne jamais exposer les traces brutes ni les cookies.
+          print("RESULTAT=", "SUCCES" if liens else "ECHEC_AUCUNE_PUBLICATION")
+          if not liens:
+              raise SystemExit(1)
+          PY
+
+  application:
+    name: Integration reelle ScrapTikTok - lemondefr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dependances ScrapTikTok
+        run: python -m pip install -r requirements-dev.txt
+      - name: Collecter via le moteur reel PresseGalleryDL puis exporter CSV
+        run: |
+          python - <<'PY'
+          import csv
+          import time
+          from types import SimpleNamespace
+          from collecte.presse_gallerydl import PresseGalleryDL
+          debut = time.monotonic()
+          moteur = PresseGalleryDL(SimpleNamespace(limit=3, timeout=12))
+          rapport = {}
+          try:
+              liens = moteur.decouvrir("lemondefr", rapport)
+          except RuntimeError as erreur:
+              print("RESULTAT=ECHEC")
+              print("DIAGNOSTIC=", rapport.get("diagnostic"))
+              print("DUREE_S=", round(time.monotonic()-debut, 1))
+              raise
+          finally:
+              moteur.fermer()
+          donnees = rapport.get("metadonnees_api") or {}
+          print("RESULTAT=SUCCES" if liens else "RESULTAT=AUCUN_LIEN")
+          print("LIENS=", len(liens))
+          print("LEGENDES=", sum(bool(fiche.get("description")) for fiche in donnees.values()))
+          print("COMPTEURS=", sum(bool(fiche.get("engagement")) for fiche in donnees.values()))
+          print("DUREE_S=", round(time.monotonic()-debut, 1))
+          print("MOTEUR=", rapport.get("presse_moteur"))
+          print("DIAGNOSTIC=", rapport.get("diagnostic"))
+          for url in liens:
+              print("VIDEO=", url)
+          assert len(liens) > 0, "Aucune publication collectee dans ScrapTikTok"
+          assert all(fiche.get("author") == "lemondefr" for fiche in donnees.values())
+          champs = ["id", "url", "author", "description", "created_at",
+                    "vues", "likes", "commentaires", "partages", "favoris",
+                    "contenu_genere_ia"]
+          with open("collecte_reelle_lemondefr.csv", "w", encoding="utf-8-sig", newline="") as fichier:
+              writer = csv.DictWriter(fichier, fieldnames=champs, delimiter=";")
+              writer.writeheader()
+              for fiche in donnees.values():
+                  ligne = {cle: fiche.get(cle, "") for cle in champs}
+                  for compteur in ("vues", "likes", "commentaires", "partages", "favoris"):
+                      ligne[compteur] = (fiche.get("engagement") or {}).get(compteur, {}).get("valeur", "")
+                  writer.writerow(ligne)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: collecte-reelle-lemondefr
+          path: collecte_reelle_lemondefr.csv
+          retention-days: 7

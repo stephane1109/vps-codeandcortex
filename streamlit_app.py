@@ -1,0 +1,4720 @@
+"""Interface Streamlit minimaliste ; la collecte et le navigateur restent dans FastAPI."""
+import hashlib
+import csv
+import html
+import json
+import os
+from datetime import date, datetime, timedelta, timezone
+import re
+
+from pathlib import Path
+import streamlit as st
+import streamlit.components.v1 as components
+from interface.client import appeler_api
+from collecte.selection_hashtags import MAX_HASHTAGS, separer_saisie_hashtags, normaliser_liste_hashtags
+from collecte.presse import cle_tri_media, ordre_affichage_medias
+from collecte.suivi_sources import (
+    etablir_bilan_medias, medias_a_reprendre, exporter_bilan_medias_csv,
+    importer_bilan_medias_csv,
+)
+from collecte.suivi_hashtags import (
+    hashtags_a_reprendre, exporter_bilan_hashtags_csv,
+)
+
+VARIABLES_TXT = {"date": "Date", "profil": "Profil", "id": "ID vidéo", "vues": "Nombre de vues",
+                 "likes": "Nombre de likes", "partages": "Nombre de partages",
+                 "commentaires": "Nombre de commentaires", "favoris": "Nombre de favoris",
+                 "duree": "Durée vidéo", "region_code": "Region Code",
+                 "is_verified": "Is Verified",
+                 "hashtags": "Htag dans le csv"}
+
+# Une icône transparente évite aussi le favicon Streamlit affiché par défaut.
+st.set_page_config(page_title="ScrapTikTok", page_icon='<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>', layout="wide", initial_sidebar_state="expanded")
+# Réduire la marge supérieure native sans masquer les commandes de la barre latérale.
+st.html("""<style>
+[data-testid="stMainBlockContainer"] { padding-top: 1rem; }
+[data-testid="stHeader"] { background: transparent; height: 0; }
+/* Le composant Analytics invisible ne doit pas occuper une ligne avant le titre. */
+[data-testid="stElementContainer"]:has(iframe[height="0"]) { display: none; }
+</style>""")
+# Même propriété Analytics que la home ; une seule visite malgré les reruns.
+components.html(Path(__file__).with_name("analytics.html").read_text(encoding="utf-8"),
+                height=0, scrolling=False)
+st.title("ScrapTikTok")
+st.caption("version - 6-11-2026")
+
+session = st.context.cookies.get("scraptiktok_session", "")
+cookie_historique = st.context.cookies.get("scraptiktok_historique", "")
+autorisation = st.context.headers.get("Authorization", "")
+if not re.fullmatch(r"[a-f0-9]{64}", session):
+    st.info("Ouvrez l’application depuis sa page d’accueil pour initialiser votre session privée.")
+    st.link_button("Ouvrir l’accueil", "/")
+    st.stop()
+
+
+def api(chemin, donnees=None):
+    return appeler_api(chemin, session, autorisation, donnees,
+                      cookie_historique=cookie_historique)
+
+
+def telecharger_api(chemin):
+    """Télécharger un fichier privé avec les mêmes cookies que les requêtes API."""
+    return appeler_api(
+        chemin, session, autorisation, cookie_historique=cookie_historique,
+        contenu_binaire=True)
+
+
+def lancer(chemin, donnees):
+    try:
+        resultat = api(chemin, donnees)
+    except RuntimeError as erreur:
+        st.error(str(erreur)); return
+    if "id" in resultat:
+        st.session_state["collecte"] = resultat
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and donnees.get("cookies_tiktok"):
+            st.session_state["_effacer_cookies_apres_requete"] = True
+        methode = donnees.get({
+            "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+            "comptes": "profil_moteur"}.get(donnees.get("source_collecte"), "presse_moteur"))
+        # Les clés Research restent masquées dans la session Streamlit afin
+        # de permettre la reprise sans les ressaisir après chaque séquence.
+        # Les exports et les historiques ne conservent pas ces secrets.
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and methode == "tikhub":
+            st.session_state["_effacer_tikhub_apres_requete"] = True
+        if (chemin == "/api/jobs" or chemin.endswith("/reprendre")) and donnees.get("presse_moteur") == "apify":
+            st.session_state["_effacer_apify_apres_requete"] = True
+    st.rerun()
+
+
+def arreter_avant_liberation():
+    """Arrêter uniquement les traitements appartenant à cette session."""
+    try:
+        tache = api("/api/session")["job"] or {}
+        if tache.get("busy"):
+            api(f"/api/jobs/{tache['id']}/stop", {})
+        if tache.get("video_busy"):
+            api(f"/api/jobs/{tache['id']}/video/stop", {})
+    except RuntimeError as erreur:
+        st.error(str(erreur))
+        return False
+    return True
+
+
+from ticket_gate import enforce_streamlit_access, SESSION_STATE_KEY, identifiant_ticket_session
+# L’interface et l’API utilisent la même identité privée pour vérifier le ticket.
+st.session_state[SESSION_STATE_KEY] = identifiant_ticket_session(session)
+enforce_streamlit_access("scraptiktok", "ScrapTikTok", avant_liberation=arreter_avant_liberation)
+
+
+def iso(valeur):
+    return valeur.isoformat() if valeur else None
+
+
+if "initialise" not in st.session_state:
+    try:
+        ancienne = api("/api/session")["job"]
+    except RuntimeError as erreur:
+        st.error(str(erreur))
+        st.stop()
+
+    # Préserver les résultats déjà récupérés même si le ZIP complet
+    # n'a pas été finalisé avant une reconnexion Streamlit.
+    if ancienne and not (
+        ancienne.get("busy", False)
+        or ancienne.get("video_busy", False)
+        or ancienne.get("archive_prete", False)
+        or ancienne.get("can_download", False)
+        or int(ancienne.get("sauvegarde_postgres_publications") or 0) > 0
+        or int(ancienne.get("processed") or 0) > 0
+    ):
+        ancienne = None
+
+    st.session_state["collecte"] = ancienne
+    ancienne = ancienne or {}
+
+    valeurs = {"source":ancienne.get("source_collecte","hashtags"), "hashtag":ancienne.get("hashtag",""),
+        "second_hashtag":ancienne.get("second_hashtag",""), "operator":ancienne.get("operator","OR"),
+        "operator_comptes": (
+            ancienne.get("operator", "OR")
+            if ancienne.get("source_collecte") == "comptes" else "OR"),
+        "utiliser_groupes_hashtags": bool(ancienne.get("groupes_hashtags")),
+        "groupe_hashtags_1": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[0]),
+        "groupe_hashtags_2": ", ".join((ancienne.get("groupes_hashtags") or [["manifestation", "manifestations"], ["lyceen", "lyceens", "lycéen", "lycéens"]])[1]),
+        "croiser_hashtag_presse":ancienne.get("croiser_hashtag_presse",False),
+        "hashtag_presse":ancienne.get("hashtag_presse",""),
+        "hashtags_presse_saisis": ", ".join(
+            "#" + str(tag).lstrip("#") for tag in (
+                ancienne.get("hashtags_presse") or
+                ([ancienne.get("hashtag_presse")] if ancienne.get("hashtag_presse") else []))),
+        "operator_presse": ancienne.get("operator_presse", "OR"),
+        "collecter_republications_research": ancienne.get(
+            "collecter_republications_research", False),
+        "maximum_republications_par_compte": ancienne.get(
+            "maximum_republications_par_compte", 100),
+        "presse_moteur":ancienne.get("presse_moteur","research"),
+        "hashtag_moteur":ancienne.get("hashtag_moteur","research"),
+        "profil_moteur":ancienne.get("profil_moteur","research"),
+        "rechercher_dans_texte": ancienne.get("rechercher_dans_texte", False),
+        "variantes_accents": ancienne.get("variantes_accents", False),
+        "region_fr_research": ancienne.get("region_fr_research", False),
+        "comptes":", ".join(ancienne.get("comptes",[])), "medias":ancienne.get("medias",[]),
+        "ville_etude": ancienne.get("ville_etude", ""),
+        "limit":ancienne.get("limit") or 50, "french_only":ancienne.get("french_only",True),
+        "include_sources":ancienne.get("include_sources",True),
+        # L'option a été supprimée : les futures collectes n'activent pas ce ZIP.
+        "sauvegarde_progressive": False,
+        "inclure_texte_genere_ia":ancienne.get("inclure_texte_genere_ia",True),
+        "inclure_theme_hashtag_txt": ancienne.get("inclure_theme_hashtag_txt", True),
+        "filtrer_texte_ia_tiktok":ancienne.get("filtrer_texte_ia_tiktok",False),
+        "export_profil_sans_arobase":ancienne.get("supprimer_arobase_profil",True),
+        "collecter_commentaires":ancienne.get("collecter_commentaires",True),
+        # Les anciennes collectes conservent leurs textes ; les nouvelles
+        # demandent explicitement l'export TXT des commentaires.
+        "inclure_commentaires_txt": ancienne.get(
+            "inclure_commentaires_txt",
+            bool(ancienne.get("collecter_commentaires", False))),
+        "collecter_follower_count":ancienne.get("collecter_follower_count",True),
+        **{
+            "profil_media_" + nom + "_brut": (
+                nom in (ancienne.get("profils_medias_variables") or [])
+                if ancienne else True)
+            for nom in ("following_count", "follower_count", "likes_count", "video_count")
+        },
+        **{
+            "profil_media_" + nom + "_classe": (
+                nom in (ancienne.get("profils_medias_classes") or [])
+                if ancienne else True)
+            for nom in ("following_count", "follower_count", "likes_count", "video_count")
+        },
+        "collecter_is_verified":ancienne.get("collecter_is_verified",True),
+        "follower_count_illustratif":ancienne.get("follower_count_illustratif",True),
+        "abonnes_classe_illustratif":ancienne.get("abonnes_classe_illustratif",True),
+        "variables_classes_txt": (
+            ancienne.get("variables_classes_txt") or []
+            if ancienne else ["vues", "likes", "commentaires", "partages", "favoris", "duree"]),
+        "taux_engagement_txt": ancienne.get("taux_engagement_txt", "brut_et_classes"),
+        "txt_taux_engagement_brut": ancienne.get("taux_engagement_txt", "brut_et_classes") in ("brut", "brut_et_classes"),
+        "txt_taux_engagement_classe": ancienne.get("taux_engagement_txt", "brut_et_classes") in ("classes", "brut_et_classes"),
+        "hashtags_exclus_saisis": ", ".join(
+            "#" + str(tag).lstrip("#") for tag in (ancienne.get("hashtags_exclus") or [])),
+        "collecter_reponses":ancienne.get("collecter_reponses",True),
+        "limite_commentaires":ancienne.get("limite_commentaires",50),
+        "test_research_10_publications":ancienne.get("test_research_10_publications",False),
+        "nom_sauvegarde": ancienne.get("nom_sauvegarde", "")}
+
+    # Retrouver les choix explicites sans transformer des archives historiques
+    # en nouvelles variables TXT. Pour une nouvelle collecte, tout cocher.
+    for nom in ("following_count", "follower_count", "likes_count", "video_count"):
+        for destination in ("txt", "csv"):
+            for type_, champ in (
+                    ("brut", "bruts"), ("classe", "classes")):
+                sauvegarde = ancienne.get("profils_medias_" + destination + "_" + champ)
+                if sauvegarde is not None:
+                    coche = nom in sauvegarde
+                elif ancienne:
+                    coche = (
+                        destination == "csv" and
+                        nom in (ancienne.get(
+                            "profils_medias_variables" if type_ == "brut"
+                            else "profils_medias_classes") or []))
+                else:
+                    coche = True
+                valeurs["profil_media_" + nom + "_" +
+                        destination + "_" + type_] = coche
+
+    variables = ancienne.get("variables_txt")
+    if variables is None:
+        # Nouvelle collecte : cocher toutes les variables, y compris les hashtags.
+        # Une collecte reprise conserve sa sélection enregistrée.
+        variables = (
+            (["date", "profil", "id"] if ancienne.get("inclure_metadonnees_txt")
+             else ["profil", "id"] if ancienne.get("include_sources", True) else [])
+            if ancienne else list(VARIABLES_TXT)
+        )
+    variables = [{"republications": "partages", "url": "id"}.get(v, v) for v in variables]
+    for variable in VARIABLES_TXT:
+        if variable != "hashtags":
+            valeurs["txt_" + variable] = variable in variables
+    # Les anciennes collectes peuvent avoir sélectionné le déplacement des
+    # hashtags dans le TXT. Leur choix est repris pour la nouvelle case CSV.
+    valeurs["csv_hashtags"] = ancienne.get(
+        "inclure_hashtags_csv", "hashtags" in variables)
+    # Toutes les classes sont actives pour une nouvelle collecte ; une ancienne
+    # collecte conserve ses cases cochées et décochées.
+    for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
+        valeurs["txt_classe_" + variable] = variable in valeurs["variables_classes_txt"]
+    valeurs["txt_collecter_follower_count"] = ancienne.get(
+        "collecter_follower_count", True)
+    valeurs["txt_categorie_compte"] = ancienne.get("categorie_compte_txt", True)
+    valeurs["txt_ville_etude"] = ancienne.get("ville_etude_txt", True)
+    # Les nouveaux choix CSV sont tous cochés par défaut : cela préserve
+    # les schémas historiques des collectes qui n'avaient pas ces options.
+    from collecte.selection_variables_csv import VARIABLES_CSV
+    ancien_csv = ancienne.get("variables_csv")
+    for nom in VARIABLES_CSV:
+        valeurs["csv_" + nom] = (
+            True if ancien_csv is None else nom in ancien_csv)
+    # Rétablir les listes des anciennes collectes à un ou deux hashtags,
+    # sans confondre les filtres propres aux modes Hashtags et Profils.
+    anciens_hashtags = ancienne.get("hashtags_saisis") or ancienne.get("hashtags") or [
+        ancienne.get("hashtag", ""), ancienne.get("second_hashtag", "")
+    ]
+    if isinstance(anciens_hashtags, str):
+        anciens_hashtags = [anciens_hashtags]
+    ancienne_saisie = ", ".join(
+        "#" + str(valeur).lstrip("#") for valeur in anciens_hashtags
+        if str(valeur).strip()
+    )
+    valeurs["hashtags_saisis"] = (
+        ancienne_saisie if ancienne.get("source_collecte") == "hashtags" else "")
+    valeurs["hashtags_saisis_comptes"] = (
+        ancienne_saisie if ancienne.get("source_collecte") == "comptes" else "")
+    # Une recherche de médias ne reprend pas les hashtags d'une recherche précédente.
+    for nom in ("hashtag", "second_hashtag"):
+        valeurs[nom + "_comptes"] = ancienne.get(nom, "") if ancienne.get("source_collecte") == "comptes" else ""
+        if ancienne.get("source_collecte") in {"presse", "comptes"}: valeurs[nom] = ""
+    for nom in ("date_debut","date_fin"):
+        valeurs[nom] = date.fromisoformat(ancienne[nom]) if ancienne.get(nom) else None
+    for cle,valeur in valeurs.items(): st.session_state.setdefault(cle,valeur)
+    st.session_state["initialise"] = True
+
+# Réinitialiser uniquement l'espace de travail après confirmation du serveur.
+# Les archives, les données persistantes et les clés Research sont conservées.
+identifiant_a_reinitialiser = st.session_state.pop(
+    "_reinitialisation_collecte_demandee", None)
+if identifiant_a_reinitialiser:
+    try:
+        api(f"/api/session/reinitialiser/{identifiant_a_reinitialiser}", {})
+    except RuntimeError as erreur:
+        st.session_state["_erreur_reinitialisation_collecte"] = str(erreur)
+    else:
+        valeurs_nouvelle_collecte = {
+            "collecte": None, "source": "hashtags", "nom_sauvegarde": "",
+            "hashtag": "", "second_hashtag": "", "hashtags_saisis": "",
+            "hashtags_exclus_saisis": "", "hashtag_comptes": "",
+            "second_hashtag_comptes": "", "hashtags_saisis_comptes": "",
+            "comptes": "", "ville_etude": "", "date_debut": None,
+            "date_fin": None, "hashtag_presse": "",
+            "hashtags_presse_saisis": "", "utiliser_groupes_hashtags": False,
+            "croiser_hashtag_presse": False, "operator": "OR",
+            "operator_comptes": "OR", "operator_presse": "OR",
+            "test_research_10_publications": False,
+        }
+        for cle, valeur in valeurs_nouvelle_collecte.items():
+            st.session_state[cle] = valeur
+        for cle in (
+            "comptes_csv_import_fichiers", "comptes_csv_en_attente",
+            "ville_csv_en_attente", "ville_etude_en_attente",
+            "source_selection_en_attente", "bilan_reprise_hashtags_csv",
+            "erreur_reprise_hashtags", "empreinte_dernier_bilan_medias",
+        ):
+            st.session_state.pop(cle, None)
+        for cle in list(st.session_state):
+            if cle.startswith("bilans_reprise_historique_"):
+                st.session_state.pop(cle, None)
+        st.session_state["_message_reinitialisation_collecte"] = True
+
+st.session_state.setdefault("telecharger_mp4", False)
+# Ignorer également l'ancienne valeur éventuellement conservée en session.
+st.session_state["sauvegarde_progressive"] = False
+st.session_state.setdefault("presse_moteur", "research")
+st.session_state.setdefault("hashtag_moteur", "research")
+st.session_state.setdefault("profil_moteur", "research")
+st.session_state.setdefault("croiser_hashtag_presse", False)
+st.session_state.setdefault("hashtag_presse", "")
+st.session_state.setdefault("hashtags_presse_saisis",
+    "#" + st.session_state["hashtag_presse"]
+    if st.session_state.get("hashtag_presse") else "")
+st.session_state.setdefault("operator_presse", "OR")
+st.session_state.setdefault("hashtags_saisis", "")
+st.session_state.setdefault("inclure_theme_hashtag_txt", True)
+st.session_state.setdefault("utiliser_groupes_hashtags", False)
+st.session_state.setdefault("groupe_hashtags_1", "manifestation, manifestations")
+st.session_state.setdefault("groupe_hashtags_2", "lyceen, lyceens, lycéen, lycéens")
+st.session_state.setdefault("hashtags_saisis_comptes", "")
+st.session_state.setdefault("hashtags_exclus_saisis", "")
+from collecte.profils_medias import (
+    VARIABLES_PROFILS_MEDIAS, LIBELLES_PROFILS_MEDIAS,
+    NOMS_VARIABLES_PROFILS_TXT)
+for variable in VARIABLES_PROFILS_MEDIAS:
+    st.session_state.setdefault("profil_media_" + variable + "_brut", True)
+    st.session_state.setdefault("profil_media_" + variable + "_classe", True)
+    # Une session Streamlit déjà ouverte doit également afficher les nouvelles
+    # cases CSV cochées par défaut, sans effacer les anciens choix explicites.
+    for destination in ("txt", "csv"):
+        for type_ in ("brut", "classe"):
+            st.session_state.setdefault(
+                "profil_media_" + variable + "_" + destination + "_" + type_,
+                True)
+st.session_state.setdefault("collecter_follower_count", True)
+st.session_state.setdefault("txt_collecter_follower_count", True)
+st.session_state.setdefault("txt_categorie_compte", True)
+st.session_state.setdefault("txt_ville_etude", True)
+from collecte.selection_variables_csv import VARIABLES_CSV
+for variable_csv in VARIABLES_CSV:
+    st.session_state.setdefault("csv_" + variable_csv, True)
+st.session_state.setdefault("follower_count_illustratif", True)
+st.session_state.setdefault("abonnes_classe_illustratif", True)
+st.session_state.setdefault("variables_classes_txt",
+    ["vues", "likes", "commentaires", "partages", "favoris", "duree"])
+st.session_state.setdefault("taux_engagement_txt", "brut_et_classes")
+st.session_state.setdefault("txt_taux_engagement_brut",
+    st.session_state.get("taux_engagement_txt") in ("brut", "brut_et_classes"))
+st.session_state.setdefault("txt_taux_engagement_classe",
+    st.session_state.get("taux_engagement_txt") in ("classes", "brut_et_classes"))
+for variable in ("vues", "likes", "commentaires", "partages", "favoris", "duree"):
+    st.session_state.setdefault("txt_classe_" + variable,
+        variable in st.session_state.get("variables_classes_txt", []))
+if st.session_state.pop("_effacer_cookies_apres_requete", False):
+    st.session_state.pop("cookies_presse_fichier", None)
+# Les champs Research restent en mémoire pour les reprises de cette session.
+if st.session_state.pop("_effacer_tikhub_apres_requete", False):
+    st.session_state.pop("tikhub_api_key", None)
+if st.session_state.pop("_effacer_apify_apres_requete", False):
+    st.session_state.pop("apify_api_token", None)
+
+# Conserver les filtres de chaque mode même quand leurs champs ne sont pas affichés.
+for variable in VARIABLES_TXT:
+    # Initialiser seulement si absent : préserver les choix manuels déjà faits.
+    st.session_state.setdefault("txt_" + variable, True)
+    st.session_state["txt_" + variable] = st.session_state["txt_" + variable]
+# Quand le mode Médias masque la radio ET/OU, Streamlit peut supprimer sa
+# clé du session_state à la fin d'une exécution. Le formulaire médias doit
+# rester lançable sans ce widget.
+st.session_state.setdefault("operator", "OR")
+# Les collectes par hashtags et par comptes sont en OU par défaut,
+# conformément à la découverte territoriale. ET reste un choix explicite.
+st.session_state.setdefault("operator_comptes", "OR")
+st.session_state.setdefault("ville_etude", "")
+st.session_state.setdefault("rechercher_dans_texte", False)
+st.session_state.setdefault("variantes_accents", False)
+st.session_state.setdefault("region_fr_research", False)
+for cle in ("hashtag", "second_hashtag", "hashtag_comptes", "second_hashtag_comptes",
+            "hashtags_saisis", "hashtags_saisis_comptes",
+            "operator", "operator_comptes", "limit", "french_only", "include_sources", "txt_date", "txt_profil", "txt_id",
+            "collecter_commentaires", "inclure_commentaires_txt",
+            "collecter_reponses", "limite_commentaires", "telecharger_mp4",
+            "date_debut", "date_fin", "comptes"):
+    # Streamlit peut effacer les clés des widgets masqués au changement de mode.
+    # Ne pas provoquer de KeyError avant même d'afficher le formulaire Médias.
+    if cle in st.session_state:
+        st.session_state[cle] = st.session_state[cle]
+
+collecte = st.session_state["collecte"] or {}
+occupe = bool(collecte.get("busy") or collecte.get("video_busy"))
+
+# L'historique est identifié par un cookie privé distinct de la session de
+# collecte ; la session peut expirer sans effacer les analyses des 30 jours.
+with st.sidebar:
+    st.subheader("Historique temporaire — collectes et analyses")
+    if not cookie_historique:
+        st.caption("Rechargez la page d'accueil pour activer l'historique privé.")
+    else:
+        try:
+            historique_reponse = api("/api/historique")
+        except RuntimeError as erreur:
+            st.warning("Historique indisponible : " + str(erreur))
+        else:
+            analyses_passees = historique_reponse.get("analyses", [])
+            duree_historique = historique_reponse.get("retention_jours", 30)
+            st.caption(
+                f"Historique local temporaire : {duree_historique} jours par défaut "
+                "pour les copies de collecte et d'analyse (sans MP4). "
+                "Cette durée ne s'applique PAS à PostgreSQL ni à la base "
+                "opérationnelle SQLite Research. Les collectes PostgreSQL "
+                "n'ont pas d'expiration automatique dans ScrapTikTok."
+            )
+            if not analyses_passees:
+                st.caption(
+                    "Aucune collecte ni analyse disponible dans cet historique "
+                    "temporaire. Consultez vos archives PostgreSQL et SQLite "
+                    "Research dans l'onglet « Base de données »."
+                )
+            else:
+                index_analyses = {ligne["id"]:ligne for ligne in analyses_passees}
+                def afficher_entree_historique(identifiant):
+                    ligne = index_analyses[identifiant]
+                    date_ = datetime.fromtimestamp(
+                        ligne.get("actualise_le", 0), tz=timezone.utc
+                    ).strftime("%d/%m/%Y")
+                    return f"{date_} · {ligne.get('titre') or identifiant[:8]}"
+
+                choix_historique = st.selectbox(
+                    "Retrouver une collecte et son analyse",
+                    list(index_analyses),
+                    format_func=afficher_entree_historique,
+                    key="choix_historique_scraptiktok",
+                )
+                entree = index_analyses[choix_historique]
+                st.caption("Statut : " + entree.get("statut","indéterminé"))
+                if st.button("Rouvrir la collecte et l’analyse",key="ouvrir_historique_scraptiktok",
+                             disabled=occupe,use_container_width=True):
+                    try:
+                        analyse_reouverte=api(
+                            f"/api/historique/{choix_historique}/ouvrir", {}
+                        )
+                        st.session_state["collecte"] = analyse_reouverte
+                        st.rerun()
+                    except RuntimeError as erreur:
+                        st.error("Réouverture impossible : " + str(erreur))
+                st.link_button(
+                    "Sauvegarde 1 — Collecte (ZIP réimportable)",
+                    f"/api/historique/{choix_historique}/sauvegarde/collecte",
+                    use_container_width=True,
+                )
+                st.link_button(
+                    "Sauvegarde 2 — Résultats de l'analyse (ZIP)",
+                    f"/api/historique/{choix_historique}/sauvegarde/analyse",
+                    use_container_width=True,
+                )
+
+# Recharger les limites serveur, identiques pour tous les utilisateurs.
+try:
+    limites_admin = api("/api/collecte/limites")
+except RuntimeError as erreur:
+    st.error("Limites administrateur indisponibles : "+str(erreur))
+    st.stop()
+max_posts_admin = int(limites_admin["maximum_publications_par_source"])
+max_sources_admin = int(limites_admin["maximum_sources_par_collecte"])
+max_commentaires_admin = int(limites_admin["maximum_commentaires_par_video"])
+st.session_state["limite_commentaires"] = min(
+    max(1,int(st.session_state.get("limite_commentaires",50))),max_commentaires_admin)
+st.session_state["limit"] = min(max(1,int(st.session_state.get("limit",50))),max_posts_admin)
+
+# Recharger le catalogue évite de conserver une ancienne liste dans une session ouverte.
+try:
+    medias = {m["id"]:m for m in api("/api/presse")["medias"]}
+except RuntimeError as erreur:
+    st.error(str(erreur)); st.stop()
+ordre_medias_visibles = ordre_affichage_medias(medias)
+def cocher_uniquement_medias(identifiants):
+    """Sélectionner uniquement les médias à reprendre, sans maintenir les anciens cochages."""
+    selection = set(identifiants).intersection(medias)
+    for identifiant in ordre_medias_visibles:
+        st.session_state["media_" + identifiant] = identifiant in selection
+    st.session_state["medias"] = [
+        identifiant for identifiant in ordre_medias_visibles if identifiant in selection
+    ]
+
+
+onglet_collecte, onglet_collecte_de_compte, onglet_base_donnees, onglet_multimodale, onglet_annotation_csv, onglet_sociometrie, onglet_corpus, onglet_aide = st.tabs(
+    ["Collecte", "Collecte de compte", "Base de données", "Analyse", "Annotation", "Analyse sociométrique", "Corpus fusionné", "Aide"]
+)
+
+with onglet_collecte:
+    api_tiktok_suspendue = False
+    if st.session_state.pop("_message_reinitialisation_collecte", False):
+        st.success(
+            "Nouvelle collecte prête. Les anciennes collectes restent "
+            "accessibles dans l'historique et les bases de données.")
+    st.text_input(
+        "Nom de la collecte *", key="nom_sauvegarde",
+        placeholder="Ex. : Manifestations_lyceennes_2026",
+        max_chars=120, disabled=occupe,
+        help="Obligatoire pour toutes les collectes, y compris les tests "
+             "sur 10 publications. Le nom accompagne les données sauvegardées "
+             "et devient le nom du ZIP de résultats. Il n'efface pas les anciennes collectes."
+    )
+    # Un transfert depuis l'onglet autonome Collecte de compte active
+    # Autres comptes avant la création du widget Streamlit de source.
+    if st.session_state.pop("source_selection_en_attente", None) == "comptes":
+        st.session_state["source"] = "comptes"
+    source = st.radio("Rechercher par", ["hashtags","presse","comptes"], key="source", horizontal=True,
+        format_func=lambda s:{"hashtags":"Hashtags","presse":"Presse et médias","comptes":"Autres comptes TikTok"}[s], disabled=occupe)
+    libelles_moteurs = {
+        "api": "API web TikTok (secUid)",
+        "research": "Research API officielle",
+        "navigateur":"Méthode Selenium",
+        "gallerydl":"Méthode gallery-dl",
+        "tikhub": "Méthode TikHub (API) (payant)",
+        "apify": "Méthode Apify (API) (payant)",
+    }
+    if source in {"hashtags", "comptes"}:
+        cle_moteur = "hashtag_moteur" if source == "hashtags" else "profil_moteur"
+        st.radio(
+            "Moteur de découverte " + ("Hashtags" if source == "hashtags" else "Profils") +
+            " (une seule méthode par collecte)",
+            ["api", "research", "navigateur", "gallerydl", "tikhub"],
+            key=cle_moteur, horizontal=True, disabled=occupe,
+            format_func=lambda valeur: libelles_moteurs[valeur],
+        )
+        moteur_courant = st.session_state.get(cle_moteur, "research")
+        if moteur_courant == "research":
+            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
+                          type="password", disabled=occupe)
+            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
+                          type="password", disabled=occupe)
+            st.caption(
+                "Research API officielle : accès réservé aux projets approuvés. "
+                "Recherche directe de hashtags ou de comptes ; sans téléchargement MP4."
+                + (
+                    " Importez les bilans CSV pour retrouver le corpus PostgreSQL de "
+                    "la collecte d'origine et ses hashtags inachevés. Aucun ZIP n'est "
+                    "nécessaire si la collecte existe dans PostgreSQL. Sans curseur "
+                    "historique, les premières pages API seront réinterrogées et "
+                    "les publications existantes seront dédupliquées par identifiant."
+                    if source == "hashtags" else ""
+                )
+            )
+        elif moteur_courant == "tikhub":
+            st.text_input("Clé API TikHub", key="tikhub_api_key",
+                          type="password", disabled=occupe,
+                          help="Clé personnelle, ou TIKHUB_API_KEY dans Coolify.")
+            st.caption("TikHub : méthode payante. Les appels sont facturables ; "
+                       "l'option Texte généré par IA peut entraîner des appels supplémentaires.")
+        if source == "hashtags" and moteur_courant in {"api", "gallerydl", "tikhub"}:
+            st.caption("Parcours hybride : les hashtags sont découverts via Selenium. "
+                       "Le moteur choisi recherche ensuite les métadonnées des vidéos "
+                       "dans les profils des auteurs (10 profils distincts au maximum). "
+                       "Si une vidéo est absente de ces listes, sa page est lue par Selenium. "
+                       "Avec TikHub, chaque profil interrogé peut entraîner des frais.")
+        if source == "hashtags" and moteur_courant == "navigateur":
+            st.caption("Découverte et lecture par Selenium, comme dans la version précédente.")
+        if source == "hashtags" and moteur_courant == "research":
+            from interface.reprise_hashtags_ui import afficher_reprise_hashtags
+            afficher_reprise_hashtags(api, lancer, occupe)
+    if source == "presse":
+        if st.session_state.get("presse_moteur") == "playwright":
+            st.session_state["presse_moteur"] = "gallerydl"
+        st.radio("Moteur de découverte Presse (une seule méthode par collecte)",
+            ["api", "research", "navigateur", "gallerydl", "tikhub", "apify"],key="presse_moteur",horizontal=True,disabled=occupe,
+            format_func=lambda v: libelles_moteurs[v],
+            help="L'API web TikTok n'est pas la Research API officielle. Elle peut renvoyer HTTP 429 "
+                 "même lorsque la collecte par hashtags fonctionne. Le navigateur inspecte le profil "
+                 "du média et son onglet Vidéos. Aucun basculement automatique n'est effectué après un refus.")
+        if st.session_state.get("presse_moteur") == "research":
+            st.text_input("TIKTOK_RESEARCH_CLIENT_KEY", key="research_client_key",
+                          type="password", disabled=occupe,
+                          help="Client key de l'application TikTok Research approuvée.")
+            st.text_input("TIKTOK_RESEARCH_CLIENT_SECRET", key="research_client_secret",
+                          type="password", disabled=occupe,
+                          help="Client secret Research : masqué à l'écran et non enregistré dans les exports.")
+        if st.session_state.get("presse_moteur") == "tikhub":
+            st.text_input("Clé API TikHub", key="tikhub_api_key", type="password",
+                          disabled=occupe,
+                          help="Clé personnelle TikHub ; elle reste en mémoire uniquement pendant la collecte. "
+                               "La variable Coolify TIKHUB_API_KEY peut également fournir la clé.")
+            st.caption("Méthode payante : TikHub facture ses requêtes. "
+                       "Profil + pages de publications (15 par page), puis une requête "
+                       "supplémentaire par vidéo si « Texte généré par IA » est coché.")
+        if st.session_state.get("presse_moteur") == "apify":
+            st.text_input("Jeton API Apify", key="apify_api_token", type="password",
+                          disabled=occupe,
+                          help="Jeton personnel Apify. Peut aussi provenir de APIFY_API_TOKEN dans Coolify. "
+                               "Il n'est jamais enregistré dans les exports.")
+            st.caption("Méthode payante : l'Actor clockworks/tiktok-profile-scraper "
+                       "s'exécute sur Apify. Nombre de résultats plafonné par la collecte. "
+                       "Coût maximal par exécution : APIFY_MAX_CHARGE_USD (1 USD par défaut). "
+                       "L'option Texte généré par IA nécessite Selenium et ne garantit pas de résumé.")
+        if st.session_state.get("presse_moteur") == "navigateur":
+            with st.expander("Session TikTok — cookies facultatifs"):
+                st.file_uploader("Importer les cookies TikTok (.txt, format Netscape)",
+                    type=["txt"], key="cookies_presse_fichier", disabled=occupe,
+                    help="Utiliser un export de votre propre session TikTok. Les cookies restent "
+                         "en mémoire pour cette collecte et ne figurent pas dans les résultats ou les archives.")
+                st.caption("Sans fichier, la collecte utilise une session anonyme, sauf cookies configurés par l’administrateur. "
+                           "Une session importée peut expirer ou nécessiter une vérification TikTok.")
+        st.write("Choisir les médias à collecter")
+        st.caption(
+            "Les catégories distinguent la portée éditoriale des titres. "
+            "Les comptes dont le statut ne peut pas être établi figurent dans "
+            "« Autres médias ou statut à confirmer ». Cette classification "
+            "n'atteste pas la propriété officielle des comptes TikTok."
+        )
+
+        def memoriser_medias():
+            """Maintenir la sélection dans l'ordre visible des cases à cocher."""
+            st.session_state["medias"] = [
+                identifiant for identifiant in ordre_medias_visibles
+                if st.session_state.get("media_" + identifiant, False)
+            ]
+
+        def cocher_tous_les_medias():
+            """Conserver le comportement historique de sélection globale."""
+            for identifiant in ordre_medias_visibles:
+                st.session_state["media_" + identifiant] = True
+            memoriser_medias()
+
+        def cocher_categorie_medias(identifiants, cocher):
+            """Sélectionner ou désélectionner une catégorie sans toucher aux autres."""
+            for identifiant in identifiants:
+                st.session_state["media_" + identifiant] = cocher
+            memoriser_medias()
+
+        st.button(
+            "Tout cocher", key="tous_medias",
+            on_click=cocher_tous_les_medias, disabled=occupe,
+        )
+        dernier_bilan = ((st.session_state.get("collecte") or {}).get("bilan_medias") or [])
+        derniere_collecte = st.session_state.get("collecte") or {}
+        if (derniere_collecte.get("source_collecte") == "presse"
+                and dernier_bilan and not derniere_collecte.get("busy")):
+            ids_reprise = medias_a_reprendre(dernier_bilan)
+            st.caption(
+                f"Dernière collecte : {len(dernier_bilan)} média(s) prévu(s), "
+                f"{len(ids_reprise)} à reprendre (non commencés, interrompus "
+                "ou partiellement traités)."
+            )
+            if ids_reprise:
+                st.button(
+                    f"Cocher uniquement les {len(ids_reprise)} médias à reprendre",
+                    key="cocher_medias_derniere_collecte",
+                    on_click=cocher_uniquement_medias,
+                    args=(ids_reprise,), disabled=occupe,
+                )
+        if (derniere_collecte.get("source_collecte") == "presse"
+                and derniere_collecte.get("presse_moteur") == "research"
+                and dernier_bilan and not derniere_collecte.get("busy")
+                and not derniere_collecte.get("video_busy")):
+            disponibles_reprise = set(medias_a_reprendre(dernier_bilan))
+            options_reprise = [
+                identifiant for identifiant in ordre_medias_visibles
+                if identifiant in disponibles_reprise
+            ]
+            if options_reprise:
+                with st.expander(
+                    "Reprendre cette collecte existante dans PostgreSQL",
+                    expanded=False,
+                ):
+                    st.caption(
+                        "Reprise du même corpus et du même identifiant de collecte. "
+                        "Les publications antérieures sont conservées et les doublons "
+                        "sont écartés par identifiant TikTok. Les dates, hashtags, "
+                        "filtres et variables restent ceux du premier lancement. "
+                        "L'archive doit encore être présente dans l'historique privé "
+                        "et le corpus d'origine dans PostgreSQL."
+                    )
+                    selection_pour_reprise = st.multiselect(
+                        "Médias encore à parcourir",
+                        options=options_reprise,
+                        default=options_reprise,
+                        format_func=lambda identifiant: (
+                            medias[identifiant]["nom"] + " (@"
+                            + medias[identifiant]["compte"] + ")"),
+                        key="reprendre_selection_" + derniere_collecte["id"],
+                        disabled=occupe,
+                    )
+                    if st.button(
+                        "Reprendre cette collecte (même corpus PostgreSQL)",
+                        key="reprendre_collecte_existante_" + derniere_collecte["id"],
+                        disabled=occupe or not selection_pour_reprise,
+                        type="primary",
+                    ):
+                        requete_reprise = {
+                            "medias": selection_pour_reprise,
+                            "presse_moteur": "research",
+                        }
+                        cle_reprise = st.session_state.get(
+                            "research_client_key", "").strip()
+                        secret_reprise = st.session_state.get(
+                            "research_client_secret", "").strip()
+                        if cle_reprise or secret_reprise:
+                            requete_reprise["research_client_key"] = cle_reprise
+                            requete_reprise["research_client_secret"] = secret_reprise
+                        lancer(
+                            "/api/historique/" + derniere_collecte["id"] + "/reprendre",
+                            requete_reprise,
+                        )
+        fichier_bilan = st.file_uploader(
+            "Importer un bilan de médias CSV d'une collecte précédente",
+            type=["csv"], key="bilan_reprise_csv", disabled=occupe,
+            help="L'import sélectionne automatiquement les médias non commencés, "
+                 "interrompus, partiels ou en échec, et décoche les autres. "
+                 "Les modifications manuelles restent ensuite possibles.",
+        )
+        if fichier_bilan is None:
+            # Autoriser le réimport du même fichier après son retrait explicite.
+            st.session_state.pop("empreinte_dernier_bilan_medias", None)
+        else:
+            contenu_bilan = fichier_bilan.getvalue()
+            try:
+                ids_importes, ids_inconnus = importer_bilan_medias_csv(
+                    contenu_bilan, medias)
+            except ValueError as erreur:
+                st.error(str(erreur))
+            else:
+                empreinte_bilan = hashlib.sha256(contenu_bilan).hexdigest()
+                if (ids_importes and not occupe
+                        and st.session_state.get("empreinte_dernier_bilan_medias")
+                            != empreinte_bilan):
+                    # Les cases sont modifiées avant la création des widgets,
+                    # uniquement lors de l'import d'un nouveau bilan.
+                    cocher_uniquement_medias(ids_importes)
+                    st.session_state["empreinte_dernier_bilan_medias"] = empreinte_bilan
+                if ids_importes:
+                    st.success(
+                        f"{len(ids_importes)} média(s) à reprendre sélectionné(s) "
+                        "automatiquement dans les cases ci-dessous. "
+                        "Les autres médias sont décochés."
+                    )
+                    st.caption(
+                        "Vous pouvez modifier les cases manuellement : "
+                        "elles ne seront pas réinitialisées à chaque actualisation."
+                    )
+                else:
+                    st.warning(
+                        "Ce bilan ne contient aucun média restant à collecter "
+                        "dans l'inventaire actuel."
+                    )
+                if ids_inconnus:
+                    st.warning(
+                        f"{len(ids_inconnus)} média(s) du bilan sont absents "
+                        "de l'inventaire actuel : " + ", ".join(ids_inconnus)
+                    )
+        categories_medias = (
+            ("presse_nationale", "Presse nationale"),
+            ("presse_regionale", "Presse Régionale/départementale"),
+            ("presse_independante", "Presse indépendante"),
+            ("autres_medias", "Autres médias ou statut à confirmer"),
+        )
+        for categorie, libelle_categorie in categories_medias:
+            # Le tri concerne l'affichage : les identifiants de sélection,
+            # la liste complète et les collectes existantes restent inchangés.
+            comptes_categorie = sorted(
+                ((identifiant, media) for identifiant, media in medias.items()
+                 if media.get("categorie") == categorie),
+                key=lambda element: cle_tri_media(element[1]),
+            )
+            if not comptes_categorie:
+                continue
+            identifiants_categorie = tuple(
+                identifiant for identifiant, _ in comptes_categorie
+            )
+            with st.expander(
+                f"{libelle_categorie} ({len(comptes_categorie)})",
+                expanded=categorie == "presse_nationale",
+            ):
+                controles = st.columns(2)
+                controles[0].button(
+                    "Tout cocher dans cette catégorie",
+                    key="cocher_categorie_" + categorie,
+                    on_click=cocher_categorie_medias,
+                    args=(identifiants_categorie, True),
+                    disabled=occupe,
+                )
+                controles[1].button(
+                    "Tout décocher dans cette catégorie",
+                    key="decocher_categorie_" + categorie,
+                    on_click=cocher_categorie_medias,
+                    args=(identifiants_categorie, False),
+                    disabled=occupe,
+                )
+                # Sous-groupes uniquement pour le national, sans toucher
+                # à la catégorie principale ni aux clés de sélection.
+                groupes_nationaux = (
+                    ("television_nationale", "Chaînes de télévision nationales"),
+                    ("presse_ecrite_nationale", "Presse nationale"),
+                    ("autres", "Autres médias nationaux"),
+                )
+                regroupements = (
+                    groupes_nationaux if categorie == "presse_nationale"
+                    else ((None, None),)
+                )
+                for sous_categorie, titre in regroupements:
+                    if sous_categorie == "autres":
+                        comptes_affiches = [
+                            element for element in comptes_categorie
+                            if element[1].get("sous_categorie") not in (
+                                "television_nationale", "presse_ecrite_nationale")
+                        ]
+                    elif sous_categorie is None:
+                        comptes_affiches = comptes_categorie
+                    else:
+                        comptes_affiches = [
+                            element for element in comptes_categorie
+                            if element[1].get("sous_categorie") == sous_categorie
+                        ]
+                    if not comptes_affiches:
+                        continue
+                    if titre:
+                        st.markdown("**" + titre + "**")
+                    colonnes_medias = st.columns(2, gap="small")
+                    for numero_colonne, colonne_media in enumerate(colonnes_medias):
+                        with colonne_media:
+                            # Un seul conteneur par colonne supprime les
+                            # espacements verticaux entre les comptes.
+                            with st.container(gap=None):
+                                for indice, (identifiant, media) in enumerate(comptes_affiches):
+                                    if indice % 2 != numero_colonne:
+                                        continue
+                                    cle = "media_" + identifiant
+                                    st.session_state.setdefault(
+                                        cle, identifiant in st.session_state.get("medias", []),
+                                    )
+                                    st.checkbox(
+                                        media["nom"] + " (@" + media["compte"] + ")",
+                                        key=cle, disabled=occupe,
+                                        on_change=memoriser_medias,
+                                    )
+        selection = [
+            identifiant for identifiant in ordre_medias_visibles
+            if st.session_state.get("media_" + identifiant, False)
+        ]
+        st.session_state["medias"] = selection
+        if st.session_state.get("presse_moteur") == "research":
+            st.caption(
+                f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                "Research API : aucune limite locale sur le nombre de médias ; "
+                "les quotas et restrictions de TikTok restent applicables. "
+                "Seules les publications des comptes cochés sont retenues."
+            )
+        else:
+            st.caption(
+                f"{len(selection)} média(s) sélectionné(s) sur {len(medias)}. "
+                f"Borne technique : {max_sources_admin} source(s) par collecte. "
+                "Seules les publications des comptes cochés sont retenues."
+            )
+            if len(selection) > max_sources_admin:
+                st.warning(
+                    "Trop de médias sélectionnés pour une même collecte : "
+                    f"maximum {max_sources_admin}."
+                )
+        liste_hashtags_presse = []
+        erreur_hashtags_presse = ""
+        st.checkbox("Croisement avec des hashtags", key="croiser_hashtag_presse",
+            disabled=occupe, help="Restreindre les vidéos des médias sélectionnés à un ou plusieurs "
+            "hashtags exacts, sans recherche générale sur d'autres comptes.")
+        if st.session_state.get("croiser_hashtag_presse"):
+            saisie_presse = st.text_area(
+                "Hashtags du croisement (1 à 10)", key="hashtags_presse_saisis",
+                placeholder="#manifestation, #lyceens, #blocage", height=95,
+                disabled=occupe,
+                help="Séparez les hashtags par des virgules, espaces, points-virgules ou "
+                     "retours à la ligne. Le signe # est facultatif ; les doublons sont supprimés.")
+            try:
+                liste_hashtags_presse = normaliser_liste_hashtags(
+                    separer_saisie_hashtags(saisie_presse))
+            except ValueError as erreur:
+                erreur_hashtags_presse = str(erreur)
+                st.error(erreur_hashtags_presse)
+            if not erreur_hashtags_presse:
+                st.caption(
+                    f"{len(liste_hashtags_presse)}/{MAX_HASHTAGS} hashtags distincts. "
+                    + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags_presse)
+                       if liste_hashtags_presse else "Saisissez au moins un hashtag."))
+            st.radio(
+                "Combiner les hashtags de presse", ["OR", "AND"],
+                format_func=lambda valeur: (
+                    "ET — tous les hashtags" if valeur == "AND"
+                    else "OU — au moins un hashtag"),
+                key="operator_presse", horizontal=True, disabled=occupe)
+            st.caption(
+                "Croisement : comptes sélectionnés ET (hashtags combinés selon ET/OU). "
+                "Research API : conditions appliquées dès la découverte, puis vérifiées "
+                "localement. Autres moteurs : filtrage après lecture des publications. "
+                "Les autres filtres de période et de langue restent applicables.")
+        st.checkbox(
+            "Récupérer les vidéos republiées par les comptes sélectionnés (Research API)",
+            key="collecter_republications_research",
+            disabled=occupe or st.session_state.get("presse_moteur") != "research",
+            help="Interroge le compte public de chaque média via l'endpoint officiel "
+                 "des republications. Produit republications.csv et republications.json, "
+                 "et rapproche les identifiants avec le corpus principal. "
+                 "La date TikTok fournie est celle de la création de la vidéo, "
+                 "pas celle de sa republication.")
+        if (st.session_state.get("collecter_republications_research")
+                and st.session_state.get("presse_moteur") == "research"):
+            st.number_input(
+                "Maximum de republications à conserver par compte",
+                min_value=1, max_value=1000, step=25,
+                key="maximum_republications_par_compte", disabled=occupe)
+            st.caption(
+                "L'API renvoie les vidéos republiées par chaque compte public éligible. "
+                "Un fichier distinct conserve l'auteur de la vidéo, le compte reposteur "
+                "et les métriques. Les dates et hashtags sont filtrés sur la vidéo "
+                "originale. Une absence de résultat ne prouve pas l'absence de "
+                "republication et les requêtes consomment le quota Research.")
+        # Une seule ligne d'information Streamlit : plusieurs st.caption,
+        # st.warning ou st.error consécutifs créent des espaces vides inutiles.
+        # Les messages sont assemblés sans saut de paragraphe ; une alerte
+        # utilise le même bloc, seulement avec une autre présentation.
+        informations_presse = []
+        alerte_presse = False
+        if st.session_state.get("presse_moteur") == "api":
+            informations_presse.append(
+                "Moteur : API web Presse (distinct du navigateur Hashtags). "
+                "Si HTTP 429, choisir manuellement « Méthode Selenium » "
+                "pour une nouvelle collecte."
+            )
+        elif st.session_state.get("presse_moteur") == "research":
+            informations_presse.append("Research API officielle : projet approuvé nécessaire. Les MP4 ne sont pas fournis par cette API.")
+        elif st.session_state.get("presse_moteur") == "gallerydl":
+            informations_presse.append("Moteur : gallery-dl (liste creator/item_list uniquement). La collecte n'ouvre pas les pages des vidéos ; les commentaires et résumés IA demandent Selenium.")
+        elif st.session_state.get("presse_moteur") == "tikhub":
+            informations_presse.append("Moteur : TikHub (API payante). Profils et publications via l'API ; résumés natifs TikTok itemCustomTDK lorsque l'option IA est cochée.")
+        elif st.session_state.get("presse_moteur") == "apify":
+            informations_presse.append("Moteur : Apify (API payante). La collecte se déroule sur Apify ; vidéos, légendes et compteurs sont réintégrés dans ScrapTikTok. Pas de téléchargement MP4 par l'Actor.")
+        else:
+            informations_presse.append("Moteur : Méthode Selenium.")
+        if st.session_state.get("presse_moteur") != "research":
+            budget_api = limites_admin.get("budget_api_presse", {})
+            informations_presse.append(
+                "Plafonds API Presse configurés (Coolify) : "
+                + " ; ".join(
+                    f"{budget_api.get(compteur, 0)}/{budget_api[maximum]} sur {periode}"
+                    for compteur, maximum, periode in (
+                        ("requete_minute", "maximum_minute", "1 min"),
+                        ("requete_heure", "maximum_heure", "1 h"),
+                        ("requete_24h", "maximum_24h", "24 h"),
+                    )
+                    if budget_api.get(maximum) is not None
+                ) if any(budget_api.get(cle) is not None
+                         for cle in ("maximum_minute", "maximum_heure", "maximum_24h"))
+                else "API Presse : aucun plafond de requêtes configuré dans Coolify."
+            )
+            echeances = (
+                ("minute", budget_api.get("reprise_locale_minute_utc")),
+                ("heure", budget_api.get("reprise_locale_heure_utc")),
+                ("jour UTC", budget_api.get("reprise_locale_jour_utc")),
+                ("enregistrements UTC", budget_api.get("reprise_locale_enregistrements_utc")),
+            )
+            plafonds_epuises = [
+                libelle + " : " +
+                datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+                for libelle, epoch in echeances
+                if isinstance(epoch, (int, float)) and epoch > 0
+            ]
+            if plafonds_epuises:
+                alerte_presse = True
+                informations_presse.append("Quotas locaux épuisés (réinitialisation) : "
+                                            + " ; ".join(plafonds_epuises) + ".")
+            else:
+                if any(budget_api.get(cle) is not None
+                       for cle in ("maximum_minute", "maximum_heure", "maximum_24h")):
+                    informations_presse.append("Plafonds configurés non atteints.")
+            try:
+                limitation_presse = api("/api/presse/limitation")
+                if limitation_presse.get("actif"):
+                    api_tiktok_suspendue = st.session_state.get("presse_moteur", "api") == "api"
+                    restant = limitation_presse.get("restant_secondes", 0)
+                    alerte_presse = True
+                    informations_presse.append(
+                        f"TikTok : Retry-After actif, {restant//60} min {restant%60} s restantes."
+                    )
+                elif limitation_presse.get("ancien_429_sans_delai"):
+                    dernier_429 = limitation_presse.get("dernier_429")
+                    date_429 = (
+                        datetime.fromtimestamp(dernier_429, tz=timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+                        if isinstance(dernier_429, (int, float)) and dernier_429 > 0
+                        else "date inconnue"
+                    )
+                    informations_presse.append(
+                        "Dernier HTTP 429 : " + date_429 +
+                        " ; aucun Retry-After indiqué, reprise TikTok inconnue."
+                    )
+                else:
+                    informations_presse.append("TikTok : aucun Retry-After actif.")
+            except RuntimeError as erreur:
+                alerte_presse = True
+                informations_presse.append("État du Retry-After indisponible : " + str(erreur))
+            try:
+                version_presse = api("/healthz").get("version_presse")
+                if version_presse:
+                    informations_presse.append("Version : " + version_presse)
+                else:
+                    alerte_presse = True
+                    informations_presse.append("Version serveur Presse absente : vérifier Coolify.")
+            except RuntimeError as erreur:
+                alerte_presse = True
+                informations_presse.append("Version serveur indisponible : " + str(erreur))
+        resume_presse = " · ".join(informations_presse)
+        if alerte_presse:
+            st.warning(resume_presse)
+        else:
+            st.caption(resume_presse)
+    elif source == "comptes":
+        # Appliquer le transfert au début du rendu, avant la création
+        # du widget Streamlit correspondant aux comptes TikTok.
+        transfert_territorial = st.session_state.pop(
+            "comptes_territoire_en_attente", None)
+        transfert_csv = st.session_state.pop("comptes_csv_en_attente", None)
+        ville_territoriale = st.session_state.pop("ville_etude_en_attente", None)
+        ville_csv = st.session_state.pop("ville_csv_en_attente", None)
+        if transfert_territorial is not None:
+            st.session_state["comptes"] = transfert_territorial
+            if ville_territoriale is not None:
+                st.session_state["ville_etude"] = ville_territoriale
+        if transfert_csv is not None:
+            # Les champs sont initialisés avant leur affichage Streamlit.
+            st.session_state["comptes"] = transfert_csv
+            # Un autre CSV ne doit pas hériter d'une ancienne ville.
+            st.session_state["ville_etude"] = ville_csv or ""
+        # Les profils et l’import CSV restent dans Autres comptes TikTok.
+        # La découverte territoriale dispose maintenant de son propre onglet.
+        st.text_input(
+            "Comptes TikTok", key="comptes",
+            placeholder="@lemondefr, @franceinfo",
+            help="Saisissez un ou plusieurs comptes séparés par des virgules ou espaces.",
+            disabled=occupe)
+        st.caption(
+            "Avec ou sans @ : @lemondefr et lemondefr sont acceptés. "
+             "Les comptes peuvent être transférés en totalité depuis la collecte de compte. "
+            "Renseignez au moins un hashtag ci-dessous pour lancer la collecte.")
+        st.caption(
+            "Un CSV de comptes contient les auteurs découverts, pas toutes leurs "
+            "vidéos territoriales. Une nouvelle collecte de profils n'applique "
+            "pas automatiquement le critère Toulouse : elle croise les comptes "
+            "avec les hashtags et la période choisis ci-dessous.")
+        if transfert_territorial is not None:
+            st.success(
+                "Comptes de l'inventaire territorial placés dans le champ "
+                "Profils. Vous pouvez lancer la collecte ci-dessous.")
+        st.text_input(
+            "Ville associée au corpus (variable IRaMuTeQ)",
+            key="ville_etude", placeholder="Toulouse",
+            max_chars=80, disabled=occupe,
+            help="Exemple : Toulouse produit *ville_toulouse dans l'en-tête "
+                 "de chaque légende et de chaque résumé IA de cette collecte. "
+                 "Champ facultatif ; renseigne la constitution du corpus, "
+                 "pas la résidence des auteurs ni la localisation des vidéos.")
+        if st.session_state.get("ville_etude", "").strip():
+            from collecte.ville_etude import balise_ville_etude
+            try:
+                st.caption(
+                    "Modalité du corpus : "
+                    + balise_ville_etude(st.session_state["ville_etude"])
+                    + " (rattachement à la sélection, non géolocalisation vérifiée).")
+            except ValueError as erreur:
+                st.warning(str(erreur))
+
+        fichiers_profils_csv = st.file_uploader(
+            "Importer un ou plusieurs CSV de comptes (collecte précédente)",
+            type=["csv"], accept_multiple_files=True,
+            key="comptes_csv_import_fichiers", disabled=occupe,
+            help="Compatible avec comptes.csv exporté par ScrapTikTok "
+                 "(colonne username, séparateur point-virgule) et avec "
+                 "les colonnes compte, profil, author ou url_compte. "
+                 "20 fichiers de 10 Mo au maximum.")
+        if fichiers_profils_csv:
+            from collecte.import_comptes_csv import lire_plusieurs_csv
+            try:
+                bilan_csv_profils = lire_plusieurs_csv([
+                    (fichier.name, fichier.getvalue())
+                    for fichier in fichiers_profils_csv])
+            except ValueError as erreur:
+                st.error("Import des comptes impossible : " + str(erreur))
+            else:
+                comptes_csv = bilan_csv_profils["comptes"]
+                st.caption(
+                    f"{len(comptes_csv)} compte(s) distinct(s) identifiés "
+                    f"dans {bilan_csv_profils['fichiers']} fichier(s) CSV ; "
+                    f"{bilan_csv_profils['doublons']} doublon(s) ignoré(s).")
+                territoires_csv = bilan_csv_profils.get("territoires", [])
+                ville_commune_csv = bilan_csv_profils.get("territoire_commun", "")
+                if len(territoires_csv) > 1:
+                    st.warning(
+                        "Le CSV contient plusieurs territoires : aucune ville "
+                        "commune ne sera attribuée automatiquement aux comptes. "
+                        "Séparez les corpus par ville si vous souhaitez une "
+                        "variable IRaMuTeQ valide.")
+                elif ville_commune_csv:
+                    st.caption(
+                        "Territoire du CSV : " + ville_commune_csv
+                        + ". Cette valeur sera préremplie si elle désigne une ville.")
+                if bilan_csv_profils["invalides"]:
+                    lignes_invalides = bilan_csv_profils["invalides"]
+                    st.warning(
+                        f"{len(lignes_invalides)} identifiant(s) invalide(s) "
+                        "ignoré(s). Exemples : " +
+                        ", ".join(
+                            f"{ligne['fichier']} ({ligne['valeur']})"
+                            for ligne in lignes_invalides[:5]))
+                st.caption(
+                    "Le chargement remplace uniquement la liste du champ "
+                    "Comptes TikTok. Les hashtags, dates, options de collecte "
+                    "et résultats enregistrés restent inchangés.")
+                if st.button(
+                    f"Charger les {len(comptes_csv)} comptes dans Collecte de profils",
+                    key="comptes_csv_import_charger", disabled=occupe):
+                    # Reporter la modification au prochain rendu Streamlit.
+                    st.session_state["comptes_csv_en_attente"] = (
+                        ", ".join(comptes_csv))
+                    # FR et les autres codes ISO désignent un pays, pas une ville.
+                    st.session_state["ville_csv_en_attente"] = (
+                        ville_commune_csv if len(ville_commune_csv) > 2
+                        else "")
+                    st.rerun()
+        if transfert_csv is not None:
+            st.success(
+                "Comptes du CSV chargés dans le champ Comptes TikTok. "
+                "Vous pouvez ajuster vos critères et lancer la collecte.")
+    # L'aide est contextualisée : elle n'apparaît qu'avec le moteur officiel.
+    moteur_formulaire = st.session_state.get(
+        {"presse": "presse_moteur", "comptes": "profil_moteur",
+         "hashtags": "hashtag_moteur"}[source], "research")
+    if moteur_formulaire == "research":
+        with st.expander("Aide spécifique — TikTok Research API (quotas et collecte)"):
+            st.markdown(
+                "**Accès et identifiants.** Le moteur officiel exige un projet Research "
+                "approuvé et un Client key / Client secret valides. Le jeton d'accès "
+                "expire au bout de deux heures. Les identifiants ne sont pas inclus "
+                "dans les exports."
+            )
+            st.markdown(
+                "**Quota officiel.** TikTok indique 1 000 requêtes par jour, "
+                "soit jusqu'à 100 000 enregistrements théoriques par jour "
+                "pour les API de vidéos et de commentaires (100 résultats "
+                "maximum par requête). Ce budget est partagé au niveau de "
+                "l'organisation et se réinitialise à 00 h 00 UTC."
+            )
+            st.markdown(
+                "**Vidéos et période.** La recherche interroge automatiquement les "
+                "pages accessibles sans plafond propre à ScrapTikTok de "
+                "1 000 publications ou de 60 pages. Chaque requête vidéo "
+                "couvre au maximum 30 jours ; les périodes plus longues sont "
+                "découpées. TikTok peut retourner moins de 100 résultats "
+                "sur une page, même si d'autres existent."
+            )
+            st.markdown(
+                "**Commentaires et réponses.** Si la collecte est cochée, "
+                "ScrapTikTok parcourt les pages de commentaires accessibles "
+                "sans limite locale de 60 pages. Les réponses sont interrogées "
+                "séparément lorsqu'elles sont activées ; ces requêtes "
+                "consomment également le quota officiel."
+            )
+            st.markdown(
+                "**Mode test.** L'option \"Faire un test sur 10 publications\" "
+                "limite à dix le nombre de publications conformes examinées. "
+                "TikTok peut retourner davantage de candidats qui ne respectent "
+                "pas les hashtags ou les autres critères ; ils sont comptabilisés "
+                "séparément. Une recherche peut se terminer avec moins de dix "
+                "textes exploitables. Les exports sélectionnés sont conservés."
+            )
+            st.markdown(
+                "**Arrêts et limites.** Une erreur, un refus d'accès, un quota "
+                "épuisé, une interruption manuelle ou la durée maximale "
+                "du traitement sur le VPS peuvent arrêter la collecte. "
+                "Les résultats déjà enregistrés restent exploitables, "
+                "mais l'exhaustivité n'est pas garantie. ScrapTikTok "
+                "n'affiche pas actuellement de compteur officiel "
+                "du quota restant pour l'organisation. Les MP4 "
+                "ne sont pas fournis par cette API."
+            )
+            st.markdown(
+                "Documentation officielle : "
+                "[FAQ Research](https://developers.tiktok.com/docs/en/research-api-faq) "
+                "et [pagination des vidéos](https://developers.tiktok.com/docs/en/research-api-get-started)."
+            )
+    cle_liste_hashtags = (
+        "hashtags_saisis" if source == "hashtags" else "hashtags_saisis_comptes")
+    liste_hashtags = []
+    liste_hashtags_exclus = []
+    erreur_hashtags = ""
+    erreur_hashtags_exclus = ""
+    # L'interface reste réactive : les cases d'export sont regroupées avec
+    # la collecte et peuvent modifier les liens TXT sans relancer une collecte.
+    with st.container(border=False):
+        if source != "presse":
+            groupes_hashtags = []
+            if source == "hashtags":
+                st.checkbox(
+                    "Deux groupes de hashtags : OU dans chaque groupe, ET entre les groupes",
+                    key="utiliser_groupes_hashtags", disabled=occupe,
+                    help="Une vidéo doit contenir au moins un hashtag de chaque groupe. "
+                         "Les six graphies sont recherchées individuellement et la "
+                         "pagination Research est conservée pour chaque source.")
+            if source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags"):
+                for indice in (1, 2):
+                    st.text_input(
+                        f"Groupe {indice} — variantes combinées par OU",
+                        key=f"groupe_hashtags_{indice}", disabled=occupe)
+                try:
+                    groupes_hashtags = [
+                        normaliser_liste_hashtags(separer_saisie_hashtags(
+                            st.session_state[f"groupe_hashtags_{indice}"]))
+                        for indice in (1, 2)
+                    ]
+                    if not all(groupes_hashtags):
+                        raise ValueError("Chaque groupe doit contenir au moins un hashtag.")
+                    liste_hashtags = normaliser_liste_hashtags(
+                        [tag for groupe in groupes_hashtags for tag in groupe])
+                    if sum(map(len, groupes_hashtags)) != len(liste_hashtags):
+                        raise ValueError("Un hashtag ne peut pas appartenir aux deux groupes.")
+                except ValueError as erreur:
+                    erreur_hashtags = str(erreur)
+                    st.error(erreur_hashtags)
+                if not erreur_hashtags:
+                    st.caption(
+                        "Critère : (" + " OU ".join("#" + h for h in groupes_hashtags[0])
+                        + ") ET (" + " OU ".join("#" + h for h in groupes_hashtags[1])
+                        + "). Chaque publication doit satisfaire les deux groupes.")
+            else:
+                saisie = st.text_area(
+                    "Hashtags à rechercher (1 à 10)", key=cle_liste_hashtags,
+                    placeholder="#manifestation, #lyceens, #mobilisation",
+                    help="Séparez les hashtags par des virgules, des points-virgules, "
+                         "des espaces ou des retours à la ligne. Le signe # est facultatif. "
+                         "Le même hashtag saisi plusieurs fois ne compte qu'une fois.",
+                    height=95, disabled=occupe,
+                )
+                try:
+                    liste_hashtags = normaliser_liste_hashtags(separer_saisie_hashtags(saisie))
+                except ValueError as erreur:
+                    erreur_hashtags = str(erreur)
+                    st.error(erreur_hashtags)
+                if not erreur_hashtags:
+                    st.caption(
+                        f"{len(liste_hashtags)}/{MAX_HASHTAGS} hashtags distincts. "
+                        + ("Sélection : " + ", ".join("#" + h for h in liste_hashtags)
+                           if liste_hashtags else "Saisissez au moins un hashtag.")
+                    )
+            if not (source == "hashtags" and st.session_state.get("utiliser_groupes_hashtags")):
+                st.radio(
+                    "Combiner les hashtags", ["OR", "AND"],
+                    format_func=lambda valeur: (
+                        "ET — tous les hashtags" if valeur == "AND"
+                        else "OU — au moins un hashtag"),
+                    key=("operator_comptes" if source == "comptes"
+                         else "operator"),
+                    horizontal=True, disabled=occupe,
+                )
+                if source == "comptes" and liste_hashtags:
+                    operateur_profils = st.session_state.get(
+                        "operator_comptes", "OR")
+                    if operateur_profils == "OR":
+                        st.caption(
+                            "Profils : une publication est retenue si elle "
+                            "contient au moins un des hashtags demandés. "
+                            "La Research API applique ce croisement dès "
+                            "la recherche des vidéos de chaque compte.")
+                    elif len(liste_hashtags) > 1:
+                        st.warning(
+                            f"Profils : ET impose les {len(liste_hashtags)} "
+                            "hashtags dans une même publication, et non "
+                            "répartis entre les vidéos du compte. "
+                            "Pour retrouver les vidéos associées à l'un "
+                            "des hashtags, choisissez OU.")
+            if source == "hashtags":
+                st.checkbox("Inclure les variantes accentuées des hashtags",
+                    key="variantes_accents", disabled=occupe,
+                    help="Décoché : seul le hashtag exact est accepté (#lyceen différent de #lycéen). "
+                         "Coché : les variantes avec ou sans accents sont prises en compte ; "
+                         "ScrapTikTok explore également un nombre limité de pages de variantes (#lyceen, #lycéen…). "
+                         "Les variantes proposées sont heuristiques (huit graphies au maximum par hashtag) : "
+                         "la recherche peut être plus longue sans garantir un résultat exhaustif. "
+                         "Avec les autres moteurs, le nombre demandé est global. "
+                         "Avec Research, la pagination est automatique.")
+            st.checkbox("Rechercher aussi dans le texte des légendes (en plus des hashtags)",
+                key="rechercher_dans_texte", disabled=occupe,
+                help="Décoché : seuls les hashtags officiels TikTok et les #hashtags écrits dans la légende comptent. "
+                     "Coché : les mots entiers du texte comptent aussi, sans distinction de majuscules ou d’accents. "
+                     "Par exemple, #lyceen peut correspondre à « lycéen » et #17octobre à « 17 octobre ». "
+                     "Une vidéo dont la légende contient le mot correspondant est donc retenue "
+                     "pour le TXT, même sans hashtag, si elle respecte la combinaison ET/OU "
+                     "et les autres filtres (langue et période). "
+                     "Ce choix agit après la découverte des vidéos TikTok.")
+        if source == "hashtags" and moteur_formulaire == "research":
+            st.checkbox(
+                "Limiter aux comptes enregistrés en France (region_code = FR)",
+                key="region_fr_research", disabled=occupe,
+                help="Facultatif et désactivé par défaut. Le code FR de la "
+                     "Research API désigne le pays d'enregistrement du compte "
+                     "créateur, et non la langue de la vidéo ou son lieu de tournage. "
+                     "Le filtre est appliqué dans la requête TikTok et revérifié "
+                     "sur les métadonnées avant l'export.")
+        st.checkbox(
+            "Conserver uniquement les publications avec un texte généré par IA par TikTok",
+            key="filtrer_texte_ia_tiktok", disabled=occupe,
+            help="Après la sélection des médias, profils et hashtags, seules les publications "
+                 "dont le résumé natif TikTok a été effectivement récupéré sont conservées. "
+                 "Une simple étiquette « contenu généré par IA » ne suffit pas. "
+                 "La lecture des pages peut nécessiter Selenium et ralentir la collecte.")
+        if st.session_state.get("filtrer_texte_ia_tiktok", False):
+            st.caption(
+                "Filtre actif : les publications sans résumé IA TikTok accessible sont "
+                "exclues du TXT, des CSV et des analyses. La lecture du résumé est "
+                "activée automatiquement. Ce critère ne peut pas être appliqué "
+                "directement à la recherche Research API ; il est vérifié après "
+                "la découverte des vidéos. Une absence de résumé récupéré ne prouve "
+                "pas que TikTok n'en a jamais produit.")
+        st.text_area(
+            "Hashtags à exclure (NOT) — facultatif",
+            key="hashtags_exclus_saisis",
+            placeholder="#publicite, #humour, #sponsorise",
+            help="Exclut toute vidéo portant au moins un hashtag indiqué. "
+                 "Research API : exclusion NOT directe. Autres moteurs : "
+                 "exclusion après lecture des hashtags réels. "
+                 "Jusqu'à dix hashtags séparés par une virgule, un espace "
+                 "ou un retour à la ligne. Les mots sans # dans la légende "
+                 "ne sont pas des critères d'exclusion.",
+            height=80, disabled=occupe,
+        )
+        try:
+            liste_hashtags_exclus = normaliser_liste_hashtags(
+                separer_saisie_hashtags(st.session_state.get("hashtags_exclus_saisis", "")))
+        except ValueError as erreur:
+            erreur_hashtags_exclus = str(erreur)
+            st.error(erreur_hashtags_exclus)
+        if moteur_formulaire == "research":
+            st.checkbox(
+                "Faire un test sur 10 publications",
+                key="test_research_10_publications", disabled=occupe,
+                help="Facultatif. Limite la lecture à dix publications conformes "
+                     "aux hashtags, toutes sources confondues. Le nombre brut "
+                     "de candidats renvoyés par l'API peut être supérieur. "
+                     "Les langues et les autres filtres peuvent encore exclure "
+                     "des textes. Les exports restent disponibles."
+            )
+            if st.session_state.get("test_research_10_publications", False):
+                st.caption(
+                    "Mode test : au maximum 10 publications conformes aux hashtags "
+                    "sont examinées. Les candidats API non conformes sont comptés "
+                    "séparément. Les résultats sont exportables ; la collecte "
+                    "complète ne démarre pas automatiquement."
+                )
+            else:
+                st.caption(
+                    "Research API : une séquence examine jusqu'à 1 000 candidats "
+                    "(100 par requête maximum), traite immédiatement les vidéos "
+                    "conformes et se termine en enregistrant les fichiers et "
+                    "la pagination. Vous pourrez ensuite poursuivre dans le même "
+                    "corpus, sans relancer les pages déjà traitées si le curseur "
+                    "TikTok reste valide."
+                    + (
+                        " Les publications publiques des comptes sélectionnés sont "
+                        "parcourues en priorité. Les hashtags saisis sont appliqués "
+                        "aux légendes après découverte. La couverture du profil "
+                        "peut être incomplète."
+                        if source == "comptes" else ""
+                    )
+                )
+        else:
+            st.number_input(
+                "Nombre TOTAL de posts à lire (tous hashtags confondus)"
+                if source == "hashtags" else "Nombre de posts TikTok à collecter par source",
+                min_value=1, max_value=max_posts_admin, step=1, key="limit", disabled=occupe,
+                help=(
+                    "Objectif maximal sur l'ensemble des hashtags saisis, en ET comme en OU. "
+                    "Le budget est partagé entre les hashtags, y compris leurs variantes. "
+                    "Les légendes, les langues et les dates sont filtrées après lecture."
+                    if source == "hashtags" else
+                    f"Borne technique du moteur : {max_posts_admin} posts par source. "
+                    "Il est vérifié aussi sur les requêtes API directes."
+                ),
+            )
+        if source == "presse":
+            nombre_medias = len(st.session_state.get("medias", []))
+            if nombre_medias and moteur_formulaire == "research":
+                st.caption(
+                    f"Research API : parcours automatique pour {nombre_medias} média(s), "
+                    "sans objectif numérique par média. Les quotas TikTok et la "
+                    "durée maximale du traitement restent applicables."
+                )
+            elif nombre_medias:
+                st.caption(
+                    f"Objectif demandé : {st.session_state.get('limit',50)} vidéos "
+                    f"PAR média, pour {nombre_medias} média(s) sélectionné(s) "
+                    f"(jusqu'à {st.session_state.get('limit',50)*nombre_medias} vidéos au total, "
+                    "si elles sont accessibles)."
+                )
+        if source == "comptes" and moteur_formulaire != "research":
+            st.caption("Les publications publiques des comptes sélectionnés sont parcourues en priorité. Les hashtags saisis sont appliqués aux légendes après découverte. La couverture du profil peut être incomplète.")
+        st.checkbox("Filtre français", key="french_only", disabled=occupe,
+            help="Écarte uniquement les légendes identifiées avec une forte confiance "
+                 "comme étant dans une autre langue. Les légendes françaises reconnues "
+                 "et les légendes de langue indéterminée (textes courts ou hashtags seuls) "
+                 "sont conservées dans le TXT, sans modifier leur contenu original. "
+                 "Le statut de langue reste présent dans les métadonnées. "
+                 "La voix et le texte incrusté dans la vidéo ne sont pas transcrits.")
+        if moteur_formulaire == "research":
+            st.checkbox(
+                "Collecte pluri-journalière (SQLite, reprise automatique)",
+                key="programmer_research", disabled=occupe,
+                help="Conserve les données dans une base SQLite indépendante "
+                     "des téléchargements et des sessions temporaires. "
+                     "Les collectes reprennent chaque jour jusqu'à la date de fin "
+                     "ou la fin du corpus."
+            )
+            if st.session_state.get("programmer_research", False):
+                st.info(
+                    "Pour la reprise automatique après fermeture du navigateur, "
+                    "configurez TIKTOK_RESEARCH_CLIENT_KEY et "
+                    "TIKTOK_RESEARCH_CLIENT_SECRET dans Coolify. "
+                    "Aucun identifiant sensible n'est sauvegardé dans SQLite."
+                )
+                d1, d2 = st.columns(2)
+                d1.date_input(
+                    "Début d'exécution de la collecte",
+                    key="research_execution_debut", value=date.today(),
+                    format="DD/MM/YYYY", disabled=occupe)
+                d2.date_input(
+                    "Fin d'exécution de la collecte",
+                    key="research_execution_fin",
+                    value=date.today() + timedelta(days=30),
+                    format="DD/MM/YYYY", disabled=occupe)
+                st.caption(
+                    "Les dates de publication sont définies dans « Période » ci-dessous. "
+                    "La date de fin d'exécution arrête le programme même si le "
+                    "corpus est incomplet. Une suspension ou un arrêt définitif "
+                    "reste possible depuis la liste des collectes programmées."
+                )
+        st.checkbox("Télécharger les vidéos (MP4)", key="telecharger_mp4", disabled=occupe,
+            help="Télécharge les vidéos accessibles des publications retenues dans l’archive ZIP. L'identifiant technique reste dans les CSV/JSON même si la case ID du TXT est décochée.")
+        st.subheader("Période")
+        with st.expander("Dates (facultatif)", expanded=bool(st.session_state["date_debut"] or st.session_state["date_fin"])):
+            d1,d2 = st.columns(2)
+            d1.date_input("Du", value=None, key="date_debut", format="DD/MM/YYYY", disabled=occupe)
+            d2.date_input("Au", value=None, key="date_fin", format="DD/MM/YYYY", disabled=occupe)
+            methode_dates = st.session_state.get(
+                {"presse": "presse_moteur", "comptes": "profil_moteur",
+                 "hashtags": "hashtag_moteur"}[source], "research")
+            st.caption("Jours inclus en UTC. Research API : 30 derniers jours par défaut, fenêtres successives de 30 jours pour une période plus longue." if methode_dates=="research" else "Jours inclus en UTC, parmi les publications consultées. Les dates inconnues sont écartées si une période est choisie.")
+            def effacer_dates():
+                st.session_state["date_debut"] = None; st.session_state["date_fin"] = None
+            st.button("Effacer la période", on_click=effacer_dates, disabled=occupe)
+        st.write("Variables des publications : destinations TXT et CSV")
+        st.caption(
+            "Sur chaque ligne, TXT ajoute la variable dans l'en-tête IRaMuTeQ "
+            "et CSV ajoute la colonne au tableau correspondant. Les deux cases "
+            "sont indépendantes et peuvent être cochées simultanément. "
+            "Les identifiants techniques nécessaires aux jointures sont conservés "
+            "dans les CSV, même si leur affichage descriptif est désactivé. "
+            "Les valeurs manquantes ne deviennent jamais des zéros.")
+        with st.container(key="bloc_variables_txt"):
+            st.html("""
+            <style>
+            /* Une ligne compacte par variable, sans blanc entre les cases. */
+            .st-key-bloc_variables_txt [data-testid="stVerticalBlock"],
+            .st-key-bloc_variables_txt [data-testid="stHorizontalBlock"] {
+                gap: 0 !important;
+                row-gap: 0 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stElementContainer"],
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"],
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"] label {
+                padding-block: 0 !important;
+                margin-block: 0 !important;
+                min-height: 0 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stCheckbox"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
+            }
+            .st-key-bloc_variables_txt [data-testid="stCaptionContainer"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
+            }
+            </style>
+            """)
+
+            def ligne_variable(libelle, cle_txt, cle_csv, *, aide=None,
+                               seulement_research=False):
+                """Placer l'intitulé et les deux cases sur une seule rangée."""
+                desactive = occupe or (
+                    seulement_research and moteur_formulaire != "research")
+                colonne_libelle, colonne_txt, colonne_csv = st.columns(
+                    [8, 1, 1], gap="small", vertical_alignment="center")
+                with colonne_libelle:
+                    # Les métadonnées IRaMuTeQ commencent par * et contiennent
+                    # des underscores : ne pas les interpréter comme Markdown.
+                    st.caption(libelle.replace("*", r"\*").replace("_", r"\_"))
+                with colonne_txt:
+                    st.checkbox(
+                        "TXT", key=cle_txt, disabled=desactive,
+                        help=aide or "Inclure cette variable dans le TXT IRaMuTeQ.")
+                with colonne_csv:
+                    st.checkbox(
+                        "CSV", key=cle_csv, disabled=desactive,
+                        help=aide or "Inclure cette variable dans les CSV de publications.")
+
+            ligne_variable("Date", "txt_date", "csv_date")
+            ligne_variable("Profil", "txt_profil", "csv_profil")
+            ligne_variable(
+                "Récupérer le nombre d'abonnés des auteurs (follower_count)",
+                "txt_collecter_follower_count", "csv_recuperer_abonnes",
+                seulement_research=True,
+                aide="L'une ou l'autre case demande le compteur officiel : "
+                     "TXT insère *follower_count_, CSV conserve follower_count. "
+                     "La sélection de la valeur réelle ou de la classe ci-dessous "
+                     "déclenche également la récupération si nécessaire.")
+            ligne_variable(
+                "Abonnés : valeur numérique réelle",
+                "follower_count_illustratif", "csv_follower_count",
+                seulement_research=True,
+                aide="Valeur exacte de follower_count. La récupérer n'ajoute "
+                     "pas une seconde fois la même variable dans le TXT.")
+            ligne_variable(
+                "Abonnés : classe",
+                "abonnes_classe_illustratif", "csv_abonnes_classe",
+                seulement_research=True,
+                aide="Codage : 0–999 ; 1 000–9 999 ; 10 000–99 999 ; "
+                     "100 000–999 999 ; ≥1 000 000.")
+            ligne_variable("ID vidéo", "txt_id", "csv_id")
+            if source == "comptes":
+                ligne_variable(
+                    "Ville associée au corpus (par exemple *ville_toulouse)",
+                    "txt_ville_etude", "csv_ville_etude",
+                    aide="Variable de sélection du corpus, non résidence "
+                         "du compte ou localisation vérifiée de la vidéo.")
+            ligne_variable(
+                "Catégorie du compte (inventaire des médias)",
+                "txt_categorie_compte", "csv_categorie_compte",
+                aide="Modalités TXT : *presse_nationale, *presse_regio_dpt, "
+                     "*presse_indep, *presse_autre. CSV : quatre colonnes "
+                     "indicatrices. La catégorie est ajoutée uniquement "
+                     "lorsque le compte appartient à l'inventaire.")
+            ligne_variable(
+                "Region Code (pays d'enregistrement du compte)",
+                "txt_region_code", "csv_region_code",
+                seulement_research=True,
+                aide="Le pays d'enregistrement ne précise pas la ville.")
+            ligne_variable(
+                "Is Verified (compte vérifié par TikTok)",
+                "txt_is_verified", "csv_is_verified",
+                seulement_research=True)
+            classes_numeriques = {
+                "vues": ("Vues", "0–999 ; 1k–9 999 ; 10k–99 999 ; 100k–999 999 ; ≥1M"),
+                "likes": ("Likes", "0 ; 1–9 ; 10–99 ; 100–999 ; 1 000–9 999 ; ≥10 000"),
+                "commentaires": ("Commentaires", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "partages": ("Partages", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "favoris": ("Favoris", "0 ; 1–9 ; 10–99 ; 100–999 ; ≥1k"),
+                "duree": ("Durée vidéo", "moins de 15 s ; 15–59 s ; 60–179 s ; ≥180 s"),
+            }
+            for nom, (libelle, intervalles) in classes_numeriques.items():
+                ligne_variable(
+                    libelle + " : valeur numérique réelle",
+                    "txt_" + nom, "csv_" + nom)
+                ligne_variable(
+                    libelle + " : classe",
+                    "txt_classe_" + nom, "csv_" + nom + "_classe",
+                    aide="Recodage catégoriel : " + intervalles + ". "
+                         "La classe est indépendante de la valeur numérique. "
+                         "Une donnée absente reste indéterminée.")
+            ligne_variable(
+                "Taux d'engagement : valeur numérique réelle",
+                "txt_taux_engagement_brut", "csv_taux_engagement",
+                aide="(Likes + commentaires + partages + favoris) / vues × 100.")
+            ligne_variable(
+                "Taux d'engagement : classe",
+                "txt_taux_engagement_classe", "csv_classe_taux_engagement",
+                aide="Codage : < 1 % ; 1–3 % ; 3–5 % ; 5–10 % ; ≥ 10 %.")
+            # La collecte des textes est une action distincte des compteurs.
+            st.checkbox(
+                "Collecter les textes des commentaires",
+                key="collecter_commentaires", disabled=occupe,
+                help="Récupère les commentaires dans commentaires.csv ; les "
+                     "options d'inclusion TXT restent dans l'expandeur suivant. "
+                     "L'API Research ne fournit pas l'identifiant unique "
+                     "du commentateur.")
+
+        st.caption(
+            "Métriques agrégées des comptes TikTok — Research API officielle. "
+            "Les cases TXT insèrent une métadonnée dans l'en-tête IRaMuTeQ "
+            "de chaque vidéo du compte. Les cases CSV alimentent le fichier "
+            "profils_medias.csv (une ligne par compte), distinct des métriques "
+            "par vidéo. Chaque destination est indépendante. Une requête "
+            "par profil peut consommer le quota Research.")
+        with st.container(key="bloc_metriques_profils"):
+            st.html("""
+            <style>
+            .st-key-bloc_metriques_profils [data-testid="stVerticalBlock"],
+            .st-key-bloc_metriques_profils [data-testid="stHorizontalBlock"] {
+                gap: 0 !important;
+                row-gap: 0 !important;
+            }
+            .st-key-bloc_metriques_profils [data-testid="stElementContainer"],
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"],
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"] label {
+                margin-block: 0 !important;
+                padding-block: 0 !important;
+                min-height: 0 !important;
+            }
+            .st-key-bloc_metriques_profils [data-testid="stCheckbox"] p,
+            .st-key-bloc_metriques_profils [data-testid="stCaptionContainer"] p {
+                margin-block: 0 !important;
+                line-height: 1.25 !important;
+            }
+            </style>
+            """)
+            for variable in VARIABLES_PROFILS_MEDIAS:
+                libelle, intervalles = LIBELLES_PROFILS_MEDIAS[variable]
+                cle = "profil_media_" + variable + "_"
+                nom_txt = NOMS_VARIABLES_PROFILS_TXT[variable]
+                ligne_variable(
+                    libelle + " : valeur numérique réelle",
+                    cle + "txt_brut", cle + "csv_brut",
+                    seulement_research=True,
+                    aide="Mesure agrégée du compte, non d'une vidéo. "
+                         "TXT : *" + nom_txt + "_valeur ; "
+                         "CSV : colonne " + variable + " dans profils_medias.csv. "
+                         "Une valeur absente reste indéterminée.")
+                ligne_variable(
+                    libelle + " : recoder en variable catégorielle",
+                    cle + "txt_classe", cle + "csv_classe",
+                    seulement_research=True,
+                    aide="Codage proposé : " + intervalles + ". "
+                         "TXT : *" + nom_txt + "classe_modalite ; "
+                         "CSV : classe_" + variable + " dans profils_medias.csv. "
+                         "La classe peut être sélectionnée sans la valeur brute. "
+                         "Les classes ne sont pas officielles TikTok.")
+
+        with st.expander("Options des commentaires", expanded=bool(
+                st.session_state.get("collecter_commentaires", False))):
+            def respecter_choix_commentaires():
+                if not st.session_state["collecter_commentaires"]:
+                    st.session_state["collecter_reponses"] = False
+                    st.session_state["inclure_commentaires_txt"] = False
+            st.checkbox(
+                "Inclure les textes des commentaires dans le fichier TXT",
+                key="inclure_commentaires_txt",
+                disabled=occupe or not st.session_state.get("collecter_commentaires", False),
+                help="Coché : commentaires ajoutés au TXT des publications et "
+                     "corpus TXT des commentaires accessible dans le ZIP. "
+                     "Décoché : commentaires exportés uniquement dans commentaires.csv ; "
+                     "les données de travail restent enregistrées pour l'historique "
+                     "et les analyses sociométriques.")
+            st.checkbox("Inclure les réponses accessibles", key="collecter_reponses",
+                disabled=occupe or not st.session_state.get("collecter_commentaires", False),
+                help="Collecter les réponses uniquement lorsque la collecte des "
+                     "textes des commentaires est activée.")
+            if moteur_formulaire != "research":
+                st.session_state.setdefault("limite_commentaires", min(50, max_commentaires_admin))
+                st.number_input("Commentaires maximum par publication", min_value=1,
+                    max_value=max_commentaires_admin, step=1,
+                    key="limite_commentaires", disabled=occupe,
+                    help="Borne technique contrôlée également côté serveur.")
+
+        st.checkbox(
+            "Supprimer le @ devant les profils dans le TXT",
+            key="export_profil_sans_arobase",
+            help="S'applique immédiatement à l'aperçu, au TXT et au ZIP "
+                 "sans relancer une collecte.")
+        st.checkbox(VARIABLES_TXT["hashtags"], key="csv_hashtags",
+            disabled=occupe,
+            help="Ajoute les hashtags réellement présents dans chaque publication "
+                 "à la colonne hashtags des exports CSV, sans le caractère #. "
+                 "Les valeurs sont séparées par des virgules. "
+                 "Décoché : la colonne reste vide dans les nouvelles collectes. "
+                 "Le texte des légendes et les fichiers TXT ne sont pas modifiés.")
+        st.checkbox(
+            "Inclure *theme_nomduhtag dans les fichiers TXT",
+            key="inclure_theme_hashtag_txt", disabled=occupe,
+            help="Décoché : supprimer uniquement la variable *theme_ des en-têtes "
+                 "des textes originaux et des résumés IA. Les variables *source_original, "
+                 "*source_ia, les autres métadonnées, les CSV et les contenus "
+                 "textuels restent inchangés.")
+        st.checkbox("Texte généré par IA", key="inclure_texte_genere_ia",
+            disabled=occupe,
+            help="Ajoute un second segment **** *source_ia uniquement si le résumé "
+                 "natif de TikTok est réellement récupéré. Les collecteurs existants "
+                 "et leurs modalités de lecture restent inchangés.")
+        mode_programme = (moteur_formulaire == "research"
+                          and st.session_state.get("programmer_research", False))
+        bilans_importes_pour_reprise = bool(
+            source == "hashtags" and moteur_formulaire == "research"
+            and st.session_state.get("bilan_reprise_hashtags_csv"))
+        if bilans_importes_pour_reprise:
+            st.warning(
+                "Des bilans CSV de hashtags sont importés : pour ne pas "
+                "recommencer la collecte à zéro, utilisez « Reprendre la "
+                "collecte d'origine à partir des bilans CSV » au-dessus. "
+                "Le bouton « Lancer la collecte » est désactivé jusqu'au "
+                "retrait des fichiers CSV."
+            )
+        if st.button(
+                "Programmer la collecte Research" if mode_programme else "Lancer la collecte",
+                type="primary",
+                                 disabled=occupe or api_tiktok_suspendue
+                                          or bilans_importes_pour_reprise
+                                          or (source == "presse" and moteur_formulaire != "research"
+                                              and len(st.session_state.get("medias", [])) > max_sources_admin),
+                                 on_click=respecter_choix_commentaires):
+            debut,fin = iso(st.session_state["date_debut"]),iso(st.session_state["date_fin"])
+            if not st.session_state.get("nom_sauvegarde", "").strip():
+                st.error("Renseignez le nom de la sauvegarde avant de lancer la collecte.")
+            elif source != "presse" and erreur_hashtags:
+                st.error("Corrigez la saisie des hashtags avant de lancer la collecte.")
+            elif erreur_hashtags_exclus:
+                st.error("Corrigez les hashtags à exclure avant de lancer la collecte.")
+            elif source != "presse" and not liste_hashtags:
+                st.error("Renseignez au moins un hashtag pour lancer la collecte.")
+            elif source == "presse" and not st.session_state.get("medias"):
+                st.error("Sélectionnez au moins un média.")
+            elif source == "presse" and erreur_hashtags_presse:
+                st.error("Corrigez les hashtags du croisement avant de lancer la collecte.")
+            elif (source == "presse" and st.session_state.get("croiser_hashtag_presse")
+                  and not liste_hashtags_presse):
+                st.error("Saisissez au moins un hashtag à croiser avec les médias.")
+            elif debut and fin and debut>fin: st.error("La date de début doit précéder ou égaler la date de fin.")
+            elif mode_programme and (not debut or not fin):
+                st.error("Définissez la période des publications avant de programmer la collecte.")
+            elif mode_programme and st.session_state.get("test_research_10_publications", False):
+                st.error("Décochez le test sur 10 publications pour programmer une collecte pluri-journalière.")
+            elif mode_programme and st.session_state.get("collecter_republications_research", False):
+                st.error("Décochez la collecte des republications : elle est réservée "
+                         "aux collectes Research ponctuelles, et n'est pas encore "
+                         "prise en charge par la programmation pluri-journalière.")
+            elif (mode_programme and source in {"presse", "hashtags"}
+                  and any(st.session_state.get(
+                      "profil_media_" + nom + "_" + destination + "_" + type_, False)
+                      for nom in VARIABLES_PROFILS_MEDIAS
+                      for destination in ("txt", "csv")
+                      for type_ in ("brut", "classe"))):
+                st.error("Les métriques des comptes médias sont disponibles dans "
+                         "les collectes Research ponctuelles ; décochez-les pour "
+                         "programmer une collecte pluri-journalière.")
+            elif mode_programme and (st.session_state.get("telecharger_mp4")
+                                    or st.session_state.get("inclure_texte_genere_ia")
+                                    or st.session_state.get("filtrer_texte_ia_tiktok")):
+                st.error("Le mode pluri-journalier Research ne télécharge pas les MP4 "
+                         "et n'utilise pas Selenium pour les textes IA.")
+            elif (mode_programme
+                  and st.session_state["research_execution_fin"]
+                      < st.session_state["research_execution_debut"]):
+                st.error("La date de fin d'exécution doit suivre la date de début.")
+            else:
+                valeurs = {k:st.session_state[k] for k in ("limit","french_only","include_sources","collecter_commentaires","collecter_reponses","telecharger_mp4","inclure_texte_genere_ia","filtrer_texte_ia_tiktok")}
+                # Aucun plafond local pour une collecte Research complète ;
+                # null est transmis et conservé dans les paramètres PostgreSQL.
+                if moteur_formulaire == "research":
+                    valeurs["limit"] = (
+                        10 if st.session_state.get("test_research_10_publications")
+                        else None)
+                valeurs["inclure_theme_hashtag_txt"] = bool(
+                    st.session_state.get("inclure_theme_hashtag_txt", True))
+                valeurs["inclure_commentaires_txt"] = bool(
+                    valeurs["collecter_commentaires"]
+                    and st.session_state.get("inclure_commentaires_txt", False))
+                if valeurs["filtrer_texte_ia_tiktok"]:
+                    valeurs["inclure_texte_genere_ia"] = True
+                # Ne plus déclencher de sauvegarde ZIP progressive pour les nouveaux jobs.
+                valeurs["sauvegarde_progressive"] = False
+                if moteur_formulaire != "research":
+                    valeurs["limite_commentaires"] = st.session_state.get("limite_commentaires", 50)
+                valeurs["nom_sauvegarde"] = st.session_state["nom_sauvegarde"].strip()
+                valeurs["collecte_research_complete"] = moteur_formulaire == "research"
+                valeurs["test_research_10_publications"] = bool(
+                    moteur_formulaire == "research"
+                    and st.session_state.get("test_research_10_publications", False))
+                valeurs["supprimer_arobase_profil"] = st.session_state.get("export_profil_sans_arobase", True)
+                valeurs["operator"] = (
+                    "AND" if (source == "presse" or
+                              (source == "hashtags" and
+                               st.session_state.get("utiliser_groupes_hashtags")))
+                    else st.session_state.get("operator_comptes", "OR")
+                    if source == "comptes"
+                    else st.session_state.get("operator", "OR"))
+                valeurs["groupes_hashtags"] = (groupes_hashtags if source == "hashtags"
+                    and st.session_state.get("utiliser_groupes_hashtags") else [])
+                valeurs["hashtags_exclus"] = liste_hashtags_exclus
+                # Les sorties TXT et CSV demandent la récupération du
+                # compteur si l'une des cases de la famille abonnés est cochée.
+                choix_abonnes = (
+                    "txt_collecter_follower_count", "csv_recuperer_abonnes",
+                    "follower_count_illustratif", "csv_follower_count",
+                    "abonnes_classe_illustratif", "csv_abonnes_classe")
+                valeurs["collecter_follower_count"] = bool(
+                    moteur_formulaire == "research"
+                    and any(st.session_state.get(nom, False)
+                            for nom in choix_abonnes))
+                valeurs["collecter_is_verified"] = bool(
+                    moteur_formulaire == "research" and (
+                        st.session_state.get("txt_is_verified", False)
+                        or st.session_state.get("csv_is_verified", False)))
+                valeurs["follower_count_illustratif"] = bool(
+                    valeurs["collecter_follower_count"] and (
+                        st.session_state.get("follower_count_illustratif", False)
+                        or st.session_state.get("txt_collecter_follower_count", False)))
+                valeurs["abonnes_classe_illustratif"] = bool(
+                    valeurs["collecter_follower_count"]
+                    and st.session_state.get("abonnes_classe_illustratif", False))
+                valeurs["categorie_compte_txt"] = bool(
+                    st.session_state.get("txt_categorie_compte", True))
+                valeurs["ville_etude_txt"] = bool(
+                    source == "comptes"
+                    and st.session_state.get("txt_ville_etude", True))
+                valeurs["variables_csv"] = [
+                    nom for nom in VARIABLES_CSV
+                    if (source == "comptes" or nom != "ville_etude")
+                    and st.session_state.get("csv_" + nom, True)
+                ]
+                # Chaque case CSV est indépendante. La sélection de la
+                # récupération déclenche l'appel Research sans forcer la
+                # colonne de valeur réelle si sa propre case est décochée.
+                valeurs["variables_classes_txt"] = [
+                    nom for nom in ("vues", "likes", "commentaires", "partages",
+                                    "favoris", "duree")
+                    if st.session_state.get("txt_classe_" + nom, False)
+                ]
+                valeurs["taux_engagement_txt"] = (
+                    "brut_et_classes" if (st.session_state.get("txt_taux_engagement_brut")
+                                         and st.session_state.get("txt_taux_engagement_classe"))
+                    else "classes" if st.session_state.get("txt_taux_engagement_classe")
+                    else "brut" if st.session_state.get("txt_taux_engagement_brut")
+                    else "aucun")
+                valeurs["presse_moteur"] = st.session_state.get("presse_moteur", "research")
+                valeurs["hashtag_moteur"] = st.session_state.get("hashtag_moteur", "research")
+                valeurs["profil_moteur"] = st.session_state.get("profil_moteur", "research")
+                moteur_selectionne = valeurs[{
+                    "presse": "presse_moteur", "hashtags": "hashtag_moteur",
+                    "comptes": "profil_moteur"}[source]]
+                valeurs["croiser_hashtag_presse"] = (
+                    bool(st.session_state.get("croiser_hashtag_presse", False)) if source == "presse" else False)
+                valeurs["hashtags_presse"] = (
+                    liste_hashtags_presse if valeurs["croiser_hashtag_presse"] else [])
+                valeurs["hashtag_presse"] = (
+                    valeurs["hashtags_presse"][0] if valeurs["hashtags_presse"] else "")
+                valeurs["operator_presse"] = st.session_state.get("operator_presse", "OR")
+                valeurs["collecter_republications_research"] = bool(
+                    source == "presse" and moteur_selectionne == "research"
+                    and st.session_state.get("collecter_republications_research", False))
+                valeurs["maximum_republications_par_compte"] = int(
+                    st.session_state.get("maximum_republications_par_compte", 100))
+                # Distinguer les champs à récupérer des deux destinations.
+                # Un choix « classe seule » déclenche la même lecture Research,
+                # mais n'impose pas la colonne brute dans le CSV.
+                for destination, suffixe in (
+                        ("txt", "brut"), ("txt", "classe"),
+                        ("csv", "brut"), ("csv", "classe")):
+                    valeurs["profils_medias_" + destination + "_" +
+                            ("bruts" if suffixe == "brut" else "classes")] = [
+                        nom for nom in VARIABLES_PROFILS_MEDIAS
+                        if moteur_selectionne == "research"
+                        and st.session_state.get(
+                            "profil_media_" + nom + "_" +
+                            destination + "_" + suffixe, False)
+                    ]
+                valeurs["profils_medias_variables"] = [
+                    nom for nom in VARIABLES_PROFILS_MEDIAS
+                    if any(nom in valeurs["profils_medias_" + destination + "_" + suffixe]
+                           for destination in ("txt", "csv")
+                           for suffixe in ("bruts", "classes"))
+                ]
+                valeurs["profils_medias_classes"] = [
+                    nom for nom in VARIABLES_PROFILS_MEDIAS
+                    if (nom in valeurs["profils_medias_txt_classes"]
+                        or nom in valeurs["profils_medias_csv_classes"])
+                ]
+                if source == "presse" and valeurs["presse_moteur"] == "navigateur":
+                    fichier_cookies = st.session_state.get("cookies_presse_fichier")
+                    if fichier_cookies is not None:
+                        try:
+                            if fichier_cookies.size > 1_048_576:
+                                raise ValueError()
+                            contenu_cookies = fichier_cookies.getvalue().decode("utf-8-sig")
+                            from collecte.cookies_presse import charger_cookies_presse
+                            charger_cookies_presse(contenu_cookies)
+                            valeurs["cookies_tiktok"] = contenu_cookies
+                        except (ValueError, RuntimeError):
+                            st.error("Importez un fichier Netscape valide de moins de 1 Mo contenant des cookies TikTok non expirés.")
+                            st.stop()
+                if moteur_selectionne == "research":
+                    valeurs["research_client_key"] = st.session_state.get("research_client_key", "")
+                    valeurs["research_client_secret"] = st.session_state.get("research_client_secret", "")
+                if moteur_selectionne == "tikhub":
+                    valeurs["tikhub_api_key"] = st.session_state.get("tikhub_api_key", "")
+                if source == "presse" and valeurs["presse_moteur"] == "apify":
+                    valeurs["apify_api_token"] = st.session_state.get("apify_api_token", "")
+                valeurs["rechercher_dans_texte"] = (
+                    bool(st.session_state.get("rechercher_dans_texte", False))
+                    if source != "presse" else False
+                )
+                valeurs["region_fr_research"] = bool(
+                    source == "hashtags" and moteur_selectionne == "research"
+                    and st.session_state.get("region_fr_research", False))
+                valeurs["variantes_accents"] = (
+                    bool(st.session_state.get("variantes_accents", False)) if source == "hashtags" else False
+                )
+                # Toujours préparer l'archive, même si une ancienne session l'avait désactivée.
+                valeurs["enrichir"] = True
+                valeurs["variables_txt"] = [
+                    v for v in VARIABLES_TXT
+                    if v != "hashtags" and st.session_state["txt_" + v]
+                    and (moteur_selectionne == "research"
+                         or v not in ("region_code", "is_verified"))
+                ]
+                valeurs["inclure_hashtags_csv"] = bool(
+                    st.session_state.get("csv_hashtags", False))
+                valeurs["ville_etude"] = (
+                    st.session_state.get("ville_etude", "").strip()
+                    if source == "comptes" else "")
+                valeurs.update(
+                    hashtag=liste_hashtags[0] if liste_hashtags else "",
+                    second_hashtag=liste_hashtags[1] if len(liste_hashtags) > 1 else "",
+                    hashtags_saisis=liste_hashtags if source != "presse" else [],
+                    source_collecte=source, date_debut=debut, date_fin=fin,
+                    comptes=re.split(r"[\s,;]+",st.session_state.get("comptes", "").strip()) if source == "comptes" and st.session_state.get("comptes", "").strip() else [],
+                    medias=st.session_state.get("medias",[]) if source == "presse" else [])
+                if mode_programme:
+                    try:
+                        plan = api("/api/research/plans", {
+                            "parametres": valeurs,
+                            "debut_execution": st.session_state["research_execution_debut"].isoformat(),
+                            "fin_execution": st.session_state["research_execution_fin"].isoformat(),
+                        })
+                    except RuntimeError as erreur:
+                        st.error(str(erreur))
+                    else:
+                        st.session_state["recherche_plans_afficher"] = True
+                        st.session_state["recherche_plan_cree"] = plan.get("id")
+                        st.rerun()
+                else:
+                    lancer("/api/jobs",valeurs)
+
+with onglet_collecte:
+    if not collecte and cookie_historique:
+        # La perte de la session Streamlit ne doit pas rendre les
+        # publications PostgreSQL impossibles à télécharger.
+        try:
+            sauvegardes_recuperables = (
+                api("/api/base-donnees").get("sauvegardes") or []
+            )
+        except RuntimeError as erreur:
+            st.warning("Récupération PostgreSQL indisponible : " + str(erreur))
+        else:
+            collectes_recuperables = [
+                ligne for ligne in sauvegardes_recuperables
+                if ligne.get("type") == "collecte"
+                and int(ligne.get("publications") or 0) > 0
+            ]
+            if collectes_recuperables:
+                derniere_pg = collectes_recuperables[0]
+                st.info(
+                    "Une collecte est enregistrée dans PostgreSQL, "
+                    "même si la session Streamlit ne l'affiche plus."
+                )
+                st.caption(
+                    f"Dernière collecte : {derniere_pg['nom']} — "
+                    f"{derniere_pg['publications']} publication(s) conservée(s)."
+                )
+                st.link_button(
+                    "Récupérer la dernière collecte (ZIP PostgreSQL)",
+                    f"/api/base-donnees/collecte/{derniere_pg['id']}/archive.zip",
+                    use_container_width=True,
+                )
+    if st.session_state.get("recherche_plan_cree"):
+        st.success("Collecte Research programmée : données enregistrées dans SQLite.")
+        st.session_state.pop("recherche_plan_cree", None)
+    if st.checkbox("Gérer mes collectes Research programmées",
+                   key="recherche_plans_afficher"):
+        @st.fragment(run_every="20s")
+        def afficher_plans_research():
+            try:
+                donnees = api("/api/research/plans")
+            except RuntimeError as erreur:
+                st.warning(str(erreur))
+                return
+            plans = donnees.get("plans") or []
+            quota = donnees.get("quota") or {}
+            st.caption(
+                f"Budget Research local (UTC) : {quota.get('appels_enregistres', 0)} / "
+                f"{quota.get('plafond_local', 1000)} requêtes aujourd'hui. "
+                "Le quota officiel restant de l'organisation ne peut pas "
+                "être garanti à partir de ce compteur."
+            )
+            if not plans:
+                st.info("Aucune collecte Research programmée.")
+            for plan in plans:
+                identifiant = plan["id"]
+                with st.expander(
+                        f"{plan.get('nom_sauvegarde') or 'Collecte sans nom'} · "
+                        f"{plan['statut']} · {plan['publications']} publications",
+                        expanded=False):
+                    st.write(
+                        f"Corpus : {plan['debut_corpus']} au {plan['fin_corpus']} · "
+                        f"Exécution : {plan['debut_execution']} au "
+                        f"{plan['fin_execution']} · "
+                        f"lots terminés : {plan['lots_termines']}/{plan['lots_totaux']} · "
+                        f"commentaires : {plan['commentaires']}"
+                    )
+                    if plan.get("message"):
+                        st.caption(plan["message"])
+                    st.caption(
+                        "Corpus et calendrier conservés dans SQLite. "
+                        "Pour télécharger ou copier les résultats dans PostgreSQL, "
+                        "ouvrez l'onglet « Base de données »."
+                    )
+                    commandes = (
+                        ["suspendre", "arreter"]
+                        if plan["statut"] in {"programme", "en_cours"}
+                        else ["reprendre", "arreter"] if plan["statut"] == "suspendu"
+                        else []
+                    )
+                    for action in commandes:
+                        if st.button(
+                                {"suspendre": "Suspendre", "reprendre": "Reprendre",
+                                 "arreter": "Arrêter définitivement"}[action],
+                                key=f"plan_{action}_{identifiant}"):
+                            try:
+                                api(f"/api/research/plans/{identifiant}/{action}", {})
+                            except RuntimeError as erreur:
+                                st.error(str(erreur))
+                            else:
+                                st.rerun()
+
+        afficher_plans_research()
+    if collecte:
+        st.divider()
+        st.subheader("Résultats")
+        @st.fragment(run_every="1s")
+        def afficher_resultats():
+            precedent = st.session_state["collecte"]
+            try: actuel = api("/api/jobs/" + precedent["id"])
+            except RuntimeError as erreur:
+                st.warning(str(erreur)); return
+            st.session_state["collecte"] = actuel
+            if actuel.get("busy"):
+                if (actuel.get("debug_collecte") or {}).get("arret_demande"):
+                    st.warning("Arrêt demandé : le moteur termine l'opération en cours et sauvegarde les résultats déjà obtenus.")
+                elif st.button("Arrêter la collecte", type="primary",
+                               key="interrompre_collecte_active", use_container_width=True):
+                    lancer(f"/api/jobs/{actuel['id']}/stop", {})
+            elif "TikTok HTTP 429" in actuel.get("message", ""):
+                st.info("Collecte terminée après HTTP 429 : aucun nouvel appel TikTok n'est lancé par ce traitement.")
+            if (not actuel.get("busy")
+                    and actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("test_research_10_publications")
+                    and actuel.get("status") in {"completed", "partial", "stopped", "failed"}):
+                hashtags_inacheves = hashtags_a_reprendre(
+                    actuel.get("bilan_hashtags_sources") or [])
+                if hashtags_inacheves:
+                    st.caption(
+                        "Cette ancienne collecte est inachevée ; le ZIP reste "
+                        "téléchargeable et la reprise conserve le corpus PostgreSQL. "
+                        "Les nouvelles collectes enchaînent automatiquement les séquences.")
+                    st.caption(
+                        "Renseignez les deux identifiants seulement s'ils ne sont "
+                        "plus présents dans cette session et si Coolify ne les fournit pas.")
+                    with st.expander(
+                            "Identifiants Research pour poursuivre la collecte",
+                            expanded=False):
+                        st.text_input(
+                            "Client key (reprise)", type="password",
+                            key="cle_research_sequence",
+                            help="Facultatif si la clé est déjà configurée "
+                                 "sur le serveur.")
+                        st.text_input(
+                            "Client secret (reprise)", type="password",
+                            key="secret_research_sequence",
+                            help="Facultatif si le secret est déjà configuré "
+                                 "sur le serveur.")
+                    if st.button(
+                            "Poursuivre la collecte",
+                            type="primary", use_container_width=True,
+                            key="poursuivre_sequence_" + actuel["id"]):
+                        choix_hashtags = st.session_state.get(
+                            "reprendre_hashtags_selection_" + actuel["id"])
+                        options_suite = {"hashtags": (
+                            choix_hashtags if choix_hashtags is not None
+                            else hashtags_inacheves)}
+                        cle_suite = (
+                            st.session_state.get("cle_research_sequence")
+                            or st.session_state.get("research_client_key")
+                            or "").strip()
+                        secret_suite = (
+                            st.session_state.get("secret_research_sequence")
+                            or st.session_state.get("research_client_secret")
+                            or "").strip()
+                        if cle_suite:
+                            options_suite["research_client_key"] = cle_suite
+                        if secret_suite:
+                            options_suite["research_client_secret"] = secret_suite
+                        erreur_reprise = None
+                        if not cookie_historique:
+                            erreur_reprise = (
+                                "Historique privé indisponible : rechargez "
+                                "la page d'accueil avant de poursuivre.")
+                        elif bool(cle_suite) != bool(secret_suite):
+                            erreur_reprise = (
+                                "Renseignez Client key ET Client secret, "
+                                "ou laissez les deux champs vides si les "
+                                "identifiants sont configurés dans Coolify.")
+                        else:
+                            try:
+                                reprise = api(
+                                    "/api/historique/" + actuel["id"]
+                                    + "/reprendre-hashtags", options_suite)
+                            except RuntimeError as erreur:
+                                erreur_reprise = str(erreur)
+                            else:
+                                st.session_state.pop("erreur_reprise_hashtags", None)
+                                st.session_state["collecte"] = reprise
+                                actuel = reprise
+                                # Ce fragment se rafraîchit tout seul : ne pas
+                                # recharger toute la page, ce qui provoquait
+                                # un écran blanc lors de la poursuite.
+                                st.info("Poursuite lancée dans le même corpus. "
+                                        "La progression s'actualise automatiquement.")
+                        if erreur_reprise:
+                            # Le fragment se réactualise toutes les secondes :
+                            # conserver le diagnostic jusqu'à la prochaine tentative.
+                            st.session_state["erreur_reprise_hashtags"] = {
+                                "collecte_id": actuel["id"],
+                                "message": erreur_reprise,
+                            }
+                    diagnostic_reprise = st.session_state.get("erreur_reprise_hashtags")
+                    if (isinstance(diagnostic_reprise, dict)
+                            and diagnostic_reprise.get("collecte_id") == actuel["id"]):
+                        st.error("Poursuite impossible : " + diagnostic_reprise["message"])
+            if (not actuel.get("busy")
+                    and actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("test_research_10_publications")
+                    and actuel.get("status") in {"completed", "partial", "stopped", "failed"}):
+                with st.expander(
+                        "Reprendre la collecte d'origine à partir de bilans hashtags CSV",
+                        expanded=False):
+                    st.caption(
+                        "Importez plusieurs bilans d'une même collecte, y compris les "
+                        "anciens fichiers à cinq colonnes. Si les bilans attestent "
+                        "une interruption mais ne possèdent aucun curseur, la "
+                        "recherche réexplore les pages de la période d'origine. "
+                        "Les publications déjà enregistrées sont dédupliquées "
+                        "dans le même corpus PostgreSQL.")
+                    fichiers_bilans = st.file_uploader(
+                        "Bilans hashtags CSV de cette collecte",
+                        type=["csv"], accept_multiple_files=True,
+                        key="bilans_reprise_historique_" + actuel["id"])
+                    cle_bilans = st.text_input(
+                        "Client key Research (reprise CSV)", type="password",
+                        key="cle_bilans_" + actuel["id"])
+                    secret_bilans = st.text_input(
+                        "Client secret Research (reprise CSV)", type="password",
+                        key="secret_bilans_" + actuel["id"])
+                    if st.button(
+                            "Reprendre dans le corpus PostgreSQL d'origine",
+                            key="reprendre_bilans_" + actuel["id"],
+                            type="primary", disabled=not fichiers_bilans):
+                        import base64
+                        cle = (cle_bilans or st.session_state.get(
+                            "research_client_key") or "").strip()
+                        secret = (secret_bilans or st.session_state.get(
+                            "research_client_secret") or "").strip()
+                        try:
+                            if not cookie_historique:
+                                raise ValueError("Historique privé absent.")
+                            if bool(cle) != bool(secret):
+                                raise ValueError(
+                                    "Renseignez les deux identifiants Research ensemble.")
+                            contenus = [fichier.getvalue() for fichier in fichiers_bilans]
+                            if len(contenus) > 20 or sum(map(len, contenus)) > 10_000_000:
+                                raise ValueError("20 fichiers et 10 Mo au maximum.")
+                            donnees = {
+                                "hashtags": [],
+                                "bilans_base64": [
+                                    base64.b64encode(contenu).decode("ascii")
+                                    for contenu in contenus],
+                            }
+                            if cle:
+                                donnees["research_client_key"] = cle
+                                donnees["research_client_secret"] = secret
+                            reprise = api(
+                                "/api/historique/" + actuel["id"]
+                                + "/reprendre-hashtags", donnees)
+                        except (ValueError, RuntimeError) as erreur:
+                            st.error("Reprise CSV impossible : " + str(erreur))
+                        else:
+                            st.session_state["collecte"] = reprise
+                            actuel = reprise
+                            st.success(
+                                "Reprise lancée dans la collecte PostgreSQL d'origine.")
+            # Distinguer la fin d'une séquence de la fin du corpus entier.
+            # Les archives restent téléchargeables quel que soit le statut final.
+            if (not actuel.get("busy") and not actuel.get("video_busy")
+                    and actuel.get("status") in ("completed", "partial", "stopped")):
+                hashtags_non_termines = (
+                    actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"
+                    and bool(hashtags_a_reprendre(
+                        actuel.get("bilan_hashtags_sources") or [])))
+                if actuel["status"] == "partial" or hashtags_non_termines:
+                    st.info(
+                        "La collecte de hashtags n'est pas entièrement terminée. "
+                        "Les résultats sont conservés et téléchargeables. "
+                        "La poursuite reprend les hashtags inachevés "
+                        "sans importer de fichier CSV.")
+                elif actuel["status"] == "stopped":
+                    st.warning(
+                        "Collecte interrompue : les résultats déjà obtenus "
+                        "restent téléchargeables.")
+                else:
+                    st.success(
+                        "Collecte terminée : les résultats restent affichés "
+                        "et les fichiers peuvent être téléchargés ci-dessous.")
+            if actuel.get("source_collecte") == "presse":
+                if actuel.get("croiser_hashtag_presse"):
+                    st.caption(
+                        "Croisement appliqué : médias sélectionnés ET ("
+                        + (" OU " if actuel.get("operator_presse", "AND") == "OR"
+                           else " ET ").join(
+                            "#" + h for h in (
+                                actuel.get("hashtags_presse")
+                                or [actuel.get("hashtag_presse", "")]))
+                        + "). Les hashtags doivent figurer dans les publications "
+                        "retenues ; ils ne garantissent pas leur pertinence thématique."
+                    )
+                else:
+                    st.caption(
+                        "Aucun filtre de hashtag n'est activé pour cette collecte "
+                        "par médias : leurs vidéos peuvent porter sur n'importe "
+                        "quel sujet. Activez « Croisement avec des hashtags » "
+                        "pour restreindre la recherche."
+                    )
+            if actuel.get("comptes_filtres"):
+                # Afficher littéralement les identifiants : les caractères _ et *
+                # ne doivent jamais déclencher une mise en forme Markdown.
+                st.text("Filtre des profils : " + ", ".join(
+                    "@" + compte for compte in actuel["comptes_filtres"]))
+                if actuel.get("source_collecte") != "presse":
+                    st.caption("Les hashtags sont vérifiés dans les légendes ; les autres auteurs sont exclus.")
+            if actuel.get("sauvegarde_progressive") and actuel.get("erreur_sauvegarde"):
+                st.warning(actuel["erreur_sauvegarde"])
+            if actuel.get("sauvegarde_progressive"):
+                point=actuel.get("dernier_point_sauvegarde") or {}
+                if point:
+                    st.caption(f"Sauvegarde progressive : {point.get('traitees',0)} publication(s) traitée(s) sauvegardée(s) · {point.get('sauvegarde_le','')}.")
+                else:
+                    st.caption("Sauvegarde progressive activée : premier point après 10 publications traitées.")
+            if actuel.get("collecter_republications_research"):
+                st.caption(
+                    f"Republications Research : {actuel.get('nombre_republications', 0)} "
+                    "relation(s) compte–vidéo collectée(s) séparément ; "
+                    "consultez republications.csv dans le ZIP. "
+                    "L'absence dans l'API ne signifie pas non-republication.")
+                with st.expander("Diagnostic des republications par média"):
+                    st.json(actuel.get("bilan_republications") or {})
+            if actuel.get("reprise"):
+                st.caption(
+                    "Reprise de la collecte d'origine : "
+                    f"{actuel.get('publications_avant_reprise', 0)} "
+                    "publication(s) déjà enregistrée(s), "
+                    f"{actuel.get('publications_ajoutees', 0)} "
+                    "nouvelle(s) publication(s). "
+                    "Même identifiant de collecte et même corpus PostgreSQL."
+                )
+            if actuel.get("source_collecte") == "presse":
+                bilan_medias = actuel.get("bilan_medias") or []
+                if bilan_medias:
+                    comptes_etats = {etat: sum(ligne["etat"] == etat for ligne in bilan_medias)
+                                     for etat in ("traitee", "partielle", "interrompue",
+                                                 "echec", "non_commencee", "en_cours", "en_attente")}
+                    st.write(
+                        "Suivi des sources médias : "
+                        f"{comptes_etats['traitee']} recherches terminées, "
+                        f"{comptes_etats['partielle']} partielles, "
+                        f"{comptes_etats['interrompue']} interrompues, "
+                        f"{comptes_etats['echec']} en erreur, "
+                        f"{comptes_etats['non_commencee']} non commencées."
+                    )
+                    a_reprendre = [
+                        ligne for ligne in bilan_medias
+                        if ligne["etat"] in ("partielle", "interrompue",
+                                             "echec", "non_commencee")
+                    ]
+                    if a_reprendre:
+                        with st.expander(
+                            f"Médias à reprendre : {len(a_reprendre)}",
+                            expanded=not actuel.get("busy", True),
+                        ):
+                            st.dataframe([
+                                {"Média": ligne["nom"], "Compte": "@" + ligne["compte"],
+                                 "État": ligne["etat"].replace("_", " "),
+                                 "Liens": ligne["liens"], "Diagnostic": ligne["motif"]}
+                                for ligne in a_reprendre
+                            ], hide_index=True, use_container_width=True)
+                    if not actuel.get("busy"):
+                        st.download_button(
+                            "Télécharger le bilan des médias (CSV réimportable)",
+                            data=exporter_bilan_medias_csv(bilan_medias),
+                            file_name="bilan_medias_" + re.sub(
+                                r"[^a-zA-Z0-9_-]+", "_",
+                                actuel.get("nom_sauvegarde") or actuel.get("id") or "collecte"
+                            )[:60] + ".csv",
+                            mime="text/csv", key="telecharger_bilan_medias",
+                        )
+                        st.caption(
+                            "Conservez ce CSV pour demain. Importez-le au-dessus de "
+                            "la liste des médias, puis cochez uniquement les sources "
+                            "à reprendre. Une recherche terminée signifie que le "
+                            "moteur a fini son parcours, sans garantie d'exhaustivité TikTok."
+                        )
+                selection_moteur = actuel.get("medias", [])
+                with st.expander(f"Médias pris en compte par la collecte : {len(selection_moteur)}"):
+                    for identifiant in selection_moteur:
+                        media = medias.get(identifiant)
+                        # Même précaution pour les noms de médias avec un tiret bas.
+                        st.text(f"{media['nom']} (@{media['compte']})" if media else identifiant)
+            if actuel.get("source_collecte") == "hashtags":
+                bilan_sources = actuel.get("bilan_hashtags_sources") or []
+                if bilan_sources:
+                    a_reprendre = hashtags_a_reprendre(bilan_sources)
+                    st.write(
+                        f"Suivi des hashtags : {len(bilan_sources)} hashtag(s) "
+                        f"demandé(s), {len(a_reprendre)} restant à reprendre."
+                    )
+                    if actuel.get("reprise"):
+                        # Les lignes « liens » du bilan reflètent la dernière
+                        # séquence, et non la totalité des publications déjà
+                        # archivées dans les collectes précédentes.
+                        anciennes = int(actuel.get("publications_avant_reprise") or 0)
+                        ajoutees = int(actuel.get("publications_ajoutees") or 0)
+                        st.caption(
+                            f"Corpus cumulé : {anciennes} publication(s) "
+                            f"avant la reprise, {ajoutees} ajoutée(s) pendant "
+                            f"cette reprise, {anciennes + ajoutees} au total. "
+                            "Le nombre de liens du bilan concerne uniquement "
+                            "la dernière exécution du hashtag."
+                        )
+                    if a_reprendre:
+                        with st.expander(
+                                f"Hashtags à reprendre : {len(a_reprendre)}",
+                                expanded=not actuel.get("busy", True)):
+                            st.dataframe([
+                                {
+                                    "Hashtag": "#" + ligne["hashtag"],
+                                    "État": ligne["etat"].replace("_", " "),
+                                    ("Liens dernière exécution"
+                                     if actuel.get("reprise") else "Liens"): ligne["liens"],
+                                    "Pages Research": ligne.get("pages_research", 0),
+                                    "Requêtes Research": ligne.get("requetes_tentees", 0),
+                                    "Arrêt Research": ligne.get("arret_research", ""),
+                                    "Cursor": ligne.get("cursor", ""),
+                                    "Diagnostic": ligne["motif"],
+                                }
+                                for ligne in bilan_sources
+                            ], hide_index=True, use_container_width=True)
+                    if not actuel.get("busy"):
+                        # Générer les octets dans Streamlit à partir du bilan
+                        # actuel : un lien HTTP ou une ancienne archive ZIP
+                        # peut encore fournir l'ancien format à cinq colonnes.
+                        # Le nom du fichier reste compatible avec les imports.
+                        from collecte.suivi_hashtags import COLONNES_PAGINATION
+                        contenu_bilan = exporter_bilan_hashtags_csv(bilan_sources)
+                        entete_bilan = contenu_bilan.decode(
+                            "utf-8-sig").splitlines()[0].split(";")
+                        if not set(COLONNES_PAGINATION).issubset(entete_bilan):
+                            st.error(
+                                "L'application utilise encore un ancien "
+                                "exporteur de bilan à cinq colonnes. "
+                                "Redéployez deploy-scraptiktok dans Coolify.")
+                        else:
+                            st.download_button(
+                                "Télécharger le bilan des hashtags (CSV réimportable)",
+                                data=contenu_bilan,
+                                file_name=(
+                                    re.sub(
+                                        r"[^\w-]+", "_",
+                                        str(actuel.get("nom_sauvegarde")
+                                            or "collecte_hashtags"),
+                                        flags=re.UNICODE
+                                    ).strip("_")[:80]
+                                    + "_bilan_hashtags.csv"
+                                ),
+                                mime="text/csv",
+                                use_container_width=True,
+                                key="telecharger_bilan_hashtags_" + actuel["id"],
+                                help="Contient cursor, search_id, indice_periode, "
+                                     "debut_periode, fin_periode, date_debut, "
+                                     "date_fin et positions_research_json.",
+                            )
+                        st.caption(
+                            "Le nombre de liens découverts n'est pas le "
+                            "nombre de publications effectivement traitées. "
+                            "Un curseur vide signifie que la source est "
+                            "terminée ou que l'ancien journal ne contenait "
+                            "aucune position exploitable."
+                        )
+            if actuel.get("status") == "attention" and actuel.get("type_intervention") == "connexion":
+                st.info("Une invitation à se connecter est visible. Si un CAPTCHA apparaît, résolvez-le dans la fenêtre ci-dessous. Sinon, fermez l’invitation si possible, puis cliquez sur Continuer. Les publications déjà obtenues sont conservées.")
+            elif actuel.get("status") == "attention" and actuel.get("type_intervention") == "captcha":
+                st.warning("TikTok demande un CAPTCHA. Terminez la vérification dans la fenêtre ci-dessous.")
+            else:
+                st.write(actuel["message"])
+            if st.checkbox("Mode debug — diagnostic de la collecte",key="debug_collecte_active",
+                    help="Affiche les causes d’arrêt, les limites et les 100 derniers événements. Le diagnostic technique est enregistré automatiquement pour cette session, même si cette case était décochée."):
+                diagnostic=actuel.get('debug_collecte')
+                if diagnostic:
+                    cause=diagnostic.get('cause_arret')
+                    if cause: st.warning(cause['explication'])
+                    elif actuel.get('status')=='stopped': st.warning('Cause non enregistrée pour cette ancienne collecte.')
+                    st.json(diagnostic,expanded=True)
+                    st.caption(
+                        "Ce diagnostic est inclus dans le ZIP des résultats.")
+                else: st.info('Diagnostic indisponible pour cette ancienne session. Relancez une collecte après le déploiement.')
+            compteurs = actuel.get("compteurs_collecte")
+            if compteurs:
+                aides_retenues = {
+                    "hashtags": (
+                        "En Research, nombre de vidéos dont les hashtags ont été "
+                        "vérifiés dès la découverte, avant les filtres de langue, "
+                        "de date et de texte IA. Les doublons ne sont lus qu'une fois. "
+                        "Les autres moteurs appliquent aussi le filtrage après lecture."
+                    ),
+                    "comptes": (
+                        "Nombre de publications distinctes trouvées sur les profils choisis, avant filtrage "
+                        "des hashtags dans les légendes. La limite s’applique à chaque compte ; les doublons "
+                        "ne sont comptés qu’une fois."
+                    ),
+                    "presse": (
+                        "Nombre de publications distinctes trouvées pour les médias sélectionnés, avant "
+                        "filtrage de langue et de période. En mode test Research, dix "
+                        "publications au maximum sont réparties entre les médias ; "
+                        "les doublons ne sont comptés qu’une fois."
+                    ),
+                }
+                colonnes = st.columns(4)
+                mode_research_hashtags = (
+                    actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research")
+                titres = (
+                    ("Candidats API", "Conformes aux hashtags", "Traitées",
+                     "Exportées dans le TXT")
+                    if mode_research_hashtags else
+                    ("Découvertes", "Retenues pour lecture", "Traitées",
+                     "Exportées dans le TXT"))
+                for colonne, cle, titre in zip(
+                        colonnes, ("decouvertes", "retenues", "traitees", "exportees"),
+                        titres):
+                    valeur = (
+                        actuel.get("candidats_research_lot", 0)
+                        if mode_research_hashtags and cle == "decouvertes"
+                        else compteurs[cle])
+                    colonne.metric(
+                        titre, valeur,
+                        help=aides_retenues.get(actuel.get("source_collecte"))
+                        if cle == "retenues" else None)
+                st.caption(("Découvertes : publications des médias sélectionnés ; retenues : auteur vérifié. Aucun filtre par hashtag. "
+                            if actuel.get("source_collecte") == "presse" else
+                            "Découvertes : vidéos repérées sur les profils ou par recherche du compte. Retenues : auteur conforme ; filtrage hashtags/texte effectué après lecture. "
+                            if actuel.get("source_collecte") == "comptes" else "")
+                           + "Les autres filtres peuvent réduire le nombre de publications exportées.")
+            else:
+                st.caption(f"{actuel['captions']} textes · {actuel['processed']}/{actuel['discovered']} publications lues")
+            if (actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"):
+                st.caption(
+                    f"Research API : {actuel.get('candidats_research_lot', 0)} "
+                    f"vidéo(s) reçue(s), "
+                    f"{compteurs.get('retenues', 0) if compteurs else 0} "
+                    f"conforme(s) aux hashtags, "
+                    f"{actuel.get('processed', 0)} traitée(s), "
+                    f"{actuel.get('captions', 0)} texte(s) retenu(s) dans le TXT, "
+                    f"{actuel.get('requetes_research_lot', 0)} requête(s) de recherche.")
+                quota_local = actuel.get("quota_research_local") or {}
+                if quota_local:
+                    st.caption(
+                        f"Budget Research local partagé aujourd'hui (UTC) : "
+                        f"{quota_local.get('appels_enregistres', 0)} / "
+                        f"{quota_local.get('plafond_local', 1000)} appel(s) ; "
+                        f"{quota_local.get('reste_local', 0)} restant(s). "
+                        "Ce chiffre ne mesure pas les appels effectués "
+                        "en dehors de cette instance ScrapTikTok.")
+                if actuel.get('ecartes_hashtags_research_lot', 0):
+                    st.caption(
+                        f"{actuel['ecartes_hashtags_research_lot']} candidat(s) "
+                        "écarté(s) car les métadonnées ne correspondent pas "
+                        "à la recherche stricte des hashtags.")
+            if (actuel.get("source_collecte") == "hashtags"
+                    and actuel.get("moteur_actif") == "research"):
+                if actuel.get("apercu_texte_research"):
+                    with st.expander(
+                            "Vérifier les dernières publications retenues",
+                            expanded=False):
+                        st.caption(
+                            "Échantillon des 20 derniers textes retenus dans "
+                            "le TXT. Les hashtags et la région proviennent "
+                            "des métadonnées Research ; la langue est estimée "
+                            "sur la légende écrite.")
+                        st.dataframe([
+                            {
+                                "Vidéo": p.get("url", ""),
+                                "Auteur": "@" + p.get("auteur", ""),
+                                "Légende": p.get("legende", ""),
+                                "Hashtags TikTok": ", ".join(
+                                    "#" + h for h in p.get("hashtags", [])),
+                                "Hashtags correspondants": ", ".join(
+                                    "#" + h for h in p.get(
+                                        "hashtags_correspondants", [])),
+                                "Langue": p.get("langue", ""),
+                                "Région": p.get("region", ""),
+                            }
+                            for p in reversed(actuel["apercu_texte_research"])
+                        ], hide_index=True, use_container_width=True,
+                            column_config={
+                                "Vidéo": st.column_config.LinkColumn(
+                                    "Vidéo", display_text="Ouvrir")})
+                if actuel.get("apercu_ecartes_research"):
+                    with st.expander(
+                            "Contrôler des vidéos écartées par les critères",
+                            expanded=not bool(actuel.get("captions"))):
+                        st.caption(
+                            "Échantillon limité de candidats renvoyés par "
+                            "TikTok mais exclus avant le traitement.")
+                        st.dataframe([
+                            {
+                                "Vidéo": p.get("url", ""),
+                                "Légende": p.get("legende", ""),
+                                "Hashtags TikTok": ", ".join(
+                                    "#" + h for h in p.get("hashtags", [])),
+                                "Région": p.get("region", ""),
+                                "Motif": p.get("motif", ""),
+                            }
+                            for p in actuel["apercu_ecartes_research"]
+                        ], hide_index=True, use_container_width=True,
+                            column_config={
+                                "Vidéo": st.column_config.LinkColumn(
+                                    "Vidéo", display_text="Ouvrir")})
+            if (actuel.get("test_research_10_publications")
+                    and actuel.get("moteur_actif") == "research"
+                    and not actuel.get("busy")):
+                with st.expander(
+                        "Diagnostic du test Research — textes retenus et exclus",
+                        expanded=not bool(actuel.get("captions"))):
+                    st.caption(
+                        ("En mode Hashtags, les candidats non conformes sont "
+                         "écartés avant lecture. Le nombre de vidéos reçues "
+                         "par l'API peut donc dépasser le nombre traité. "
+                         if actuel.get("source_collecte") == "hashtags" else
+                         "Le test répartit les publications entre les médias choisis. ")
+                        + "Le filtre français évalue chaque légende, et non "
+                        "la nationalité du compte. Une légende courte dont "
+                        "la langue reste indéterminée est conservée dans le TXT."
+                    )
+                    details = actuel.get("apercu_filtrage") or []
+                    if details:
+                        motifs = {
+                            "retenue": "Retenue dans le TXT",
+                            "legende_vide": "Légende absente de la réponse API",
+                            "autre_langue": "Autre langue détectée",
+                            "langue_indeterminee": "Langue indéterminée (ancienne collecte, exclue)",
+                            "retenue_langue_indeterminee": "Retenue dans le TXT, langue indéterminée",
+                            "filtre_hashtags": "Écartée par le filtre de hashtags",
+                            "sans_texte_ia_tiktok": "Écartée : aucun résumé IA TikTok récupéré",
+                            "hors_periode": "Hors période",
+                            "date_indeterminee": "Date indéterminée",
+                            "non_determine": "Diagnostic indisponible",
+                        }
+                        st.dataframe([
+                            {"Auteur": item.get("auteur", ""),
+                             "Légende API (extrait)": item.get("legende", ""),
+                             "Langue": item.get("langue", ""),
+                             "Décision": motifs.get(
+                                 item.get("motif"), item.get("motif", "")),
+                             "URL": item.get("url", "")}
+                            for item in details
+                        ], hide_index=True, use_container_width=True)
+                    elif actuel.get("processed"):
+                        st.info("Consultez les compteurs et le détail des sources "
+                                "pour connaître les motifs d'exclusion.")
+                    if actuel.get("french_only") and not actuel.get("captions"):
+                        st.warning(
+                            "Aucune légende retenue. Vérifiez les légendes absentes "
+                            "de l'API, les dates, le croisement avec le hashtag "
+                            "et les langues détectées comme étrangères. "
+                            "Les légendes de langue indéterminée ne sont "
+                            "plus rejetées par le filtre français."
+                        )
+                    if not actuel.get("processed"):
+                        st.warning("Aucune vidéo consultée : vérifiez le détail "
+                                   "des sources et les droits Research API.")
+            if actuel.get("filtrer_texte_ia_tiktok"):
+                st.caption(
+                    "Filtre texte IA TikTok actif : seules les publications dont le "
+                    "résumé a été récupéré restent dans le corpus. "
+                    f"{actuel.get('exclus_sans_texte_ia', 0)} publication(s) "
+                    "écartée(s) faute de texte IA exploitable.")
+            if actuel.get("hashtags"):
+                combinaison = (" ET " if actuel["operator"] == "AND" else " OU ").join("#" + h for h in actuel["hashtags"])
+                st.caption("Filtre appliqué : " + combinaison
+                           + (" (hashtags et texte)" if actuel.get("rechercher_dans_texte")
+                              else " (hashtags uniquement)")
+                           + (" · variantes accentuées incluses" if actuel.get("variantes_accents") else "")
+                           + (" · région du compte FR" if actuel.get("region_fr_research") else ""))
+                if "bilan_hashtags" in actuel and actuel.get("processed", 0):
+                    with st.expander("Bilan des filtres", expanded=not actuel["busy"] and not actuel["captions"]):
+                        # Un seul bloc évite l'espacement vertical que Streamlit
+                        # ajoute entre plusieurs appels à st.write ou st.caption.
+                        introduction_bilan = (
+                            "Comptages sur les légendes lisibles dans la période choisie, avant le filtre français. "
+                            + ("Hashtags ou mots entiers du texte, sans distinction d’accents."
+                               if actuel.get("rechercher_dans_texte") else
+                               "Seuls les hashtags officiels ou précédés de # sont pris en compte.")
+                            + (" Comparaison des hashtags avec et sans accents."
+                               if actuel.get("variantes_accents") else "")
+                        )
+                        lignes_bilan = [introduction_bilan]
+                        lignes_bilan.extend(
+                            f"#{hashtag} : {nombre} légende(s)"
+                            for hashtag, nombre in actuel["bilan_hashtags"].items()
+                        )
+                        lignes_bilan.append(
+                            f"{combinaison} : {actuel['correspondances_hashtags']} légende(s) correspondante(s)")
+                        lignes_bilan.append(
+                            f"Filtre français : {actuel['non_french']} dans une autre langue écartés · "
+                            f"{actuel['language_unknown']} de langue indéterminée conservés avec signalement")
+                        lignes_bilan.append(
+                            f"{actuel['legendes_vides']} publication(s) sans légende lisible · "
+                            f"{actuel['errors']} erreur(s) de lecture")
+                        # Échapper le contenu : un hashtag contenant des caractères
+                        # Markdown ou HTML doit rester affiché littéralement.
+                        st.html(
+                            '<div style="line-height:1.35;">'
+                            + "<br>".join(html.escape(ligne) for ligne in lignes_bilan)
+                            + "</div>"
+                        )
+            if actuel["date_debut"] or actuel["date_fin"]:
+                st.caption(f"Période : {actuel['hors_periode']} hors période · {actuel['dates_indeterminees']} sans date connue")
+            if actuel["busy"]:
+                st.progress(min(1.0,actuel["processed"]/max(1,actuel["discovered"])))
+                if actuel.get("status") != "attention":
+                    st.caption("La fenêtre TikTok s’ouvre automatiquement en cas de vérification. Pour les profils et médias, elle s’ouvre aussi si aucune publication n’est lisible ou si la pagination se bloque.")
+            if actuel.get("diagnostics"):
+                with st.expander("Diagnostics de collecte"):
+                    libelles = {"erreur_session": "Session Selenium perdue", "erreur_extraction_video": "Erreur d’extraction d’une publication",
+                                "erreur_navigateur": "Erreur du navigateur"}
+                    for diagnostic in actuel["diagnostics"]:
+                        st.write(libelles.get(diagnostic["code"], diagnostic["code"]) +
+                                 (" · publication " + diagnostic["publication_id"] if diagnostic.get("publication_id") else ""))
+            if actuel.get("bilan_sources"):
+                with st.expander("Détail des sources", expanded=not actuel["busy"] and not actuel["captions"]):
+                    requetes_api_lot = 0
+                    def ajouter_detail_source(message):
+                        details_source.append(" ".join(str(message).split()))
+                    for numero_source, bilan in enumerate(actuel["bilan_sources"], 1):
+                        details_source = []
+                        ajouter_detail_source(f"Source {numero_source} — {bilan['source']} : {bilan['liens']} lien(s) — {bilan['message']}")
+                        if (actuel.get("source_collecte") == "hashtags"
+                                and actuel.get("moteur_actif") == "research"):
+                            ajouter_detail_source(
+                                f"Research : {bilan.get('candidats_examines', 0)} "
+                                f"candidat(s) reçus, "
+                                f"{bilan.get('ecartes_hashtags_api', 0)} "
+                                f"écarté(s) par les hashtags officiels, "
+                                f"{bilan.get('requetes_tentees', 0)} "
+                                "requête(s) vidéo envoyée(s).")
+                        if actuel.get("source_collecte") == "hashtags":
+                            exclus_criteres = bilan.get("ecartes_combinaison_hashtags") or 0
+                            exclus_non_verifies = bilan.get("ecartes_metadonnees_absentes") or 0
+                            if exclus_criteres or exclus_non_verifies:
+                                ajouter_detail_source(
+                                    f"Préfiltrage Research ET/OU : {exclus_criteres} vidéo(s) "
+                                    "sans correspondance avec tous les critères ; "
+                                    f"{exclus_non_verifies} vidéo(s) sans métadonnées "
+                                    "vérifiables, non transmises au corpus.")
+                        informations_source = []
+                        if actuel.get("source_collecte") == "presse":
+                            version_source=bilan.get("version_collecteur")
+                            if version_source:
+                                informations_source.append(
+                                    "Méthode enregistrée : "+str(bilan.get("presse_moteur") or "?")+
+                                    " · version "+version_source
+                                )
+                            else:
+                                ajouter_detail_source("Diagnostic issu d'une ancienne collecte, sans version enregistrée : "
+                                           "relancez une collecte pour tester le nouveau moteur.")
+                        if bilan.get("retenues_par_compte"):
+                            informations_source.append("Liens retenus cumulés : " + " · ".join(
+                                f"@{compte} : {nombre}" for compte, nombre in bilan["retenues_par_compte"].items()))
+                        if informations_source:
+                            ajouter_detail_source(" · ".join(informations_source))
+                        navigation_videos = bilan.get("navigation_videos") or {}
+                        navigation_observee = bilan.get("navigation_videos_observee") or {}
+                        etat_page = bilan.get("etat_page") or {}
+                        reseau_profil = bilan.get("reseau_profil") or {}
+                        if etat_page or reseau_profil:
+                            ajouter_detail_source(
+                                "Chargement TikTok : HTTP " +
+                                str(bilan.get("statut_http_profil") or "?") +
+                                " · état " + str(etat_page.get("etat") or "?") +
+                                " · erreur affichée : " + ("oui" if etat_page.get("erreur_tiktok") else "non") +
+                                " · réponses vidéo : " + str(reseau_profil.get("reponses", 0)) +
+                                (" · refus réseau HTTP " + str(reseau_profil["refus_http"])
+                                 if reseau_profil.get("refus_http") else ""))
+                        if navigation_videos.get("statut") == "selectionne_sans_publications":
+                            ajouter_detail_source(
+                                "L'onglet Vidéos est sélectionné mais aucune publication n'a été chargée. "
+                                "Ce n'est pas une preuve que la liste des vidéos est accessible.")
+                        if navigation_videos:
+                            ajouter_detail_source(
+                                "Accès Vidéos : " + str(navigation_videos.get("statut", "?")) +
+                                (" · via " + str(navigation_videos.get("type"))
+                                 if navigation_videos.get("type") else ""))
+                        if navigation_observee:
+                            ajouter_detail_source(
+                                "Page visitée : " + str(navigation_observee.get("route", "?")) +
+                                " · grilles : " + str(navigation_observee.get("grilles", 0)) +
+                                " · liens vidéo du compte : " +
+                                str(navigation_observee.get("liens_video_auteur", 0)))
+                        for recherche in bilan.get("recherches", []):
+                            ajouter_detail_source(f"{recherche['requete']} : {recherche['liens']} lien(s) retenu(s), {recherche['auteurs_ecartes']} d’autres auteurs écarté(s).")
+                            auteurs = recherche.get("auteurs_dans_liens", {})
+                            compte = recherche.get("compte")
+                            if compte and not recherche.get("urls_embed_non_verifiees"):
+                                ajouter_detail_source(f"@{compte} : {auteurs.get(compte, 0)} publication(s) dans les liens reçus de TikTok, sur {recherche.get('candidats_examines', 0)} publication(s) repérée(s).")
+                                if recherche.get("candidats_examines") and not auteurs.get(compte, 0):
+                                    ajouter_detail_source("Le compte ciblé est absent des liens reçus pour cette recherche. Le filtre l’a cherché ; cela ne prouve pas que ses vidéos n’existent pas.")
+                            if auteurs:
+                                frequents = sorted(auteurs.items(), key=lambda element: (-element[1], element[0]))[:10]
+                                ajouter_detail_source("Auteurs indiqués dans les liens (10 premiers au maximum) : " + " · ".join(f"@{auteur} : {nombre}" for auteur, nombre in frequents))
+                            navigation_detail = recherche.get("navigation_videos") or {}
+                            navigation_observee = recherche.get("navigation_videos_observee") or {}
+                            if navigation_detail:
+                                ajouter_detail_source(
+                                    "Accès Vidéos : " + str(navigation_detail.get("statut", "?")) +
+                                    (" · via " + str(navigation_detail.get("type"))
+                                     if navigation_detail.get("type") else ""))
+                            if navigation_observee:
+                                ajouter_detail_source(
+                                    "Page visitée : " + str(navigation_observee.get("route", "?")) +
+                                    " · grilles : " + str(navigation_observee.get("grilles", 0)) +
+                                    " · liens vidéo du compte : " +
+                                    str(navigation_observee.get("liens_video_auteur", 0)))
+                            navigation=recherche.get("navigation_publications")
+                            ligne_pagination = ""
+                            if navigation=="research_officielle":
+                                ajouter_detail_source(f"Research API : {recherche.get('pages_research',0)} page(s), {recherche.get('liens',0)} vidéo(s) retenue(s).")
+                            elif navigation=="api_liste_createur":
+                                provenance=recherche.get("source_secuid")
+                                resolution=(
+                                    "identifiant public vérifié lors d'une collecte précédente"
+                                    if provenance=="cache_verifie" else
+                                    "identifiant vérifié dans les vidéos du premier embed (sans embed vidéo supplémentaire)"
+                                    if provenance=="embed_createur_videos" else
+                                    "identifiant confirmé via l'embed d'une vidéo"
+                                    if provenance=="embed_video" else
+                                    "identifiant fourni par l'embed du créateur"
+                                    if provenance=="embed_createur" else
+                                    "identifiant non encore confirmé"
+                                )
+                                if recherche.get("urls_embed_non_verifiees"):
+                                    ligne_pagination = (
+                                        "Pagination : 0 page reçue. "
+                                        f"{recherche['urls_embed_non_verifiees']} identifiant(s) repéré(s) "
+                                        "dans l'embed, non vérifiés et non sauvegardés."
+                                    )
+                                else:
+                                    ligne_pagination = (
+                                        f"Liste vidéo TikTok par secUid : "
+                                        f"{recherche.get('pages_api',0)} page(s) reçue(s), "
+                                        f"{recherche.get('liens',0)} vidéo(s) retenue(s) "
+                                        f"du média ; {resolution}."
+                                    )
+                            elif navigation=="onglet_videos_selectionne":
+                                ajouter_detail_source("Onglet Vidéos du média confirmé : collecte sur sa grille et ses pages successives.")
+                            elif navigation=="grille_videos_sans_onglet_distinct":
+                                ajouter_detail_source("Grille de vidéos du média reconnue ; aucun onglet distinct n'était nécessaire.")
+                            elif navigation=="onglet_videos_indisponible":
+                                ajouter_detail_source("Onglet Vidéos introuvable sur ce profil : aucune recherche générale n'est substituée.")
+                            elif navigation=="clic_onglet_videos_impossible":
+                                ajouter_detail_source("Impossible d'ouvrir l'onglet Vidéos du média.")
+                            elif navigation=="ouverture_onglet_videos_en_cours":
+                                ajouter_detail_source("Ouverture de l'onglet Vidéos demandée, mais le chargement n'a pas été confirmé.")
+                            elif navigation=="rubrique_selectionnee":
+                                ajouter_detail_source("Rubrique Vidéos/Publications ouverte avant la pagination.")
+                            elif navigation=="pas_de_rubrique_distincte_detectee":
+                                ajouter_detail_source("Aucun accès distinct à « Toutes les vidéos » détecté : collecte sur la grille visible du profil.")
+                            elif navigation=="clic_impossible":
+                                ajouter_detail_source("TikTok a refusé l'ouverture de la rubrique Vidéos/Publications.")
+                            details_pagination=recherche.get("pagination_bilan") or {}
+                            if details_pagination:
+                                ajouter_detail_source(
+                                    f"Pagination du profil : {details_pagination.get('defilements',0)} "
+                                    f"défilement(s), {details_pagination.get('sans_progres',0)} sans déplacement "
+                                    f"de grille · {details_pagination.get('pages_reseau',0)} page(s) "
+                                    "de publications reçue(s) par le navigateur."
+                                )
+                                if details_pagination.get("connexion_exigee"):
+                                    ajouter_detail_source(
+                                        "TikTok interrompt la pagination anonyme de ce média en demandant "
+                                        "une connexion. Les premières vidéos restent conservées ; "
+                                        "la recherche complémentaire tente d'en trouver d'autres."
+                                    )
+                                elif details_pagination.get("sans_progres",0):
+                                    ajouter_detail_source(
+                                        "La grille du profil n'a pas progressé à certains défilements. "
+                                        "Cela peut provenir du conteneur TikTok ou d'une limite "
+                                        "d'accès aux publications suivantes."
+                                    )
+                                if not details_pagination.get("reseau_disponible",True):
+                                    ajouter_detail_source("Observation des pages réseau indisponible ; liens HTML uniquement.")
+                            motifs = {"limit": "limite demandée atteinte", "no_new_links": "plus de nouveaux liens après plusieurs attentes",
+                                      "max_scrolls": "budget de défilement atteint", "blocked": "vérification TikTok en attente",
+                                      "tiktok_error": "erreur de chargement TikTok", "no_accessible_links": "aucun lien lisible",
+                                      "connexion_apres_resultats": "invitation à se connecter et absence de nouveaux liens",
+                                      "publications_non_accessibles": "invitation à se connecter et aucun lien lisible",
+                                      "recherche_redirigee": "redirection vers une autre page"}
+                            if recherche.get("arret"):
+                                texte_arret = (f"{recherche.get('defilements', 0)} défilement(s) effectué(s). Arrêt : "
+                                               + motifs.get(recherche["arret"], recherche["arret"]))
+                                ligne_pagination = (ligne_pagination + " · " + texte_arret
+                                                    if ligne_pagination else texte_arret)
+                            if ligne_pagination:
+                                ajouter_detail_source(ligne_pagination)
+                            if recherche.get("diagnostic"):
+                                diagnostic_recherche=recherche["diagnostic"]
+                                code_recherche=diagnostic_recherche.get("code", "indéterminé")
+                                ajouter_detail_source("Diagnostic : " + code_recherche)
+                                if code_recherche in {"research_acces_refuse", "research_indisponible"}:
+                                    ajouter_detail_source("Research API officielle : " + str(diagnostic_recherche.get("detail") or code_recherche))
+                                elif code_recherche=="tiktok_limitation_429":
+                                    ajouter_detail_source("TikTok a renvoyé HTTP 429 : le moteur API s'est arrêté sans "
+                                             "essayer les autres vidéos ni les autres médias.")
+                                    ajouter_detail_source(
+                                        "Ce refus concerne l'API web Presse, et non nécessairement "
+                                        "la collecte par hashtags. Pour une nouvelle collecte, "
+                                        "vous pouvez choisir manuellement le moteur "
+                                        "« Méthode Selenium ». "
+                                        "ScrapTikTok n'enchaîne pas automatiquement un autre "
+                                        "moteur après un HTTP 429."
+                                    )
+                                    etapes_429={
+                                        "identification_media": "Identification du compte média",
+                                        "identification_video": "Identification via une vidéo du média",
+                                        "pagination_videos": "Pagination des publications",
+                                        "non_commencee": "Avant le premier appel",
+                                    }
+                                    phase=diagnostic_recherche.get("etape_api")
+                                    if phase:
+                                        appels_media = int(recherche.get("requetes_tentees") or
+                                                            diagnostic_recherche.get("requetes_tentees") or 0)
+                                        ajouter_detail_source(
+                                            "Média en échec : " + str(compte or bilan["source"])
+                                            + f" · source {numero_source} de la sélection. "
+                                            + "Étape du refus : " + etapes_429.get(phase,phase)
+                                            + f" · {appels_media} requête(s) tentée(s) pour ce média "
+                                            + f"· {requetes_api_lot + appels_media} "
+                                              "requête(s) API Presse tentée(s) depuis le début de cette collecte (hors Selenium) "
+                                            + f"· {diagnostic_recherche.get('pages_api',0)} "
+                                              "page(s) reçue(s) pour ce média."
+                                        )
+                                elif code_recherche=="budget_interne_epuise":
+                                    ajouter_detail_source("Budget administrateur des requêtes API Presse épuisé. "
+                                               "La collecte a été arrêtée avant de solliciter TikTok.")
+                                elif code_recherche=="tiktok_pause_429":
+                                    ajouter_detail_source("Moteur API suspendu par la pause de protection après HTTP 429. "
+                                               "Aucune requête TikTok n'a été envoyée pour cette nouvelle collecte.")
+                                if diagnostic_recherche.get("retry_after_seconds"):
+                                    ajouter_detail_source(f"Délai indicatif transmis par TikTok (Retry-After) : "
+                                               f"{diagnostic_recherche['retry_after_seconds']} secondes.")
+                                if diagnostic_recherche.get("detail"):
+                                    ajouter_detail_source("Accès TikTok : " + diagnostic_recherche["detail"])
+                            elif recherche.get("message_erreur"):
+                                ajouter_detail_source("Accès TikTok : "+recherche["message_erreur"])
+                            requetes_api_lot += int(recherche.get("requetes_tentees") or 0)
+                        diagnostic = bilan.get("diagnostic", {})
+                        if diagnostic:
+                            indices = [str(diagnostic[cle]) for cle in ("code", "exception", "erreur_reseau", "url", "etat") if diagnostic.get(cle)]
+                            ajouter_detail_source(" · ".join(indices))
+                        st.caption(" · ".join(details_source))
+            bilan_ia = actuel.get("bilan_textes_ia")
+            if bilan_ia and bilan_ia["publications"]:
+                st.caption(f"Textes IA TikTok récupérés : {bilan_ia['recuperes']} sur {bilan_ia['publications']} publications retenues dans le TXT.")
+                if bilan_ia["recuperes"] < bilan_ia["publications"]:
+                    st.warning("Certains résumés IA n’ont pas été récupérés. Ils peuvent être absents ou inaccessibles dans la page TikTok. Les textes originaux restent exportés.")
+                with st.expander("Détail de la récupération des textes IA"):
+                    st.dataframe(bilan_ia["details"], hide_index=True)
+            with st.expander("Aperçu des textes"):
+                st.caption("Les cinq premières publications, avec le codage des sources et les variables sélectionnées.")
+                for publication in actuel.get("preview",[]):
+                    cle_apercu = ("texte_export_sans_arobase" if st.session_state.get("export_profil_sans_arobase", True)
+                                  else "texte_export_avec_arobase")
+                    st.text(publication.get(cle_apercu, publication.get("texte_export", publication["description"])))
+            if actuel.get("apercu_engagement"):
+                st.caption(
+                    f"{len(actuel['apercu_engagement'])} publications examinées · "
+                    f"{actuel.get('captions', 0)} textes retenus après les filtres.")
+
+                def compteur(mesure):
+                    if mesure.get("valeur") is None:
+                        return "Indisponible"
+                    return ("≈ " if mesure.get("estime") else "") + str(mesure["valeur"])
+
+                lignes_retenues = []
+                lignes_ecartees = []
+                motifs_exclusion = {
+                    "filtre_hashtags": "Hashtags ET/OU non satisfaits",
+                    "autre_langue": "Langue étrangère détectée",
+                    "hors_periode": "Publication hors période",
+                    "date_indeterminee": "Date non déterminée",
+                    "sans_texte_ia_tiktok": "Texte IA demandé absent",
+                    "legende_vide": "Légende vide",
+                }
+                for publication in actuel["apercu_engagement"]:
+                    ligne = {
+                        "Auteur": "@" + publication["author"],
+                        "Publication": publication["url"],
+                        "URL TikTok": publication["url"]
+                    }
+                    for cle, titre in (
+                        ("likes", "Likes"),
+                        ("vues", "Vues"),
+                        ("partages", "Partages"),
+                        ("commentaires", "Nombre de commentaires"),
+                        ("favoris", "Nombre de favoris")
+                    ):
+                        ligne[titre] = compteur(
+                            publication.get("engagement", {}).get(cle, {})
+                        )
+                    ligne["Retenue dans le TXT"] = (
+                        "Oui" if publication.get("retenue_txt", True) else "Non"
+                    )
+                    ligne["Langue"] = {
+                        "fr": "Français",
+                        "other": "Autre langue",
+                        "unknown": "Indéterminée",
+                        None: "Non évaluée"
+                    }.get(publication.get("langue_detection"), "Non évaluée")
+                    ligne["Motif d'exclusion"] = motifs_exclusion.get(
+                        publication.get("motif_non_retenue"),
+                        publication.get("motif_non_retenue") or "")
+                    if publication.get("retenue_txt", True):
+                        lignes_retenues.append(ligne)
+                    else:
+                        lignes_ecartees.append(ligne)
+
+                configuration_colonnes = {
+                    "Publication": st.column_config.LinkColumn(
+                        "Publication", display_text="Ouvrir"),
+                    "Langue": st.column_config.TextColumn(
+                        "Langue de la légende",
+                        help="Langue du texte écrit, sans les hashtags ni les mentions. "
+                             "La voix de la vidéo n'est pas analysée."),
+                    "Retenue dans le TXT": st.column_config.TextColumn(
+                        "Retenue dans le TXT",
+                        help="Oui : texte conservé après les filtres ; Non : exclu du TXT."),
+                }
+                if lignes_retenues:
+                    st.caption("Publications retenues dans le corpus TXT")
+                    st.dataframe(lignes_retenues, hide_index=True,
+                                 column_config=configuration_colonnes)
+                else:
+                    st.info("Aucune publication retenue dans le TXT avec les critères sélectionnés.")
+                if lignes_ecartees:
+                    with st.expander(
+                            f"Publications écartées des textes : {len(lignes_ecartees)}"):
+                        st.caption(
+                            "Conservées dans les données brutes pour diagnostic, "
+                            "mais exclues du corpus TXT.")
+                        st.dataframe(lignes_ecartees, hide_index=True,
+                                     column_config=configuration_colonnes)
+
+            if actuel.get("profils_medias_variables"):
+                st.caption(
+                    f"Profils médias : {actuel.get('nombre_profils_medias', 0)} "
+                    "compte(s) consignés dans profils_medias.csv "
+                    "(les valeurs indisponibles restent vides).")
+                with st.expander("Disponibilité des métriques par compte"):
+                    st.dataframe(actuel.get("bilan_profils_medias") or [],
+                                 hide_index=True)
+            if actuel.get("collecter_commentaires"):
+                st.write(f"{actuel.get('commentaires_collectes', 0)} texte(s) de commentaires récupéré(s).")
+                st.caption(
+                    "Export des commentaires : "
+                    + ("TXT et CSV" if actuel.get("inclure_commentaires_txt", True)
+                       else "CSV uniquement, sans insertion des textes dans les TXT.")
+                )
+                if actuel.get("commentaires_indisponibles"):
+                    st.warning(f"Commentaires non récupérés ou collecte interrompue pour {actuel['commentaires_indisponibles']} publication(s). Voir le détail ci-dessous.")
+                if actuel.get("bilan_commentaires"):
+                    with st.expander("Détail de la collecte des commentaires"):
+                        st.dataframe([{"ID vidéo": e["publication_id"], "Nombre annoncé": e.get("annonces"),
+                            "Textes récupérés": e.get("recuperes", 0), "Diagnostic": e.get("message") or e.get("statut")}
+                            for e in actuel["bilan_commentaires"]], hide_index=True)
+            else:
+                st.caption("La collecte des textes des commentaires n’était pas activée pour cette recherche. Le nombre de commentaires reste inclus dans les compteurs.")
+            if actuel.get("telecharger_mp4") and actuel.get("bilan_mp4"):
+                disponibles = sum(bool(v.get("video_fichier")) for v in actuel["bilan_mp4"])
+                st.write(f"MP4 : {disponibles}/{len(actuel['bilan_mp4'])} fichier(s) disponible(s).")
+                with st.expander("Bilan des téléchargements MP4"):
+                    st.dataframe([{"ID vidéo": v["video_id"], "Fichier": v.get("video_fichier"),
+                                   "État": v.get("video_message")} for v in actuel["bilan_mp4"]], hide_index=True)
+            choix_export = ""
+            if actuel["can_download"] or actuel["archive_prete"]:
+                sans_arobase = st.session_state.get("export_profil_sans_arobase", True)
+                choix_export = "?supprimer_arobase_profil=" + ("true" if sans_arobase else "false")
+            st.caption("Nom de la collecte : " + (actuel.get("nom_sauvegarde") or "Collecte sans nom (ancienne session)"))
+            if actuel.get("busy"):
+                if actuel.get("sauvegarde_postgres") == "synchronise":
+                    st.caption(
+                        "PostgreSQL : sauvegarde automatique active · "
+                        f"{actuel.get('sauvegarde_postgres_publications', 0)} publication(s) "
+                        f"et {actuel.get('sauvegarde_postgres_commentaires', 0)} commentaire(s) "
+                        "déjà enregistrés. Mise à jour au cours de la collecte."
+                    )
+                elif actuel.get("sauvegarde_postgres") in ("erreur", "identite_absente"):
+                    st.error(actuel.get("erreur_postgres") or "Sauvegarde PostgreSQL interrompue.")
+            if not actuel.get("busy"):
+                if actuel.get("sauvegarde_postgres") == "synchronise":
+                    st.success("Sauvegarde PostgreSQL effectuée. Retrouvez les données dans « Base de données ».")
+                elif actuel.get("sauvegarde_postgres") in ("erreur", "identite_absente"):
+                    st.error(actuel.get("erreur_postgres") or "Sauvegarde PostgreSQL impossible.")
+                    if st.button("Réessayer la sauvegarde PostgreSQL", key="relancer_pg_" + actuel["id"]):
+                        try:
+                            api(f"/api/base-donnees/{actuel['id']}/synchroniser", {})
+                        except RuntimeError as erreur:
+                            st.error(str(erreur))
+                        else:
+                            st.success("La sauvegarde a été enregistrée dans PostgreSQL.")
+                            st.rerun()
+            if (not actuel.get("archive_prete")
+                    and int(actuel.get("sauvegarde_postgres_publications") or 0) > 0):
+                st.warning(
+                    "Le ZIP local n'est pas encore disponible. Les publications "
+                    "déjà enregistrées dans PostgreSQL sont récupérables."
+                )
+                st.link_button(
+                    "Récupérer les publications sauvegardées (ZIP PostgreSQL)",
+                    f"/api/base-donnees/collecte/{actuel['id']}/archive.zip",
+                    use_container_width=True,
+                )
+            if actuel["archive_prete"] and not (actuel["busy"] or actuel["video_busy"]):
+                st.link_button(
+                    "Télécharger les résultats",
+                    f"/api/jobs/{actuel['id']}/archive{choix_export}",
+                    use_container_width=True,
+                    help="Un ZIP au nom de la collecte, comprenant tous les "
+                         "fichiers TXT, CSV, JSON, commentaires, diagnostic et "
+                         "MP4 accessibles lorsque cette option a été activée.")
+            elif actuel["can_download"]:
+                st.caption(
+                    "Le ZIP complet sera disponible à la fin de la collecte.")
+            if not (actuel.get("busy") or actuel.get("video_busy")):
+                if st.button(
+                        "Nouvelle collecte / Réinitialiser",
+                        key="reinitialiser_collecte_" + actuel["id"],
+                        use_container_width=True,
+                        help="Réinitialise le formulaire et l'affichage uniquement. "
+                             "Les ZIP, l'historique, les annotations et les bases "
+                             "de données ne sont pas supprimés."):
+                    st.session_state["_reinitialisation_collecte_demandee"] = actuel["id"]
+                    st.rerun(scope="app")
+        afficher_resultats()
+        erreur_reinitialisation = st.session_state.pop(
+            "_erreur_reinitialisation_collecte", None)
+        if erreur_reinitialisation:
+            st.error("Réinitialisation impossible : " + erreur_reinitialisation)
+        if st.session_state["collecte"].get("status") == "attention":
+            st.info("Vérifiez TikTok dans le navigateur ci-dessous, puis cliquez sur Continuer dans cette fenêtre. La sélection des médias reste celle de la collecte lancée.")
+            # Le WebSocket Streamlit et l'iframe peuvent arriver sur des
+            # instances différentes lors d'un déploiement Coolify. Transmettre
+            # seulement leurs empreintes pour diagnostiquer ce cas, sans
+            # divulguer le cookie privé.
+            try:
+                contexte_controle = api("/api/session")
+            except RuntimeError as erreur:
+                st.warning("Impossible de vérifier la session du navigateur : " + str(erreur))
+            else:
+                instance_controle = contexte_controle.get("instance", "")
+                empreinte_controle = contexte_controle.get("empreinte_session", "")
+                identifiant_controle = st.session_state["collecte"]["id"]
+                adresse_controle = (
+                    f"/controle?collecte={identifiant_controle}"
+                    f"&instance={instance_controle}&session={empreinte_controle}"
+                )
+                st.link_button(
+                    "Ouvrir le navigateur TikTok dans un onglet séparé",
+                    adresse_controle,
+                    help="Alternative si le navigateur intégré n'affiche pas le CAPTCHA."
+                )
+                st.iframe(adresse_controle, height=850, alt="Navigateur TikTok du serveur")
+
+with onglet_collecte:
+    with st.expander("Récupérer les anciennes archives intermédiaires", expanded=False):
+        st.caption("Les ZIP sont conservés sur le volume VPS pendant 7 jours par défaut, "
+                   "mais leur téléchargement depuis cette interface nécessite le cookie privé "
+                   "d’origine (valable 24 h). Ils contiennent TXT et JSON, sans MP4 ni "
+                   "reprise automatique de la collecte.")
+        if st.button("Actualiser la liste des sauvegardes",key="actualiser_sauvegardes"):
+            st.session_state.pop("sauvegardes_collectes",None)
+        if "sauvegardes_collectes" not in st.session_state:
+            try:
+                st.session_state["sauvegardes_collectes"]=api("/api/sauvegardes")["sauvegardes"]
+            except RuntimeError as erreur:
+                st.warning("Liste indisponible : "+str(erreur))
+                st.session_state["sauvegardes_collectes"]=[]
+        for point in st.session_state["sauvegardes_collectes"]:
+            st.write(f"{point.get('source','Collecte')} — {point.get('traitees',0)} traitée(s) · "
+                     f"{point.get('retenues',0)} retenue(s) · {point.get('statut','')} · "
+                     f"{point.get('sauvegarde_le','')}")
+            st.link_button("Télécharger le ZIP — "+point['id'][:8],
+                f"/api/sauvegardes/{point['id']}/telecharger")
+        if not st.session_state["sauvegardes_collectes"]:
+            st.info("Aucune sauvegarde disponible pour cette session.")
+
+
+with onglet_collecte_de_compte:
+    # La découverte des comptes est indépendante de la collecte de profils.
+    # Tout son formulaire et son suivi résident dans collcompte.py.
+    from collcompte import afficher_collecte_de_compte
+    afficher_collecte_de_compte(
+        api, telecharger=telecharger_api, occupe=occupe)
+
+
+with onglet_base_donnees:
+    st.subheader("1. PostgreSQL — collectes sauvegardées")
+    st.caption(
+        "Les fichiers téléchargés sont enregistrés dans le dossier choisi "
+        "dans les paramètres du navigateur (Firefox, Safari, etc.), "
+        "et non dans un dossier imposé par le serveur VPS. "
+        "Le nom du fichier reprend celui de la collecte ou de l'export."
+    )
+    st.caption(
+        "Sauvegarde automatique des collectes ponctuelles. "
+        "Aucune expiration automatique n'est programmée dans ScrapTikTok. "
+        "Les collectes Research programmées doivent être copiées depuis SQLite."
+    )
+    if not cookie_historique:
+        st.warning("Rechargez la page pour accéder à vos collectes privées.")
+    else:
+        message_suppression = st.session_state.pop(
+            "base_pg_suppression_reussie", None)
+        if message_suppression:
+            st.success(
+                f"Collecte « {message_suppression} » supprimée de PostgreSQL."
+            )
+        try:
+            resultat_bdd = api("/api/base-donnees")
+        except RuntimeError as erreur:
+            st.error(str(erreur))
+            resultat_bdd = None
+        if resultat_bdd is not None:
+            if not resultat_bdd.get("configure"):
+                st.error(
+                    "PostgreSQL n'est pas configuré : renseignez "
+                    "RESEARCH_POSTGRES_DSN dans Coolify."
+                )
+            else:
+                sauvegardes_bdd = resultat_bdd.get("sauvegardes") or []
+                if not sauvegardes_bdd:
+                    st.info("Aucune collecte PostgreSQL disponible.")
+                else:
+                    index_bdd = st.selectbox(
+                        "Choisir une collecte",
+                        list(range(len(sauvegardes_bdd))),
+                        format_func=lambda i: (
+                            f"{sauvegardes_bdd[i]['nom']} · "
+                            f"{sauvegardes_bdd[i]['publications']} publications · "
+                            f"{sauvegardes_bdd[i]['date'][:10]} · "
+                            f"{'Research' if sauvegardes_bdd[i]['type'] == 'research' else 'Ponctuelle'}"
+                        ),
+                        key="base_pg_selection",
+                    )
+                    sauvegarde_bdd = sauvegardes_bdd[index_bdd]
+                    adresse_bdd = (
+                        f"/api/base-donnees/{sauvegarde_bdd['type']}/"
+                        f"{sauvegarde_bdd['id']}"
+                    )
+                    st.link_button(
+                        "Télécharger tous les résultats (ZIP)",
+                        adresse_bdd + "/archive.zip",
+                        use_container_width=True,
+                        help="Tous les exports CSV, JSON, TXT, métriques et "
+                             "fichiers originaux encore disponibles. "
+                             "Les MP4 absents ne peuvent pas être reconstitués.",
+                    )
+                    with st.expander("Supprimer cette collecte de PostgreSQL"):
+                        st.warning(
+                            "Suppression définitive de cette seule collecte, "
+                            "de ses publications et de ses commentaires dans "
+                            "PostgreSQL. Les autres collectes restent intactes. "
+                            "Cette opération n'efface ni les fichiers locaux "
+                            "ni les copies SQLite."
+                        )
+                        nom_confirmation = st.text_input(
+                            f"Saisissez exactement « {sauvegarde_bdd['nom']} »",
+                            key=("base_pg_confirmation_"
+                                 + sauvegarde_bdd["type"] + "_"
+                                 + sauvegarde_bdd["id"]),
+                        )
+                        if st.button(
+                                "Supprimer définitivement cette collecte",
+                                key=("base_pg_supprimer_"
+                                     + sauvegarde_bdd["type"] + "_"
+                                     + sauvegarde_bdd["id"]),
+                                disabled=nom_confirmation != sauvegarde_bdd["nom"]):
+                            try:
+                                api(
+                                    adresse_bdd + "/supprimer",
+                                    {"nom_confirmation": nom_confirmation},
+                                )
+                            except RuntimeError as erreur:
+                                st.error(str(erreur))
+                            else:
+                                st.session_state["base_pg_suppression_reussie"] = (
+                                    sauvegarde_bdd["nom"]
+                                )
+                                st.rerun()
+
+    st.divider()
+    st.subheader("2. SQLite — collectes Research programmées")
+    st.caption(
+        "SQLite Research ne relève pas de la limite des 30 jours de "
+        "l'historique temporaire. Pour consulter les données sur Mac, "
+        "téléchargez le ZIP d'une collecte, extrayez corpus.sqlite3, "
+        "puis ouvrez ce fichier dans DBeaver avec une connexion SQLite. "
+        "Ce fichier exporté contient publications et commentaires ; "
+        "il ne contient pas le calendrier du programme, conservé dans "
+        "collectes_research.sqlite3 sur le VPS."
+    )
+    if not cookie_historique:
+        st.warning("Historique privé indisponible : rechargez la page.")
+    else:
+        if st.checkbox("Afficher mes collectes SQLite Research",
+                       key="base_sqlite_afficher", value=False):
+            try:
+                etat_sqlite = api("/api/research/plans")
+                plans_sqlite = etat_sqlite.get("plans") or []
+            except RuntimeError as erreur:
+                st.warning("Liste des programmes SQLite indisponible : " + str(erreur))
+                plans_sqlite = []
+            if plans_sqlite:
+                index_sqlite = st.selectbox(
+                    "Choisir une collecte Research dans SQLite",
+                    list(range(len(plans_sqlite))),
+                    format_func=lambda i: (
+                        f"{plans_sqlite[i].get('nom_sauvegarde') or 'Sans nom'} · "
+                        f"{plans_sqlite[i].get('statut', '')} · "
+                        f"{plans_sqlite[i].get('publications', 0)} publications"
+                    ),
+                    key="sqlite_plan_selection",
+                )
+                plan_sqlite = plans_sqlite[index_sqlite]
+                identifiant_sqlite = plan_sqlite["id"]
+                st.caption(
+                    f"Publications : {plan_sqlite.get('publications', 0)} · "
+                    f"Commentaires : {plan_sqlite.get('commentaires', 0)}"
+                )
+                st.link_button(
+                    "Télécharger cette collecte SQLite (ZIP)",
+                    f"/api/research/plans/{identifiant_sqlite}/export/zip",
+                    use_container_width=True,
+                    help="Publications et commentaires CSV, JSON, textes et une "
+                         "copie SQLite du corpus. Ne réinstalle pas le calendrier."
+                )
+                if st.button("Copier cette collecte SQLite dans PostgreSQL",
+                             key="sqlite_copier_postgres"):
+                    try:
+                        bilan_sqlite = api(
+                            f"/api/research/plans/{identifiant_sqlite}/synchroniser-postgres",
+                            {})
+                    except RuntimeError as erreur:
+                        st.error(str(erreur))
+                    else:
+                        st.success(
+                            f"Copie vers PostgreSQL : "
+                            f"{bilan_sqlite['publications']} publications et "
+                            f"{bilan_sqlite['commentaires']} commentaires."
+                        )
+            else:
+                st.info("Aucun programme Research SQLite accessible dans cet historique.")
+
+    st.divider()
+    st.subheader("3. Concaténer des publications CSV")
+    st.caption(
+        "Importez des fichiers publications.csv ou engagement.csv obtenus "
+        "depuis PostgreSQL, SQLite ou les ZIP de collecte. "
+        "Chaque vidéo est identifiée par son ID TikTok. Les colonnes des "
+        "différents fichiers sont réunies, et les doublons sont écartés. "
+        "Cette fusion ne modifie aucune base de données."
+    )
+    fichiers_concat = st.file_uploader(
+        "Importer des fichiers CSV pour les concaténer",
+        type=["csv"], accept_multiple_files=True,
+        key="base_fichiers_concat",
+        help="20 fichiers au maximum, 10 Mo par fichier, 100 000 lignes au total."
+    )
+    priorite_concat = st.radio(
+        "En cas de doublon",
+        ("premier", "dernier"),
+        horizontal=True,
+        format_func=lambda v: (
+            "Conserver le premier" if v == "premier"
+            else "Conserver le dernier"),
+        key="base_priorite_concat",
+    )
+    if fichiers_concat:
+        from corpus.fusion_publications import fusionner_publications_csv
+        try:
+            resultat_concat = fusionner_publications_csv(
+                [(f.name, f.getvalue()) for f in fichiers_concat],
+                priorite_concat)
+        except ValueError as erreur:
+            st.error("Fusion impossible : " + str(erreur))
+        else:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Lignes importées", resultat_concat["total_initial"])
+            c2.metric("Vidéos distinctes", resultat_concat["nombre_unique"])
+            c3.metric("Doublons écartés", resultat_concat["doublons"])
+            if resultat_concat["doublons_divergents"]:
+                st.warning(
+                    f"{resultat_concat['doublons_divergents']} doublon(s) "
+                    "présentent des valeurs différentes : la priorité "
+                    "sélectionnée détermine les valeurs conservées."
+                )
+            st.download_button(
+                "Télécharger le CSV concaténé",
+                resultat_concat["csv"],
+                file_name=f"fusion_publications_{datetime.now():%Y%m%d}.csv",
+                mime="text/csv",
+                key="base_telecharger_concat",
+                use_container_width=True,
+            )
+            st.caption(
+                f"{len(resultat_concat['colonnes'])} colonnes conservées, "
+                "dont le nom des fichiers d'origine."
+            )
+            st.dataframe(
+                resultat_concat["lignes"][:100],
+                hide_index=True, use_container_width=True,
+            )
+
+
+with onglet_aide:
+    st.subheader("Comment utiliser l’application")
+    st.markdown("1. Choisissez **Presse et médias**, cochez les comptes ou utilisez **Tout cocher**.\n"
+                "2. Pour Presse et médias, aucun hashtag n'est nécessaire : cochez les comptes, choisissez les filtres facultatifs et lancez la collecte. Pour Hashtags et Profils, indiquez un hashtag (deuxième facultatif, ET/OU).\n"
+                "3. Les médias sont parcourus par compte public, avec recherche ciblée en secours. Seules les publications des auteurs sélectionnés sont conservées.\n"
+                "4. La fenêtre TikTok s’ouvre automatiquement si une vérification est nécessaire ou si une recherche ne fournit plus de publications lisibles. Intervenez dans cette fenêtre, puis cliquez sur **Continuer**.\n"
+                "5. Téléchargez le TXT ou l’archive ZIP lorsque les résultats sont disponibles.")
+    st.caption("En cas de résultat vide, consultez le détail des sources et les compteurs de filtres. Une page inaccessible n’indique pas qu’un compte n’a aucune publication. Le TXT contient les légendes ; le ZIP enrichi ajoute les données et les commentaires demandés.")
+    st.subheader("Protection contre les erreurs TikTok 429")
+    st.write(
+        "Les limites de l'API Presse viennent des variables d'environnement "
+        "Coolify API_MAX_* ou SCRAPTIKTOK_API_MAX_*. Si une limite n'est pas "
+        "configurée, le code n'en ajoute aucune. Deux alias renseignés pour "
+        "un même plafond : la valeur la plus restrictive est retenue. "
+        "Ces limites ne sont pas des quotas officiels du scraping TikTok "
+        "et n'empêchent pas nécessairement les erreurs HTTP 429."
+    )
+    budget_aide = limites_admin.get("budget_api_presse", {})
+    st.table([
+        {"Limite locale (API Presse)": "Requêtes par minute",
+         "Maximum actif": budget_aide.get("maximum_minute") or "Non configuré"},
+        {"Limite locale (API Presse)": "Requêtes par heure",
+         "Maximum actif": budget_aide.get("maximum_heure") or "Non configuré"},
+        {"Limite locale (API Presse)": "Requêtes par jour UTC",
+         "Maximum actif": budget_aide.get("maximum_24h") or "Non configuré"},
+        {"Limite locale (API Presse)": "Enregistrements par jour UTC",
+         "Maximum actif": budget_aide.get("maximum_enregistrements_24h") or "Non configuré"},
+        {"Limite locale (API Presse)": "Intervalle minimal entre appels (s)",
+         "Maximum actif": budget_aide.get("intervalle_min_s", "?")},
+    ])
+    st.caption(
+        "Consommation : "
+        f"{budget_aide.get('requete_24h', 0)} appels et "
+        f"{budget_aide.get('enregistrements_24h', 0)} enregistrements aujourd'hui (UTC). "
+        "Les limites sont communes à toutes les sessions. "
+        "Le navigateur Selenium n'est pas comptabilisé ; son exécution reste limitée "
+        "par la durée des collectes, les bornes techniques et les blocages TikTok. "
+        "Chaque plafond configuré vient de Coolify ; une collecte s'arrête lorsqu'un plafond actif est atteint."
+    )
+    st.caption(
+        "Les cinq anciennes variables de limitation par source sont ignorées. "
+        "Références documentaires uniquement : "
+        "[API officielle TikTok v2](https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit) "
+        "et [Research API](https://developers.tiktok.com/docs/en/research-api-faq)."
+    )
+    st.subheader("Limites de durée, de concurrence et de tickets Redis")
+    st.table([
+        {"Variable": "APP_TICKET_MAX_ACTIVE",
+         "Valeur active": os.getenv("APP_TICKET_MAX_ACTIVE", "1"),
+         "Effet": "Tickets actifs simultanés pour ScrapTikTok"},
+        {"Variable": "APP_TICKET_MAX_WAITING",
+         "Valeur active": os.getenv("APP_TICKET_MAX_WAITING", "20"),
+         "Effet": "Places maximum dans la file d'attente"},
+        {"Variable": "APP_TICKET_COST",
+         "Valeur active": os.getenv("APP_TICKET_COST", "4"),
+         "Effet": "Unités de capacité serveur prises par un ticket"},
+        {"Variable": "CAPACITE_SERVEUR",
+         "Valeur active": os.getenv("CAPACITE_SERVEUR", "6"),
+         "Effet": "Capacité globale partagée du VPS"},
+        {"Variable": "APP_TICKET_TTL_SECONDS",
+         "Valeur active": os.getenv("APP_TICKET_TTL_SECONDS", "1800"),
+         "Effet": "Secondes avant expiration d'un ticket non renouvelé"},
+        {"Variable": "APP_TICKET_HEARTBEAT_MS",
+         "Valeur active": os.getenv("APP_TICKET_HEARTBEAT_MS", "300000"),
+         "Effet": "Intervalle de renouvellement du ticket (millisecondes)"},
+        {"Variable": "APP_TICKET_HIDDEN_RELEASE_SECONDS",
+         "Valeur active": os.getenv("APP_TICKET_HIDDEN_RELEASE_SECONDS", "300"),
+         "Effet": "Délai de libération après masquage de l'onglet (0 : désactivé)"},
+        {"Variable": "APP_TICKET_WAIT_REFRESH_MS",
+         "Valeur active": os.getenv("APP_TICKET_WAIT_REFRESH_MS", "10000"),
+         "Effet": "Rafraîchissement de la file d'attente (millisecondes)"},
+        {"Variable": "MAX_CONCURRENT_JOBS",
+         "Valeur active": os.getenv("MAX_CONCURRENT_JOBS", "1"),
+         "Effet": "Collectes simultanées maximum sur le serveur"},
+        {"Variable": "JOB_TIMEOUT_SECONDS",
+         "Valeur active": os.getenv("JOB_TIMEOUT_SECONDS", "1800"),
+         "Effet": "Durée maximale d'une collecte (secondes)"},
+        {"Variable": "IDLE_TIMEOUT_SECONDS",
+         "Valeur active": os.getenv("IDLE_TIMEOUT_SECONDS", "300"),
+         "Effet": "Inactivité maximale pendant une collecte (secondes)"},
+        {"Variable": "RESULT_TTL_SECONDS",
+         "Valeur active": os.getenv("RESULT_TTL_SECONDS", "3600"),
+         "Effet": "Rétention des résultats temporaires (secondes)"},
+        {"Variable": "CHECKPOINT_TTL_SECONDS",
+         "Valeur active": os.getenv("CHECKPOINT_TTL_SECONDS", "604800"),
+         "Effet": "Rétention des sauvegardes progressives (secondes)"},
+    ])
+    st.caption(
+        "Le ticket Redis peut être renouvelé à chaque heartbeat : son TTL n'est "
+        "pas une limite absolue de présence. Le délai maximal d'une collecte "
+        "est gouverné par JOB_TIMEOUT_SECONDS. Les valeurs affichées proviennent "
+        "de l'environnement du conteneur ; aucun secret Redis n'est exposé."
+    )
+    st.subheader("Comprendre l’analyse du désordre visuel")
+    from analyse_desordre.presentation import (
+        AIDE_PREPARATION_DESORDRE, PROCESSUS_DESORDRE, AIDE_AGREGATION_DESORDRE
+    )
+    st.markdown(AIDE_PREPARATION_DESORDRE)
+    for titre, explication in PROCESSUS_DESORDRE:
+        with st.expander(titre):
+            st.markdown(explication)
+    st.markdown("**Comment est calculé l’indice de désordre visuel ?**")
+    st.markdown(AIDE_AGREGATION_DESORDRE)
+
+
+
+
+with onglet_annotation_csv:
+    st.subheader("Annotation à partir d'un fichier CSV")
+    st.caption(
+        "Importez engagement.csv ou un CSV contenant un identifiant TikTok. "
+        "Annotez les publications sans analyse vidéo ni nouvelle collecte. "
+        "Les colonnes sources restent en lecture seule ; vos annotations "
+        "sont enregistrées dans un projet privé et réexportables en CSV.")
+    if not cookie_historique:
+        st.warning("Rechargez la page d'accueil pour initialiser l'historique privé.")
+    else:
+        import base64
+        import pandas as pd
+        fichier_ann = st.file_uploader(
+            "Importer engagement.csv", type=["csv"], key="annotation_csv_importer",
+            help="Fichier UTF-8 jusqu'à 12 Mo, avec publication_id ou id.")
+        nom_ann = st.text_input(
+            "Nom du projet d'annotation", key="annotation_csv_nom",
+            placeholder="Annotations_manifestations_2026", max_chars=120)
+        if st.button("Créer le projet d'annotation", key="annotation_csv_creer"):
+            if not fichier_ann:
+                st.error("Importez d'abord un fichier CSV.")
+            elif not nom_ann.strip():
+                st.error("Renseignez le nom du projet.")
+            elif fichier_ann.size > 12_000_000:
+                st.error("Le fichier dépasse 12 Mo.")
+            else:
+                try:
+                    projet_ann = api("/api/annotation-csv/importer", {
+                        "nom": nom_ann.strip(),
+                        "contenu_base64": base64.b64encode(
+                            fichier_ann.getvalue()).decode("ascii"),
+                    })
+                except RuntimeError as erreur:
+                    st.error("Import impossible : " + str(erreur))
+                else:
+                    st.session_state["annotation_csv_projet"] = projet_ann["id"]
+                    st.success("Projet importé et enregistré sur le serveur.")
+                    st.rerun()
+
+        try:
+            projets_ann = api("/api/annotation-csv").get("projets", [])
+        except RuntimeError as erreur:
+            st.error("Liste des annotations inaccessible : " + str(erreur))
+            projets_ann = []
+        if projets_ann:
+            ids_ann = [projet["id"] for projet in projets_ann]
+            selection_ann = st.session_state.get("annotation_csv_projet")
+            if selection_ann not in ids_ann:
+                selection_ann = ids_ann[0]
+            position_ann = ids_ann.index(selection_ann)
+            identifiant_ann = st.selectbox(
+                "Projet enregistré", ids_ann, index=position_ann,
+                format_func=lambda identifiant: next(
+                    (p["nom"] + " — " + str(p["nombre"]) + " publications"
+                     for p in projets_ann if p["id"] == identifiant),
+                    identifiant),
+                key="annotation_csv_choix_projet")
+            st.session_state["annotation_csv_projet"] = identifiant_ann
+            with st.expander("Ajouter une variable d'annotation", expanded=False):
+                nom_variable_ann = st.text_input(
+                    "Nom de la variable (sans espace)", key="annotation_csv_variable_nom",
+                    placeholder="violence_policiere")
+                type_variable_ann = st.radio(
+                    "Type de codage", ["binaire", "categorielle"],
+                    key="annotation_csv_variable_type", horizontal=True,
+                    format_func=lambda v: "Binaire (0/1)" if v == "binaire"
+                    else "Catégoriel")
+                modalites_ann = ""
+                if type_variable_ann == "categorielle":
+                    modalites_ann = st.text_input(
+                        "Modalités séparées par des virgules",
+                        placeholder="pacifique, confrontation, repression",
+                        key="annotation_csv_modalites")
+                if st.button("Créer cette variable", key="annotation_csv_ajouter_variable"):
+                    try:
+                        api("/api/annotation-csv/" + identifiant_ann + "/variable", {
+                            "nom": nom_variable_ann.strip(),
+                            "type_variable": type_variable_ann,
+                            "modalites": [
+                                v.strip() for v in modalites_ann.split(",") if v.strip()],
+                        })
+                    except RuntimeError as erreur:
+                        st.error("Variable refusée : " + str(erreur))
+                    else:
+                        st.success("Variable ajoutée au projet.")
+                        st.rerun()
+
+            resume_ann = next(p for p in projets_ann if p["id"] == identifiant_ann)
+            nombre_ann = int(resume_ann["nombre"])
+            taille_ann = st.selectbox(
+                "Publications par page", [25, 50, 100, 200], index=1,
+                key="annotation_csv_taille_page")
+            maximum_ann = max(1, (nombre_ann + taille_ann - 1) // taille_ann)
+            page_ann = st.number_input(
+                "Page", min_value=1, max_value=maximum_ann, value=1,
+                step=1, key="annotation_csv_page")
+            try:
+                donnees_ann = api(
+                    f"/api/annotation-csv/{identifiant_ann}"
+                    f"?page={page_ann-1}&taille={taille_ann}")
+            except RuntimeError as erreur:
+                st.error("Lecture des annotations impossible : " + str(erreur))
+            else:
+                variables_ann = donnees_ann.get("variables") or []
+                colonnes_ann = donnees_ann.get("colonnes") or []
+                noms_annotations = [v["id"] for v in variables_ann]
+                preferees_ann = [
+                    nom for nom in (
+                        donnees_ann["colonne_id"], "url", "auteur", "legende",
+                        "date_collecte", "vues", "likes", "commentaires",
+                        "partages", "favoris", "statut_resume_ia", "resume_ia_tiktok")
+                    if nom in colonnes_ann]
+                visibles_ann = st.multiselect(
+                    "Colonnes du CSV à afficher (lecture seule)", colonnes_ann,
+                    default=list(dict.fromkeys(preferees_ann)),
+                    key="annotation_csv_colonnes_visibles")
+                if donnees_ann["colonne_id"] not in visibles_ann:
+                    visibles_ann = [donnees_ann["colonne_id"], *visibles_ann]
+                if variables_ann:
+                    tableau_ann = pd.DataFrame(
+                        donnees_ann.get("lignes") or [])
+                    colonnes_editeur = list(dict.fromkeys(
+                        [*visibles_ann, *noms_annotations]))
+                    tableau_ann = tableau_ann.reindex(columns=colonnes_editeur).fillna("")
+                    st.caption(
+                        f"Page {page_ann}/{maximum_ann} · {nombre_ann} publications. "
+                        "Les valeurs Non évaluée restent distinctes de Non (0).")
+                    with st.form("annotation_csv_formulaire_" + identifiant_ann):
+                        code_ann = {
+                            v["id"]: st.column_config.SelectboxColumn(
+                                v["nom"], options=v["modalites"], required=True)
+                            for v in variables_ann
+                        }
+                        if "url" in colonnes_editeur:
+                            code_ann["url"] = st.column_config.LinkColumn("URL TikTok")
+                        tableau_modifie_ann = st.data_editor(
+                            tableau_ann, hide_index=True, use_container_width=True,
+                            num_rows="fixed",
+                            disabled=visibles_ann,
+                            column_config=code_ann,
+                            key="annotation_csv_editeur_" + identifiant_ann
+                                + "_" + str(donnees_ann["revision"])
+                                + "_" + str(page_ann),
+                        )
+                        envoyer_ann = st.form_submit_button(
+                            "Enregistrer les annotations de cette page", type="primary")
+                    if envoyer_ann:
+                        modifications_ann = [
+                            {"publication_id": str(ligne[donnees_ann["colonne_id"]]),
+                             "codages": {
+                                 nom: str(ligne[nom]) for nom in noms_annotations}}
+                            for _, ligne in tableau_modifie_ann.iterrows()
+                        ]
+                        try:
+                            api(
+                                "/api/annotation-csv/" + identifiant_ann + "/enregistrer",
+                                {"revision": donnees_ann["revision"],
+                                 "modifications": modifications_ann})
+                        except RuntimeError as erreur:
+                            st.error("Enregistrement impossible : " + str(erreur))
+                        else:
+                            st.success("Annotations enregistrées sur le serveur.")
+                            st.rerun()
+                else:
+                    st.info(
+                        "Créez une variable d'annotation pour commencer le codage.")
+                    st.dataframe(
+                        pd.DataFrame(donnees_ann.get("lignes") or [])
+                        .reindex(columns=visibles_ann),
+                        hide_index=True, use_container_width=True)
+                st.link_button(
+                    "Télécharger le CSV avec toutes les annotations",
+                    "/api/annotation-csv/" + identifiant_ann + "/export.csv",
+                    use_container_width=True)
+
+
+with onglet_multimodale:
+    st.subheader("Métrics, engagement et annotation")
+    tache_desordre=st.session_state.get('collecte') or {}
+    if tache_desordre.get('archive_prete'):
+        nom_source={
+            "presse": "Presse et médias", "comptes": "Profils",
+            "hashtags": "Hashtags",
+        }.get(tache_desordre.get("source_collecte"), "Collecte")
+        st.caption(
+            f"Source : {nom_source} · Les résultats et annotations peuvent être conservés "
+            "dans votre historique privé pendant 30 jours, sans dupliquer les fichiers MP4."
+        )
+    if not tache_desordre.get('archive_prete'):
+        if tache_desordre.get('source_collecte') == "presse" and tache_desordre.get('status') in {"failed", "partial", "stopped"}:
+            st.warning("Aucune publication Presse exploitable n'a été enregistrée. La collecte a été interrompue avant de récupérer des métadonnées ; aucun fichier ni aucune vidéo non vérifiée ne sont proposés à l'analyse.")
+        else:
+            st.info("Effectuez une collecte dans l'onglet Collecte (Presse et médias, Profils ou Hashtags).")
+    else:
+        if st.button("Enregistrer cette analyse (30 jours)",
+                     key=f"sauvegarder_desordre_{tache_desordre['id']}",
+                     disabled=bool(tache_desordre.get('busy') or tache_desordre.get('video_busy'))):
+            try:
+                confirmation_analyse=api(
+                    f"/api/jobs/{tache_desordre['id']}/desordre/sauvegarder",{}
+                )
+                if confirmation_analyse.get("ok"):
+                    st.success("Analyse et codages enregistrés dans l'historique privé.")
+                else:
+                    st.error("L'archive n'a pas été confirmée par le serveur.")
+            except RuntimeError as erreur:
+                st.error("Enregistrement de l'analyse impossible : " + str(erreur))
+        # Ne pas rafraîchir automatiquement le formulaire d'annotation une fois
+        # l'analyse terminée : l'édition des cellules doit rester stable.
+        @st.fragment(run_every='3s' if tache_desordre.get('video_busy') or tache_desordre.get('busy') else None)
+        def afficher_desordre():
+            try:
+                actuel=api(f"/api/jobs/{tache_desordre['id']}")
+                donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
+            except RuntimeError as erreur:
+                st.error(str(erreur));return
+            if (bool(actuel.get('video_busy')) != bool(tache_desordre.get('video_busy')) or
+                    bool(actuel.get('busy')) != bool(tache_desordre.get('busy'))):
+                st.session_state['collecte'] = actuel
+                st.rerun()
+            etat=donnees.get('etat',{})
+            en_cours=etat.get('statut')=='en_cours' and actuel.get('video_busy',False)
+            st.write(f"{donnees.get('publications_collectees',0)} publication(s) collectée(s) · {donnees.get('mp4_locaux',0)} MP4 présent(s) · {donnees.get('mp4_manquants',0)} MP4 manquant(s).")
+            if not donnees.get('disponible'):
+                st.warning("Le serveur doit être redéployé avec les dépendances OpenCV de Désordre visuel.")
+            elif not donnees.get('mp4_locaux') and not donnees.get('mp4_telechargeables'):
+                st.warning("Aucun MP4 associé ni URL TikTok exploitable dans cette collecte. Consultez les publications collectées.")
+            telecharger=st.checkbox("Télécharger les MP4 manquants avant l’analyse",value=True,key='desordre_telecharger',
+                help="Les MP4 déjà présents sont réutilisés. Les échecs TikTok seront indiqués par publication.")
+            activation=st.checkbox("Analyse du mouvement",key='activer_desordre',value=False)
+            with st.expander("Paramètres de cette analyse"):
+                frequence=st.number_input("Images analysées par seconde",min_value=1.,max_value=60.,value=10.,step=1.,key='frequence_desordre')
+                duree=st.number_input("Durée maximale par vidéo (secondes)",min_value=1.,max_value=3600.,value=10.,step=5.,key='duree_desordre',
+                    help="Cette valeur limite la portion analysée, et non la durée totale autorisée d’une vidéo TikTok. "
+                         "Avec 10 s : une vidéo de 6 s est analysée entièrement ; pour une vidéo de 2 min, "
+                         "seules les 10 premières secondes sont étudiées. À 10 images/s, cela représente environ "
+                         "100 images pour une vidéo d’au moins 10 s. Les boutons +/− ajustent la durée par pas de 5 secondes "
+                         "(par exemple 10, 15 ou 20 s). Conséquence méthodologique : les indicateurs "
+                         "d’une vidéo longue décrivent uniquement son début, tandis que les vidéos courtes sont "
+                         "analysées entièrement. Pour étudier une portion plus longue, augmentez cette limite "
+                         "(jusqu’à 3 600 s).")
+            indisponible=not activation or not donnees.get('disponible') or not (donnees.get('mp4_locaux') or (telecharger and donnees.get('mp4_telechargeables'))) or actuel.get('busy') or actuel.get('video_busy')
+            if st.button("Lancer l’analyse du désordre",disabled=bool(indisponible),key='lancer_desordre'):
+                lancer(f"/api/jobs/{tache_desordre['id']}/desordre",{'frequence':frequence,'duree_max':duree,'telecharger_manquants':telecharger})
+            if en_cours:
+                st.progress(min(1.,etat.get('terminees',0)/max(1,etat.get('total',0))))
+                st.write(etat.get('etape','Calcul en cours'))
+                if st.button("Arrêter l’analyse du désordre",key='arreter_desordre'):
+                    lancer(f"/api/jobs/{tache_desordre['id']}/video/stop",{})
+            elif etat.get('statut') in ('echec','interrompu'):
+                st.warning(etat.get('erreur') or etat.get('etape','Analyse interrompue'))
+            elif etat.get('statut')=='partiel':
+                st.warning("Résultats partiels : consultez les statuts et la couverture de chaque vidéo.")
+            if etat.get('erreurs_telechargement'):
+                st.warning("MP4 exclus du lot : détail des échecs de téléchargement ci-dessous.")
+                st.dataframe(etat['erreurs_telechargement'],hide_index=True)
+            resultats=donnees.get('indicateurs',[])
+            absentes=donnees.get('sans_resultat',[])
+            lignes=resultats+absentes
+            if absentes and etat.get('statut') in ('termine','partiel','echec','interrompu'):
+                st.warning(f"Analyse incomplète : {len(absentes)} publication(s) du corpus n’ont aucun résultat enregistré. Consultez les lignes sans résultat et relancez l’analyse pour les traiter.")
+            personnalises=donnees.get("codages_personnalises") or {"variables":[],"valeurs":{}}
+            variables_personnalisees=personnalises.get("variables") or []
+            valeurs_personnalisees=personnalises.get("valeurs") or {}
+            traitement_termine=not actuel.get("busy") and not actuel.get("video_busy")
+            with st.expander("Variables de codage personnalisées",expanded=not variables_personnalisees):
+                st.caption("Créez jusqu'à 20 variables binaires (ex. Symbole de l'État, Présence policière). "
+                           "Le nom reste modifiable ; les valeurs enregistrées restent associées aux mêmes vidéos.")
+                with st.form(f"desordre_creer_variable_{tache_desordre['id']}"):
+                    nom_creation=st.text_input(
+                        "Nom de la nouvelle variable",
+                        placeholder="Ex. Symbole de l'État",
+                        max_chars=70,
+                    )
+                    creer=st.form_submit_button(
+                        "Ajouter une colonne au tableau",
+                        disabled=not traitement_termine or len(variables_personnalisees)>=20,
+                    )
+                if creer:
+                    try:
+                        reponse=api(f"/api/jobs/{tache_desordre['id']}/desordre/variables",
+                                    {"nom":nom_creation})
+                        if not reponse.get("ok"):
+                            raise RuntimeError("La variable n'a pas été créée.")
+                        st.session_state['desordre_confirmation_variable']="Variable créée."
+                        st.rerun()
+                    except RuntimeError as erreur:
+                        st.error("Création impossible : "+str(erreur))
+                if variables_personnalisees:
+                    with st.form(f"desordre_renommer_variable_{tache_desordre['id']}"):
+                        choix_variable=st.selectbox(
+                            "Variable à renommer",
+                            [v["id"] for v in variables_personnalisees],
+                            format_func=lambda identifiant:next(
+                                (v["nom"] for v in variables_personnalisees if v["id"]==identifiant),
+                                identifiant),
+                        )
+                        nom_courant=next(
+                            v["nom"] for v in variables_personnalisees if v["id"]==choix_variable
+                        )
+                        nouveau_nom=st.text_input(
+                            "Nouveau nom",value=nom_courant,max_chars=70,
+                            key=f"desordre_renommer_nom_{tache_desordre['id']}_{choix_variable}",
+                        )
+                        renommer=st.form_submit_button("Renommer la variable",disabled=not traitement_termine)
+                    if renommer:
+                        try:
+                            reponse=api(
+                                f"/api/jobs/{tache_desordre['id']}/desordre/variables/{choix_variable}/renommer",
+                                {"nom":nouveau_nom},
+                            )
+                            if not reponse.get("ok"):
+                                raise RuntimeError("Le nom de la variable n'a pas été enregistré.")
+                            st.session_state['desordre_confirmation_variable']="Variable renommée ; codages conservés."
+                            st.rerun()
+                        except RuntimeError as erreur:
+                            st.error("Renommage impossible : "+str(erreur))
+                confirmation_variable=st.session_state.pop('desordre_confirmation_variable',None)
+                if confirmation_variable: st.success(confirmation_variable)
+                st.link_button(
+                    "Exporter les variables et leurs annotations (CSV)",
+                    f"/api/jobs/{tache_desordre['id']}/desordre/codages.csv",
+                )
+            if not lignes:
+                st.info("Les colonnes créées seront éditables dès que le tableau d'analyse sera disponible.")
+                return
+            total_collecte=max(donnees.get('publications_collectees',0),len(lignes))
+            st.caption(f"{len(resultats)} publication(s) avec un résultat enregistré sur {total_collecte} · {max(0,total_collecte-len(resultats))} sans résultat enregistré. Un résultat peut lui-même signaler une erreur.")
+            if etat.get('statut') not in ('termine','partiel'):
+                st.info('Résultats intermédiaires sauvegardés : les vidéos déjà traitées restent consultables, même si le lot est encore en cours ou a été interrompu.')
+            import pandas as pd
+            from analyse_desordre.presentation import AIDE_INDICE, AIDES_INDICATEURS, AIDE_SPEARMAN, AIDES_STATISTIQUES, AIDES_COLONNES, preparer_graphique, superposer_droite_regression, formater_nombre
+            tableau=pd.DataFrame(lignes)
+            # Les identifiants restent des chaînes, même au-delà de 15 chiffres.
+            tableau['publication_id']=tableau['publication_id'].astype(str)
+            valeurs_ia = donnees.get('indicateurs_ia') or {}
+            libelles_ia = {
+                'declare_par_createur': 'Déclaré par le créateur',
+                'etiquete_automatique': 'Étiquette automatique TikTok',
+            }
+            tableau['contenu_genere_ia'] = [
+                libelles_ia.get(valeurs_ia.get(identifiant), 'Non renseigné')
+                for identifiant in tableau['publication_id'].astype(str)
+            ]
+            tableau.insert(0,'numero_video',range(1,len(tableau)+1))
+            st.markdown("**Qu’est-ce que l’indice de désordre visuel ?**",help=AIDE_INDICE)
+            # Une seule grille : menus déroulants directement dans la colonne
+            # de chaque vidéo ; toutes les mesures automatiques restent protégées.
+            from analyse_desordre.annotation import modifications_depuis_tableau
+            from analyse_desordre.codages_personnalises import modifications_depuis_tableau as modifications_personnalisees
+            options_violence=('Non évaluée','Non (0)','Oui (1)')
+            etiquette_violence={None:'Non évaluée',0:'Non (0)',1:'Oui (1)'}
+            tableau_editable=tableau.copy()
+            tableau_editable.insert(1,'annotation_violence',[
+                etiquette_violence.get(
+                    None if pd.isna(valeur) else int(valeur),'Non évaluée')
+                for valeur in tableau['violence_visible']
+            ])
+            for position, variable in enumerate(variables_personnalisees,2):
+                valeurs=valeurs_personnalisees.get(variable["id"]) or {}
+                tableau_editable.insert(position,variable["id"],[
+                    etiquette_violence.get(valeurs.get(identifiant),"Non évaluée")
+                    for identifiant in tableau_editable['publication_id']
+                ])
+            colonnes_visibles=[nom for nom in tableau_editable.columns
+                              if nom!='violence_visible']
+            colonnes_annotations={"annotation_violence",*[v["id"] for v in variables_personnalisees]}
+            etat_finalise=etat.get('statut') in ('termine','partiel')
+            st.caption("Indice exploratoire de 0 à 100 — ce n’est pas un pourcentage. "
+                       "Annotez « Mouvements dans l’image » et vos colonnes personnalisées : "
+                       "1 = mouvements visibles, 0 = aucun mouvement visible, Non évaluée = manquant. "
+                       "Les anciennes annotations de violence doivent être revérifiées avant de les interpréter comme des mouvements.")
+            # Un formulaire empêche chaque sélection de provoquer un rerun
+            # de Streamlit et de remettre la colonne à « Non évaluée ».
+            # Les cellules et la ligne restent affichées jusqu'à la sauvegarde.
+            with st.form(f"desordre_annotations_{tache_desordre['id']}",clear_on_submit=False):
+                tableau_modifie=st.data_editor(
+                    tableau_editable,hide_index=True,use_container_width=True,num_rows='fixed',
+                    disabled=[nom for nom in tableau_editable.columns if nom not in colonnes_annotations]
+                             if etat_finalise else True,
+                    column_order=colonnes_visibles,
+                    column_config={
+                        **{v["id"]:st.column_config.SelectboxColumn(
+                            v["nom"],options=list(options_violence),required=True,width="medium",
+                            help="Codage manuel : Non évaluée (manquant), Non (0), Oui (1).")
+                           for v in variables_personnalisees},
+                        **{nom:st.column_config.Column(help=aide)
+                           for nom,aide in AIDES_COLONNES.items() if nom in tableau_editable},
+                        'numero_video':st.column_config.NumberColumn('N° vidéo',format='%d',
+                            help='Numéro de repérage dans cette analyse, repris dans les infobulles du graphique.'),
+                        'publication_id':st.column_config.TextColumn('ID TikTok'),
+                        'contenu_genere_ia':st.column_config.TextColumn('Généré par IA (TikTok)',
+                            help='Étiquette signalée dans les métadonnées TikTok ; Non renseigné ne signifie pas absence d’IA.'),
+                        'annotation_violence':st.column_config.SelectboxColumn(
+                            'Mouvements dans l’image',options=list(options_violence),
+                            required=True,help=AIDES_INDICATEURS['violence_visible'],width='medium'),
+                        'indice_desordre':st.column_config.NumberColumn('Indice de désordre (0–100)',help=AIDE_INDICE),
+                        'vitesse_residuelle':st.column_config.NumberColumn('Vitesse des sujets en mouvements',
+                            help=AIDES_INDICATEURS['vitesse_residuelle']),
+                        'url':st.column_config.LinkColumn('URL TikTok',help=AIDES_COLONNES['url'])
+                    },
+                    key=f"desordre_editeur_principal_{tache_desordre['id']}_{donnees.get('annotation_version','0')}"
+                )
+                bouton_enregistrement=st.form_submit_button(
+                    "Enregistrer les annotations",disabled=not etat_finalise)
+            if bouton_enregistrement:
+                try:
+                    changements_violence=modifications_depuis_tableau(
+                        tableau_editable,tableau_modifie,colonne='annotation_violence')
+                    changements_personnalises=modifications_personnalisees(
+                        tableau_editable,tableau_modifie,variables_personnalisees)
+                    if changements_violence:
+                        retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/annotations",
+                                   {'annotations':changements_violence})
+                        if not retour.get("ok"):
+                            raise RuntimeError("Le serveur n’a pas confirmé le codage des mouvements.")
+                    if changements_personnalises:
+                        retour=api(f"/api/jobs/{tache_desordre['id']}/desordre/codages",
+                                   {'annotations':changements_personnalises})
+                        if not retour.get("ok"):
+                            raise RuntimeError("Le serveur n'a pas confirmé les codages personnalisés.")
+                    if changements_violence or changements_personnalises:
+                        nouvelles_donnees=api(f"/api/jobs/{tache_desordre['id']}/desordre")
+                        confirmees={
+                            str(ligne['publication_id']):ligne.get('violence_visible')
+                            for ligne in nouvelles_donnees.get('indicateurs',[])+
+                                         nouvelles_donnees.get('sans_resultat',[])
+                        }
+                        if any(confirmees.get(ch['publication_id'],'absent') !=
+                               ch['violence_visible'] for ch in changements_violence):
+                            raise RuntimeError("La relecture ne confirme pas les annotations des mouvements.")
+                        nouveaux_codages=(nouvelles_donnees.get("codages_personnalises") or {}).get("valeurs",{})
+                        if any(nouveaux_codages.get(ch["variable_id"],{}).get(ch["publication_id"]) != ch["valeur"]
+                               for ch in changements_personnalises):
+                            raise RuntimeError("La relecture ne confirme pas les codages personnalisés.")
+                        st.session_state['desordre_dernier_enregistrement']=(
+                            tache_desordre['id'],len(changements_violence)+len(changements_personnalises))
+                        st.rerun()
+                    else:
+                        st.info("Aucune annotation modifiée.")
+                except (RuntimeError,ValueError) as erreur:
+                    st.error("Enregistrement impossible : "+str(erreur))
+            confirmation=st.session_state.pop('desordre_dernier_enregistrement',None)
+            if confirmation and confirmation[0]==tache_desordre['id']:
+                st.success(f"{confirmation[1]} annotation(s) enregistrée(s).")
+            effectif_ann=donnees.get('annotations_violence',{})
+            st.caption(f"Annotations sauvegardées : {effectif_ann.get('oui',0)} oui · "
+                       f"{effectif_ann.get('non',0)} non · "
+                       f"{effectif_ann.get('non_evaluees',len(tableau))} non évaluées.")
+            st.link_button("Exporter les annotations (CSV)",
+                f"/api/jobs/{tache_desordre['id']}/desordre/annotations.csv")
+            st.subheader("Croiser les variables")
+            indicateurs={'indice_desordre':'Indice de désordre visuel (0–100)','instabilite_camera':'Instabilité de la caméra (diagonales/s²)',
+                'entropie_directionnelle':'Entropie directionnelle (0–1)','irregularite_temporelle':'Irrégularité temporelle (0–1)',
+                'vitesse_residuelle':'Vitesse des sujets en mouvements (diagonales/s)',
+                'violence_visible':'Mouvements dans l’image — codage manuel (0/1)'}
+            engagements={'likes':'Nombre de likes','commentaires':'Nombre de commentaires','partages':'Nombre de partages','favoris':'Nombre de favoris','vues':'Nombre de vues',
+                'likes_pour_1000_vues':'Likes pour 1 000 vues','commentaires_pour_1000_vues':'Commentaires pour 1 000 vues','partages_pour_1000_vues':'Partages pour 1 000 vues'}
+            axe_x=st.selectbox("Indicateur visuel (axe horizontal)",list(indicateurs),format_func=indicateurs.get,key='desordre_x',help='Choisissez un indicateur automatique ou le codage manuel des mouvements dans l’image. Sa définition et son unité sont disponibles dans l’aide « Comprendre l’indicateur choisi » ci-dessous.')
+            autres_mesures={cle:nom for cle,nom in indicateurs.items() if cle!='violence_visible'} if axe_x=='violence_visible' else {}
+            variables_verticales={**engagements, **autres_mesures}
+            # Une nouvelle option ne doit pas rendre invalide une ancienne sélection Streamlit.
+            if st.session_state.get('desordre_y') not in variables_verticales:
+                st.session_state['desordre_y']='likes'
+            axe_y=st.selectbox("Variable à croiser (axe vertical)",list(variables_verticales),format_func=variables_verticales.get,key='desordre_y',help='Choisissez un compteur, un taux pour 1 000 vues, ou, avec le codage manuel, un indicateur automatique.')
+            st.markdown('**Comprendre la variable choisie**',
+                help=AIDES_COLONNES[axe_y] if axe_y in AIDES_COLONNES else AIDES_INDICATEURS[axe_y])
+            if axe_y in engagements:
+                st.caption("Les nombres bruts dépendent notamment de l’audience. Les taux pour 1 000 vues permettent aussi une comparaison rapportée à l’exposition.")
+            else:
+                st.caption("Comparer les deux groupes (mouvements visibles : oui/non) sur les valeurs de l’indicateur visuel automatique.")
+            afficher_droite=st.checkbox("Afficher la droite de régression linéaire",
+                value=False, key="desordre_droite_regression",
+                help="Ajoute une droite de tendance en pointillés au nuage de points, quand au moins "
+                     "trois vidéos ont deux mesures valides et qu'aucune variable n'est constante. "
+                     "Les points sont colorés selon leur position au-dessus, au-dessous ou sur la droite. "
+                     "Il s’agit de moindres carrés sur les valeurs brutes, "
+                     "pas du coefficient de Spearman (ρ), qui compare les rangs. "
+                     "Une droite ne prouve pas une causalité et peut être sensible aux valeurs extrêmes.")
+            if axe_x not in tableau or axe_y not in tableau:
+                st.info("Variable absente de ces anciens résultats : relancez l’analyse.")
+            else:
+                st.markdown("**Comprendre l’indicateur choisi**",help=AIDES_INDICATEURS[axe_x])
+                points,specification,effectifs=preparer_graphique(tableau,axe_x,axe_y,indicateurs[axe_x],variables_verticales[axe_y])
+                st.caption(f"{effectifs['videos']} vidéo(s) représentée(s) sur {total_collecte} publications collectées · {max(0,total_collecte-len(resultats))} sans résultat · {max(0,effectifs['exclues']-len(absentes))} résultat(s) sans les deux mesures valides · {effectifs['positions']} position(s) distincte(s). Un point = une vidéo ; des points très proches peuvent aussi se masquer visuellement.")
+                if effectifs['superposees']:
+                    st.info(f"{effectifs['superposees']} vidéos partagent exactement des coordonnées avec d’autres : leurs points se superposent. Survolez pour retrouver leurs numéros dans le tableau.")
+                if afficher_droite:
+                    if axe_x=='violence_visible':
+                        st.info("Droite non affichée pour le codage binaire 0/1 : comparez directement les deux groupes de vidéos.")
+                    else:
+                        specification, raison_droite = superposer_droite_regression(points, specification)
+                        if raison_droite:
+                            st.info("Droite non disponible : " + raison_droite)
+                if points.empty: st.info("Aucune publication ne possède les deux mesures nécessaires.")
+                else:
+                    st.vega_lite_chart(points,specification,use_container_width=True)
+                    st.caption(f"Axe vertical : {variables_verticales[axe_y]}. Les espaces séparent les milliers : 1 600 000 = un million six cent mille. Survolez un point pour voir son numéro, son identifiant et ses valeurs.")
+                correlation=next((r for r in donnees.get('correlations',[]) if r['indicateur']==axe_x and r['engagement']==axe_y),None)
+                if correlation and correlation.get('rho') is not None:
+                    st.markdown("**Corrélation de Spearman**",help=AIDE_SPEARMAN)
+                    for colonne,cle,libelle,decimales in zip(st.columns(4),('rho','n','p','p_ajustee_bh'),
+                            ('ρ — Spearman','Vidéos comparées','p-value','p-value ajustée'),(3,0,6,6)):
+                        colonne.metric(libelle,formater_nombre(correlation.get(cle),decimales),help=AIDES_STATISTIQUES[cle])
+                elif axe_x=='violence_visible':
+                    st.info("Pour le codage des mouvements, évaluez plusieurs vidéos dans les deux catégories (0 et 1).")
+            with st.expander("Toutes les corrélations"):
+                st.dataframe([{cle:('Vitesse des sujets en mouvements' if cle=='indicateur' and valeur=='vitesse_residuelle' else valeur) for cle,valeur in ligne.items() if cle != 'permutations'}
+                              for ligne in donnees.get('correlations',[])],hide_index=True,
+                    column_config={nom:st.column_config.Column(help=aide) for nom,aide in AIDES_STATISTIQUES.items()})
+            st.caption("Les valeurs manquantes restent absentes ; elles ne sont pas remplacées par zéro. "
+                       "Les corrélations avec les mouvements annotés sont exploratoires et calculées uniquement "
+                       "sur les annotations enregistrées, avec correction séparée pour les treize comparaisons possibles.")
+            if etat.get('statut') in ('termine','partiel'):
+                st.link_button("Corrélations avec mouvements (CSV)",
+                    f"/api/jobs/{tache_desordre['id']}/desordre/correlations_violence.csv")
+            st.link_button("Exporter le tableau complet (CSV réimportable)",
+                f"/api/jobs/{tache_desordre['id']}/desordre/tableau-complet.csv",
+                help="URL TikTok, indice de désordre, mouvements annotés, engagement, "
+                     "variables personnalisées et provenance du lot.")
+            for nom,libelle in [('indicateurs_engagement.csv','Indicateurs et engagements CSV'),('mesures_temporelles.csv','Mesures temporelles CSV'),('correlations_spearman.csv','Corrélations CSV')]:
+                if etat.get('statut') in ('termine','partiel') or nom=='indicateurs_engagement.csv':
+                    st.link_button(libelle,f"/api/jobs/{tache_desordre['id']}/desordre/export/{nom}")
+        afficher_desordre()
+
+
+with onglet_sociometrie:
+    mode_alimentation = st.radio(
+        "Origine des données sociométriques",
+        ["collecte", "csv", "engagement"],
+        key="sociometrie_origine",
+        horizontal=True,
+        format_func=lambda valeur: {
+            "collecte": "Collecte existante",
+            "csv": "Importer des CSV de commentaires",
+            "engagement": "Réseau de similarité de l'engagement",
+        }[valeur])
+    if mode_alimentation == "csv":
+        st.subheader("Analyse sociométrique à partir de fichiers CSV")
+        st.caption(
+            "Importer un ou plusieurs commentaires.csv, et facultativement "
+            "des engagement.csv pour enrichir les nœuds vidéo. Les colonnes "
+            "id et publication_id doivent être présentes dans les commentaires. "
+            "Les fichiers ne modifient ni les collectes ni PostgreSQL.")
+        fichiers_commentaires = st.file_uploader(
+            "Fichiers commentaires.csv",
+            type=["csv"], accept_multiple_files=True,
+            key="sociometrie_csv_commentaires")
+        fichiers_engagement = st.file_uploader(
+            "Fichiers engagement.csv (facultatifs)",
+            type=["csv"], accept_multiple_files=True,
+            key="sociometrie_csv_engagement")
+        if fichiers_commentaires:
+            from analyse_sociometrique.import_csv import lire_csv
+            for fichier in fichiers_commentaires:
+                try:
+                    colonnes_verifiees, lignes_verifiees = lire_csv(
+                        fichier.getvalue(), fichier.name)
+                except (ValueError, csv.Error) as erreur:
+                    st.error("Contrôle du fichier : " + str(erreur))
+                    continue
+                completes = sum(
+                    bool((ligne.get("id") or "").strip())
+                    and bool((ligne.get("publication_id") or "").strip())
+                    for ligne in lignes_verifiees)
+                st.caption(
+                    f"{fichier.name} : {len(lignes_verifiees)} ligne(s) de données, "
+                    f"{completes} commentaire(s) avec ID vidéo et ID commentaire.")
+                if not lignes_verifiees:
+                    st.warning(
+                        "Ce fichier ne contient que les en-têtes : aucun "
+                        "commentaire n'y a été enregistré. L'import ne "
+                        "peut pas construire un réseau sociométrique.")
+                elif not completes:
+                    st.warning(
+                        "Aucune ligne ne possède simultanément id et "
+                        "publication_id. Vérifiez les données exportées.")
+                else:
+                    nombre_research_csv = sum(
+                        (ligne.get("source") or "").strip() == "research_api_officielle"
+                        for ligne in lignes_verifiees)
+                    if nombre_research_csv:
+                        st.info(
+                            f"{nombre_research_csv} commentaire(s) issus de la Research API : "
+                            "l'endpoint officiel ne fournit pas de username de commentateur. "
+                            "La colonne auteur reste vide pour ces commentaires ; "
+                            "le nom affiché éventuel n'est pas un identifiant unique. "
+                            "Le graphe des réponses exploite plutôt parent_id.")
+        if st.button("Importer et vérifier les fichiers CSV",
+                     key="sociometrie_csv_valider", type="primary"):
+            from analyse_sociometrique.import_csv import preparer_import
+            try:
+                if not fichiers_commentaires:
+                    raise ValueError("Sélectionnez au moins un commentaires.csv.")
+                if (len(fichiers_commentaires) > 20
+                        or len(fichiers_engagement or []) > 20):
+                    raise ValueError("20 fichiers au maximum par catégorie.")
+                donnees_sociometriques = preparer_import(
+                    [(f.name, f.getvalue()) for f in fichiers_commentaires],
+                    [(f.name, f.getvalue()) for f in (fichiers_engagement or [])])
+            except (ValueError, UnicodeError, csv.Error) as erreur:
+                st.error("Import CSV impossible : " + str(erreur))
+            else:
+                st.session_state["sociometrie_csv_donnees"] = donnees_sociometriques
+                # Ne jamais modifier automatiquement le type de réseau choisi :
+                # les trois analyses restent accessibles, même sans auteur fiable.
+                st.success(
+                    f"{len(donnees_sociometriques['commentaires'])} commentaire(s) "
+                    f"distinct(s), {len(donnees_sociometriques['publications'])} "
+                    "vidéo(s) disponibles pour l'analyse.")
+        donnees_sociometriques = st.session_state.get("sociometrie_csv_donnees")
+        if donnees_sociometriques:
+            for diagnostic in donnees_sociometriques["diagnostics"]:
+                st.warning(diagnostic)
+            if donnees_sociometriques.get("commentaires_research"):
+                st.caption(
+                    f"Research API : {donnees_sociometriques['commentaires_research']} "
+                    "commentaire(s) sans identifiant stable de commentateur ; "
+                    f"{donnees_sociometriques.get('reponses_observees', 0)} "
+                    "lien(s) de réponse potentiel(s) dans les données importées.")
+            choix_sociometriques = {
+                "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
+                "videos_communes": "Vidéos–vidéos : commentateurs communs",
+                "reponses": "Commentaires : graphe des réponses",
+            }
+            mode_csv = st.selectbox(
+                "Type de réseau", list(choix_sociometriques),
+                format_func=lambda valeur: choix_sociometriques[valeur],
+                key="sociometrie_csv_mode")
+            seuil_csv = st.number_input(
+                "Réseau vidéos–vidéos : seuil de commentateurs communs",
+                min_value=1, max_value=1000, value=1, step=1,
+                key="sociometrie_csv_seuil",
+                disabled=mode_csv != "videos_communes",
+                help="Saisissez 2 pour ne relier que les vidéos ayant au moins "
+                     "2 commentateurs identifiables en commun, 3 pour au moins "
+                     "3, etc. La valeur s'applique au graphique et à tous les exports.")
+            if mode_csv == "videos_communes":
+                st.caption(
+                    f"Seuil retenu : au moins {int(seuil_csv)} "
+                    "commentateur(s) commun(s) entre deux vidéos.")
+            from analyse_sociometrique.import_csv import analyser_import
+            from analyse_sociometrique.reseaux import (
+                apercu, construire_dot, exporter)
+            try:
+                graphe_csv = analyser_import(
+                    donnees_sociometriques, mode_csv, int(seuil_csv))
+            except ValueError as erreur:
+                st.error("Réseau non calculable : " + str(erreur))
+            else:
+                statistiques_csv = graphe_csv["statistiques"]
+                valeurs_stats = st.columns(4)
+                valeurs_stats[0].metric(
+                    "Commentaires", statistiques_csv["commentaires_exploitables"])
+                valeurs_stats[1].metric(
+                    "Auteurs identifiés", statistiques_csv["auteurs_distincts"])
+                valeurs_stats[2].metric(
+                    "Auteurs identifiés (%)",
+                    f"{statistiques_csv['pourcentage_auteur_identifie']:.1f} %")
+                valeurs_stats[3].metric(
+                    "Liens du graphe", statistiques_csv["liens"])
+                for diagnostic in graphe_csv["diagnostics"]:
+                    if diagnostic not in donnees_sociometriques["diagnostics"]:
+                        st.warning(diagnostic)
+                if (mode_csv != "reponses"
+                        and statistiques_csv["auteurs_distincts"] == 0):
+                    st.info(
+                        "Aucun identifiant de commentateur exploitable : la Research API "
+                        "ne fournit pas de username de commentateur. "
+                        "Choisissez « Commentaires : graphe des réponses » "
+                        "pour exploiter les liens parent_id éventuellement présents.")
+                if (mode_csv == "reponses"
+                        and statistiques_csv["reponses_observees"] == 0):
+                    st.info(
+                        "Aucune réponse collectée : les commentaires isolés "
+                        "ne permettent pas de reconstruire des liens entre "
+                        "commentaires. Lors d'une nouvelle collecte, activez "
+                        "« Collecter les réponses aux commentaires ».")
+                if graphe_csv["liens"]:
+                    moteur_graphique_csv = st.radio(
+                        "Visualisation du réseau",
+                        ["PyVis (interactif)", "Graphviz (statique)"],
+                        key="sociometrie_csv_visualisation",
+                        horizontal=True,
+                    )
+                    if moteur_graphique_csv == "PyVis (interactif)":
+                        visualisation_csv = apercu(
+                            graphe_csv, max_noeuds=300, max_liens=600)
+                        try:
+                            from analyse_sociometrique.visualisation_pyvis import (
+                                html_reseau_pyvis)
+                            components.html(
+                                html_reseau_pyvis(visualisation_csv),
+                                height=640, scrolling=False)
+                        except (ImportError, ValueError, RuntimeError) as erreur:
+                            st.warning(
+                                "PyVis indisponible : affichage Graphviz. "
+                                + str(erreur))
+                            visualisation_csv = apercu(graphe_csv)
+                            st.graphviz_chart(
+                                construire_dot(visualisation_csv),
+                                use_container_width=True)
+                        st.caption(
+                            "PyVis : déplacez les nœuds, zoomez et survolez-les "
+                            "pour afficher leurs propriétés. Les auteurs "
+                            "identifiables restent pseudonymisés.")
+                    else:
+                        visualisation_csv = apercu(graphe_csv)
+                        st.graphviz_chart(
+                            construire_dot(visualisation_csv),
+                            use_container_width=True)
+                    if visualisation_csv["partiel"]:
+                        st.caption(
+                            "Aperçu partiel : tous les nœuds et liens restent "
+                            "disponibles dans les exports.")
+                    with st.expander("Détail des liens affichés"):
+                        st.dataframe(
+                            visualisation_csv["liens"], hide_index=True,
+                            use_container_width=True)
+                else:
+                    st.info("Aucune relation disponible pour ce réseau et ce seuil.")
+                st.subheader("Télécharger le réseau importé")
+                for nom, libelle, type_mime in (
+                    ("noeuds.csv", "Nœuds CSV", "text/csv"),
+                    ("liens.csv", "Liens CSV", "text/csv"),
+                    ("graphml", "GraphML", "application/xml"),
+                    ("gexf", "GEXF", "application/xml"),
+                ):
+                    st.download_button(
+                        libelle, exporter(graphe_csv, nom),
+                        file_name="sociometrie_csv_" + mode_csv + "_" + nom,
+                        mime=type_mime,
+                        key="sociometrie_csv_export_" + nom)
+                if len(graphe_csv["noeuds"]) <= 250:
+                    st.download_button(
+                        "Matrice d'adjacence CSV",
+                        exporter(graphe_csv, "matrice.csv"),
+                        file_name="sociometrie_csv_" + mode_csv + "_matrice.csv",
+                        mime="text/csv", key="sociometrie_csv_matrice")
+                else:
+                    st.caption(
+                        "Matrice limitée à 250 nœuds ; utilisez les liens CSV.")
+                st.caption(
+                    "Les identifiants d'auteurs issus de la Research API ne "
+                    "permettent pas de déduire des comptes communs. Les "
+                    "relations de réponse sont fondées exclusivement sur "
+                    "les identifiants des commentaires et de leurs parents.")
+        else:
+            st.info("Importez et vérifiez les CSV pour construire les réseaux.")
+    elif mode_alimentation == "engagement":
+        st.subheader("Réseau de similarité de l'engagement des vidéos")
+        st.caption(
+            "Importer engagement.csv, publications.csv ou un fichier de métriques "
+            "équivalent. Chaque nœud est une vidéo. Deux vidéos sont reliées "
+            "lorsque leurs profils de vues, likes, commentaires et partages "
+            "sont suffisamment proches. Ce réseau ne décrit pas les relations "
+            "sociales ni les personnes qui ont interagi avec les vidéos.")
+        fichiers_mesures = st.file_uploader(
+            "Fichiers engagement.csv ou publications.csv",
+            type=["csv"], accept_multiple_files=True,
+            key="sociometrie_engagement_csv")
+        if st.button(
+                "Importer les métriques vidéo", type="primary",
+                key="sociometrie_engagement_importer"):
+            from analyse_sociometrique.similarite_engagement import (
+                importer_engagement)
+            try:
+                if not fichiers_mesures:
+                    raise ValueError("Sélectionnez au moins un CSV de métriques.")
+                if len(fichiers_mesures) > 20:
+                    raise ValueError("20 fichiers CSV au maximum.")
+                donnees_mesures = importer_engagement([
+                    (fichier.name, fichier.getvalue())
+                    for fichier in fichiers_mesures
+                ])
+            except (ValueError, UnicodeError, csv.Error) as erreur:
+                st.error("Import des métriques impossible : " + str(erreur))
+            else:
+                st.session_state["sociometrie_engagement_donnees"] = donnees_mesures
+                # Un nouveau CSV invalide les résultats et exports précédents.
+                st.session_state["sociometrie_engagement_version"] = (
+                    st.session_state.get("sociometrie_engagement_version", 0) + 1)
+                st.session_state.pop("sociometrie_engagement_resultat", None)
+                st.session_state["sociometrie_engagement_afficher_graphe"] = False
+                st.success(
+                    f"{len(donnees_mesures['videos'])} vidéo(s) distincte(s) importée(s).")
+        donnees_mesures = st.session_state.get(
+            "sociometrie_engagement_donnees")
+        if donnees_mesures:
+            for message in donnees_mesures["diagnostics"]:
+                st.warning(message)
+            choix_mesures = {
+                "vues": "View Count — vues",
+                "likes": "Like Count — likes",
+                "commentaires": "Comment Count — commentaires",
+                "partages": "Share Count — partages",
+            }
+            selection_mesures = st.multiselect(
+                "Métriques utilisées pour calculer la similarité",
+                options=list(choix_mesures),
+                default=list(choix_mesures),
+                format_func=lambda valeur: choix_mesures[valeur],
+                key="sociometrie_engagement_variables")
+            seuil_mesures = st.slider(
+                "Seuil minimal de similarité entre vidéos",
+                min_value=0.50, max_value=0.99, value=0.75, step=0.01,
+                key="sociometrie_engagement_seuil",
+                help="Un seuil plus élevé conserve uniquement les vidéos "
+                     "aux profils statistiques les plus proches.")
+            voisins_mesures = st.slider(
+                "Nombre de voisins proposés par vidéo",
+                min_value=1, max_value=20, value=5, step=1,
+                key="sociometrie_engagement_voisins",
+                help="Chaque vidéo propose ses voisins les plus proches. "
+                     "Les liens sont ensuite rendus non orientés : une vidéo "
+                     "peut recevoir d'autres liens depuis ses voisins.")
+            limite_mesures = st.slider(
+                "Nombre maximal de vidéos à comparer",
+                min_value=50, max_value=1000, value=500, step=50,
+                key="sociometrie_engagement_limite",
+                help="Calcul limité aux premières vidéos exploitables du CSV "
+                     "pour maîtriser le coût des comparaisons deux à deux. "
+                     "Un éventuel échantillon partiel sera signalé.")
+            st.caption(
+                "Méthode : log(1 + compteur), puis centrage-réduction "
+                "de chaque variable. Similarité = 1 / (1 + distance euclidienne "
+                "quadratique moyenne). Les valeurs manquantes ne sont pas "
+                "remplacées par zéro. Les quatre indicateurs représentent "
+                "des volumes de réactions, sans identification des utilisateurs.")
+            from analyse_sociometrique.similarite_engagement import (
+                construire_reseau_engagement)
+            from analyse_sociometrique.reseaux import (
+                apercu, construire_dot, exporter)
+            # Aucun calcul n'est déclenché par les mouvements de curseur :
+            # seule l'action explicite prépare un nouveau réseau et ses exports.
+            signature_mesures = (
+                st.session_state.get("sociometrie_engagement_version", 0),
+                tuple(selection_mesures), float(seuil_mesures),
+                int(voisins_mesures), int(limite_mesures))
+            if st.button(
+                    "Calculer le réseau de similarité", type="primary",
+                    key="sociometrie_engagement_calculer"):
+                with st.spinner(
+                        "Calcul des proximités statistiques entre vidéos..."):
+                    try:
+                        nouveau_reseau = construire_reseau_engagement(
+                            donnees_mesures, selection_mesures,
+                            seuil=seuil_mesures, voisins=voisins_mesures,
+                            limite=limite_mesures)
+                    except ValueError as erreur:
+                        st.session_state.pop(
+                            "sociometrie_engagement_resultat", None)
+                        st.warning("Réseau non calculable : " + str(erreur))
+                    else:
+                        st.session_state["sociometrie_engagement_resultat"] = {
+                            "signature": signature_mesures,
+                            "reseau": nouveau_reseau,
+                        }
+                        # Ne pas lancer automatiquement une simulation PyVis
+                        # au premier calcul (risque de blocage du navigateur).
+                        st.session_state[
+                            "sociometrie_engagement_afficher_graphe"] = False
+            resultat_reseau = st.session_state.get(
+                "sociometrie_engagement_resultat")
+            if (not resultat_reseau
+                    or resultat_reseau.get("signature") != signature_mesures):
+                st.info(
+                    "Paramètres prêts : cliquez sur « Calculer le réseau de "
+                    "similarité ». Toute modification du seuil, des variables, "
+                    "des voisins ou du nombre de vidéos nécessite un nouveau "
+                    "calcul. Aucun résultat précédent n'est présenté comme actuel.")
+            else:
+                reseau_mesures = resultat_reseau["reseau"]
+                metriques_reseau = reseau_mesures["statistiques"]
+                indicateurs = st.columns(4)
+                indicateurs[0].metric(
+                    "Vidéos importées", metriques_reseau["videos_importees"])
+                indicateurs[1].metric(
+                    "Vidéos analysées", metriques_reseau["videos_analysees"])
+                indicateurs[2].metric(
+                    "Liens de similarité", metriques_reseau["liens"])
+                indicateurs[3].metric(
+                    "Variables utilisées",
+                    len(metriques_reseau["metriques_actives"]))
+                for message in reseau_mesures["diagnostics"]:
+                    st.caption(message)
+                if reseau_mesures["liens"]:
+                    st.caption(
+                        f"{metriques_reseau['comparaisons']} paires de vidéos "
+                        f"comparées ; {metriques_reseau['paires_au_seuil']} "
+                        "paires atteignent le seuil. Les arêtes exportées "
+                        "ne conservent que les voisinages les plus proches.")
+                    st.checkbox(
+                        "Afficher l'aperçu du réseau",
+                        key="sociometrie_engagement_afficher_graphe",
+                        help="Le graphique peut solliciter le navigateur. "
+                             "Désactivez l'aperçu pour conserver les résultats "
+                             "et télécharger le réseau sans le dessiner.")
+                    if st.session_state.get(
+                            "sociometrie_engagement_afficher_graphe", False):
+                        choix_affichage_mesures = st.radio(
+                            "Visualisation du réseau d'engagement",
+                            ["Graphviz (statique)", "PyVis (interactif)"],
+                            horizontal=True,
+                            key="sociometrie_engagement_visualisation")
+                        taille_apercu_mesures = st.slider(
+                            "Nombre maximal de nœuds dans l'aperçu",
+                            min_value=20, max_value=200, value=80, step=20,
+                            key="sociometrie_engagement_apercu_noeuds",
+                            help="La limite ne s'applique qu'à l'affichage. "
+                                 "Les exports contiennent le réseau complet.")
+                        graphe_affiche = apercu(
+                            reseau_mesures,
+                            max_noeuds=taille_apercu_mesures,
+                            max_liens=min(300, taille_apercu_mesures * 2))
+                        if choix_affichage_mesures == "PyVis (interactif)":
+                            try:
+                                from analyse_sociometrique.visualisation_pyvis import (
+                                    html_reseau_pyvis)
+                                components.html(
+                                    html_reseau_pyvis(graphe_affiche),
+                                    height=640, scrolling=False)
+                            except (ImportError, ValueError, RuntimeError) as erreur:
+                                st.warning(
+                                    "PyVis indisponible : Graphviz utilisé. "
+                                    + str(erreur))
+                                st.graphviz_chart(
+                                    construire_dot(graphe_affiche),
+                                    use_container_width=True)
+                        else:
+                            st.graphviz_chart(
+                                construire_dot(graphe_affiche),
+                                use_container_width=True)
+                        if graphe_affiche["partiel"]:
+                            st.caption(
+                                "Aperçu partiel : les exports conservent tous "
+                                "les nœuds et liens du réseau calculé.")
+                        with st.expander("Liens de similarité affichés"):
+                            st.dataframe(
+                                graphe_affiche["liens"], hide_index=True,
+                                use_container_width=True)
+                else:
+                    st.info(
+                        "Aucune paire de vidéos n'atteint le seuil choisi. "
+                        "Réduisez le seuil ou sélectionnez d'autres métriques.")
+                st.subheader("Exporter le réseau de similarité")
+
+                def preparer_telechargement_reseau(graphe, format_sortie):
+                    """Générer les octets seulement après un clic utilisateur."""
+                    def produire_fichier():
+                        return exporter(graphe, format_sortie)
+                    return produire_fichier
+
+                for nom, libelle, mime in (
+                    ("noeuds.csv", "Nœuds CSV", "text/csv"),
+                    ("liens.csv", "Liens CSV", "text/csv"),
+                    ("graphml", "GraphML", "application/xml"),
+                    ("gexf", "GEXF", "application/xml"),
+                ):
+                    # Streamlit 1.65 accepte un générateur différé :
+                    # ne préparer GraphML/GEXF/CSV qu'au clic de téléchargement.
+                    st.download_button(
+                        libelle,
+                        data=preparer_telechargement_reseau(
+                            reseau_mesures, nom),
+                        file_name="similarite_engagement_" + nom,
+                        mime=mime,
+                        on_click="ignore",
+                        key="sociometrie_engagement_export_" + nom)
+                if len(reseau_mesures["noeuds"]) <= 250:
+                    st.download_button(
+                        "Matrice de similarité CSV",
+                        data=preparer_telechargement_reseau(
+                            reseau_mesures, "matrice.csv"),
+                        file_name="similarite_engagement_matrice.csv",
+                        mime="text/csv",
+                        on_click="ignore",
+                        key="sociometrie_engagement_matrice")
+                else:
+                    st.caption(
+                        "Matrice limitée à 250 vidéos ; les liens CSV "
+                        "conservent tous les couples calculés.")
+        else:
+            st.info("Importez un CSV de métriques pour construire le réseau.")
+    else:
+        st.subheader("Analyse sociométrique des commentaires")
+        st.caption(
+            "Réseaux construits avec les commentaires déjà collectés. "
+            "Aucun appel supplémentaire à TikTok : les comptes observés sur les "
+            "pages publiques sont pseudonymisés ; Research conserve les liens de réponses."
+        )
+        # Les trois réseaux restent visibles même lorsque la collecte active
+        # ne dispose plus de session : ne jamais masquer leur sélection.
+        modes_reseau = {
+            "auteurs_videos": "Auteurs–vidéos : commentaires par vidéo",
+            "videos_communes": "Vidéos–vidéos : commentateurs communs",
+            "reponses": "Commentaires : graphe des réponses",
+        }
+        mode_reseau = st.radio(
+            "Type de réseau", list(modes_reseau),
+            key="sociometrie_mode", format_func=lambda m: modes_reseau[m])
+        actif_reseau = st.session_state.get("collecte") or {}
+        if not actif_reseau.get("id"):
+            st.info(
+                "Les trois analyses restent disponibles. Effectuez ou rouvrez "
+                "une collecte avec commentaires, ou choisissez « Importer des "
+                "CSV de commentaires » pour analyser des fichiers sauvegardés.")
+        else:
+            seuil_reseau = st.number_input(
+                "Réseau vidéos–vidéos : seuil de commentateurs communs",
+                min_value=1, max_value=1000, value=1, step=1,
+                disabled=mode_reseau != "videos_communes",
+                key="sociometrie_seuil",
+                help="Saisissez 2 pour ne relier que les vidéos ayant au moins "
+                     "2 commentateurs identifiables en commun, 3 pour au moins "
+                     "3, etc. La valeur s'applique au graphique et à tous les exports.")
+            if mode_reseau == "videos_communes":
+                st.caption(
+                    f"Seuil retenu : au moins {int(seuil_reseau)} "
+                    "commentateur(s) commun(s) entre deux vidéos.")
+            from urllib.parse import urlencode
+            arguments_reseau = urlencode({"mode": mode_reseau, "seuil": seuil_reseau})
+            try:
+                res_reseau = api(
+                    f"/api/jobs/{actif_reseau['id']}/sociometrie?{arguments_reseau}")
+            except RuntimeError as erreur:
+                st.warning("Analyse indisponible : " + str(erreur))
+            else:
+                stats = res_reseau["statistiques"]
+                colonnes = st.columns(4)
+                colonnes[0].metric("Commentaires", stats["commentaires_exploitables"])
+                colonnes[1].metric("Auteurs identifiés", stats["auteurs_distincts"])
+                colonnes[2].metric(
+                    "Auteurs identifiés (%)", f"{stats['pourcentage_auteur_identifie']:.1f} %")
+                colonnes[3].metric("Liens du graphe", stats["liens"])
+                if stats["commentaires_sans_auteur_fiable"]:
+                    st.info(
+                        f"{stats['commentaires_sans_auteur_fiable']} commentaire(s) sans "
+                        "identifiant d'auteur fiable. Ils sont exclus des graphes "
+                        "d'auteurs, mais les réponses observées sont utilisables."
+                    )
+                if res_reseau["analyse_en_cours"]:
+                    st.warning("Collecte en cours : résultats provisoires.")
+                for message in res_reseau["diagnostics"]:
+                    st.warning(message)
+                if stats["liens"]:
+                    moteur_graphique = st.radio(
+                        "Visualisation du réseau",
+                        ["PyVis (interactif)", "Graphviz (statique)"],
+                        key="sociometrie_collecte_visualisation",
+                        horizontal=True,
+                    )
+                    if moteur_graphique == "PyVis (interactif)":
+                        visualisation_collecte = res_reseau.get("apercu_pyvis")
+                        if visualisation_collecte:
+                            try:
+                                from analyse_sociometrique.visualisation_pyvis import (
+                                    html_reseau_pyvis)
+                                components.html(
+                                    html_reseau_pyvis(visualisation_collecte),
+                                    height=640, scrolling=False)
+                            except (ImportError, ValueError, RuntimeError) as erreur:
+                                st.warning(
+                                    "PyVis indisponible : affichage Graphviz. "
+                                    + str(erreur))
+                                st.graphviz_chart(
+                                    res_reseau["dot"], use_container_width=True)
+                        else:
+                            st.info(
+                                "Aperçu PyVis indisponible pour cette version "
+                                "du serveur : visualisation Graphviz conservée.")
+                            st.graphviz_chart(
+                                res_reseau["dot"], use_container_width=True)
+                        st.caption(
+                            "PyVis : déplacez les nœuds, zoomez et survolez-les "
+                            "pour afficher leurs propriétés. Les auteurs "
+                            "identifiables restent pseudonymisés.")
+                        apercu_partiel = (
+                            visualisation_collecte.get("partiel", False)
+                            if visualisation_collecte
+                            else res_reseau["apercu_partiel"])
+                        liens_affiches = (
+                            visualisation_collecte["liens"]
+                            if visualisation_collecte
+                            else res_reseau["apercu_liens"])
+                    else:
+                        st.graphviz_chart(
+                            res_reseau["dot"], use_container_width=True)
+                        apercu_partiel = res_reseau["apercu_partiel"]
+                        liens_affiches = res_reseau["apercu_liens"]
+                    if apercu_partiel:
+                        st.caption(
+                            "Aperçu partiel : tous les nœuds et liens restent "
+                            "disponibles dans les exports.")
+                    with st.expander("Détail des liens affichés"):
+                        st.dataframe(
+                            liens_affiches, hide_index=True,
+                            use_container_width=True)
+                elif not stats["commentaires_exploitables"]:
+                    st.info("Aucun commentaire exploitable pour cette collecte.")
+                else:
+                    st.info("Aucune relation disponible pour le type de réseau et le seuil choisis.")
+                st.subheader("Exports sociométriques")
+                st.caption(
+                    "CSV pour les nœuds, les liens pondérés et la matrice ; GraphML et "
+                    "GEXF pour Gephi, NetworkX ou igraph. Aucune identité brute n'est exportée."
+                )
+                colonnes_export = st.columns(4)
+                for colonne, (titre, nom) in zip(colonnes_export, (
+                    ("Nœuds CSV", "noeuds.csv"), ("Liens CSV", "liens.csv"),
+                    ("GraphML", "graphml"), ("GEXF", "gexf"))):
+                    colonne.link_button(
+                        titre,
+                        f"/api/jobs/{actif_reseau['id']}/sociometrie/export/"
+                        f"{nom}?{arguments_reseau}", use_container_width=True)
+                if res_reseau["matrice_disponible"]:
+                    st.link_button(
+                        "Matrice d'adjacence CSV",
+                        f"/api/jobs/{actif_reseau['id']}/sociometrie/export/"
+                        f"matrice.csv?{arguments_reseau}")
+                else:
+                    st.caption("Matrice limitée à 250 nœuds ; utilisez les liens CSV.")
+                st.caption(
+                    "Une audience commune ne démontre pas nécessairement une relation "
+                    "sociale ni une convergence d'opinions."
+                )
+    
+    
+with onglet_corpus:
+    st.subheader("Fusionner plusieurs analyses de Désordre visuel")
+    st.caption("Importez les CSV « Tableau complet » des collectes ou des archives "
+               "de l'historique. Toutes les URLs, mesures, annotations et provenances "
+               "sont conservées. Aucune vidéo n'est téléchargée.")
+    st.info("La fusion permet de recalculer les comparaisons statistiques. "
+            "L'indice de désordre et les mesures de mouvement ne sont pas recalculés : "
+            "ils proviennent des MP4 examinés dans chaque analyse d'origine.")
+    fichiers_corpus = st.file_uploader(
+        "Importer les tableaux complets CSV (20 fichiers maximum, 10 Mo chacun)",
+        type=["csv"], accept_multiple_files=True, key="fichiers_corpus_fusion",
+    )
+    choix_doublons = st.radio(
+        "Si le même ID TikTok apparaît dans plusieurs tableaux",
+        ("premier", "dernier"), horizontal=True,
+        format_func=lambda v: {"premier":"Conserver le premier",
+                                "dernier":"Conserver le dernier"}[v],
+        key="choix_doublons_corpus",
+        help="Une même vidéo compte une seule fois dans les effectifs et corrélations.")
+    if fichiers_corpus:
+        from analyse_desordre.corpus_fusion import fusionner_tableaux
+        try:
+            fusion = fusionner_tableaux([
+                (fichier.name, fichier.getvalue()) for fichier in fichiers_corpus
+            ], priorite=choix_doublons)
+        except ValueError as erreur:
+            st.error("Import impossible : " + str(erreur))
+        else:
+            c1,c2,c3 = st.columns(3)
+            c1.metric("Publications uniques",fusion["nombre_unique"])
+            c2.metric("Lignes importées",fusion["total_initial"])
+            c3.metric("Doublons écartés",fusion["doublons"])
+            if fusion["doublons_divergents"]:
+                st.warning(
+                    f"{fusion['doublons_divergents']} doublon(s) présentent des "
+                    "valeurs différentes entre les lots. Le choix de priorité "
+                    "ci-dessus détermine quelles valeurs sont conservées."
+                )
+            st.download_button(
+                "Télécharger le corpus fusionné (CSV)",
+                fusion["csv"].encode("utf-8"),
+                file_name=f"fusion_analyses_{datetime.now():%Y%m%d}.csv", mime="text/csv",
+            )
+            import pandas as pd
+            tableau_fusionne = pd.DataFrame(fusion["lignes"])
+            st.dataframe(
+                tableau_fusionne, hide_index=True, use_container_width=True,
+                column_config={
+                    "publication_id":st.column_config.TextColumn("ID TikTok"),
+                    "url":st.column_config.LinkColumn("URL TikTok"),
+                }
+            )
+            exclues = {
+                "publication_id","url","analyse_source","statut","erreur",
+                "metadonnees_presentes","parametres_frequence",
+                "parametres_dimension","parametres_duree_max",
+            }
+            numeriques = {}
+            for nom in tableau_fusionne.columns:
+                if nom in exclues:
+                    continue
+                valeurs = pd.to_numeric(
+                    tableau_fusionne[nom].replace("",None),errors="coerce")
+                if valeurs.notna().sum() >= 3:
+                    numeriques[nom] = valeurs
+            if len(numeriques) >= 2:
+                st.subheader("Nouvelles comparaisons statistiques")
+                choix_x = st.selectbox("Variable horizontale",list(numeriques),
+                    index=list(numeriques).index("indice_desordre")
+                    if "indice_desordre" in numeriques else 0,
+                    key="comparaison_corpus_x")
+                variables_y = [cle for cle in numeriques if cle != choix_x]
+                choix_y = st.selectbox("Variable verticale",variables_y,
+                    index=variables_y.index("likes") if "likes" in variables_y else 0,
+                    key="comparaison_corpus_y")
+                observations = pd.DataFrame({
+                    "publication_id":tableau_fusionne["publication_id"].astype(str),
+                    choix_x:numeriques[choix_x],
+                    choix_y:numeriques[choix_y],
+                }).dropna(subset=[choix_x,choix_y])
+                st.caption(f"{len(observations)} vidéo(s) avec deux mesures valides "
+                           f"sur {len(tableau_fusionne)} publications uniques. "
+                           "Les valeurs manquantes ne sont jamais remplacées par zéro.")
+                if not observations.empty:
+                    st.scatter_chart(observations.head(3000),x=choix_x,y=choix_y)
+                    if len(observations)>3000:
+                        st.caption("Le graphique affiche 3 000 observations au maximum ; "
+                                   "les statistiques utilisent les données complètes.")
+                if st.button("Calculer Spearman sur le corpus fusionné",
+                             key="calcul_spearman_corpus"):
+                    if len(observations)<3:
+                        st.warning("Au moins trois vidéos sont nécessaires.")
+                    else:
+                        try:
+                            if len(observations)<=2000:
+                                from analyse_desordre.statistiques import correlation_spearman
+                                statistique = correlation_spearman(
+                                    observations[choix_x],observations[choix_y],
+                                    permutations=999,graine=42)
+                            else:
+                                from scipy.stats import spearmanr
+                                import math
+                                mesure = spearmanr(observations[choix_x],
+                                                  observations[choix_y])
+                                rho,p = float(mesure.statistic),float(mesure.pvalue)
+                                statistique = {"n":len(observations),
+                                    "rho":rho if math.isfinite(rho) else None,
+                                    "p":p if math.isfinite(p) else None,
+                                    "methode":"approximation_asymptotique"}
+                            st.write({
+                                "n":statistique["n"],
+                                "ρ Spearman":statistique["rho"],
+                                "p-value":statistique["p"],
+                                "Méthode":statistique["methode"],
+                            })
+                            st.caption("Analyse exploratoire : p-value bilatérale "
+                                       "non corrigée pour les comparaisons multiples. "
+                                       "Vérifiez l'homogénéité des lots et des paramètres d'analyse.")
+                        except ImportError:
+                            st.warning("SciPy est requis pour le calcul de la corrélation.")
+            elif len(tableau_fusionne):
+                st.info("Choisissez des tableaux possédant au moins deux variables "
+                        "avec trois mesures numériques valides.")

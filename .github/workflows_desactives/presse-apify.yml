@@ -1,0 +1,73 @@
+name: ScrapTikTok - Moteur Presse Apify
+
+on:
+  push:
+    branches: [deploy-scraptiktok, deploy-tiktok]
+    paths:
+      - "collecte/presse_apify.py"
+      - "connect_presse.py"
+      - "connect_profil.py"
+      - "connect_htag.py"
+      - "collecte/presse_research.py"
+      - "collecte/researchapi.py"
+      - "tests/test_researchapi_commentaires.py"
+      - "tests/test_researchapi_abonnes.py"
+      - "collecte/variables_profil.py"
+      - "tests/test_region_verification.py"
+      - "collecte/classes_abonnes.py"
+      - "tests/test_classes_abonnes.py"
+      - "collecte/variables_numeriques.py"
+      - "tests/test_variables_numeriques.py"
+      - "tests/test_options_variables_txt.py"
+      - "analyse_sociometrique/reseaux.py"
+      - "tests/test_sociometrie.py"
+      - "requirements.txt"
+      - "collecte/exclusion_hashtags.py"
+      - "tests/test_exclusion_hashtags.py"
+      - "collecte/comptes.py"
+      - "corpus/construction.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_presse_apify.py"
+      - "stockage/collectes_research.py"
+      - "tests/test_collectes_research_programmees.py"
+      - "tests/test_connexions_modes.py"
+      - "tests/test_moteurs_hashtags_profils.py"
+      - "tests/test_hashtags_multiples.py"
+      - "collecte/selection_hashtags.py"
+      - "tests/test_presse_isolation_version.py"
+      - ".github/workflows/presse-apify.yml"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dependances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verifier la syntaxe Python
+        run: |
+          python -m compileall -q collecte/presse_apify.py connect_presse.py webapp.py streamlit_app.py tests/test_presse_apify.py
+      - name: Tester Apify sans jeton ni requete payante
+        run: python -m unittest discover -s tests -p test_presse_apify.py -v
+      - name: Tester la selection des moteurs Presse
+        run: python -m unittest discover -s tests -p test_presse_isolation_version.py -v
+      - name: Tester les moteurs Hashtags et Profils
+        run: |
+          python -m unittest discover -s tests -p test_connexions_modes.py -v
+          python -m unittest discover -s tests -p test_moteurs_hashtags_profils.py -v
+          python -m unittest discover -s tests -p test_hashtags_multiples.py -v
+          python -m unittest discover -s tests -p test_presse_research.py -v
+          python -m unittest discover -s tests -p test_collectes_research_programmees.py -v
+          python -m unittest discover -s tests -p test_researchapi_commentaires.py -v
+          python -m unittest discover -s tests -p test_researchapi_abonnes.py -v
+          python -m unittest discover -s tests -p test_region_verification.py -v
+          python -m unittest discover -s tests -p test_classes_abonnes.py -v
+          python -m unittest discover -s tests -p test_variables_numeriques.py -v
+          python -m unittest discover -s tests -p test_options_variables_txt.py -v
+          python -m unittest discover -s tests -p test_sociometrie.py -v
+          python -m unittest discover -s tests -p test_exclusion_hashtags.py -v

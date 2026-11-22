@@ -1,0 +1,765 @@
+import tempfile
+import csv
+import io
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+from fastapi.testclient import TestClient
+
+import webapp as web
+
+
+RECORD = {"id": "123", "url": "https://www.tiktok.com/@test/video/123",
+          "author": "test", "description": "Café 🍋\n#été"}
+HEADERS = {"X-ScrapTikTok": "1"}
+
+
+def waiting_runner(job):
+    job.update(status="attention", frame=b"fake-png")
+    job.stop.wait(5)
+    job.update(status="stopped", busy=False, finished=time.monotonic())
+
+
+class WebTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.manager = web.Manager(data_dir=self.directory.name, runner=waiting_runner, max_jobs=1)
+        self.app = web.create_app(self.manager)
+        self.client = TestClient(self.app)
+        self.client.__enter__()
+        self.addCleanup(self.client.__exit__, None, None, None)
+        self.client.get("/")
+
+    def start(self, client=None):
+        response = (client or self.client).post("/api/jobs", headers=HEADERS,
+                                               json={"nom_sauvegarde": "Test recherche", "hashtag": "#été", "limit": 2})
+        self.assertEqual(response.status_code, 202, response.text)
+        return response.json()["id"]
+
+    def test_french_filter_settings_persist_and_download_filename(self):
+        response = self.client.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "été", "french_only": True})
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json()["french_only"])
+        snapshot = self.client.get("/api/session").json()["job"]
+        self.assertTrue(snapshot["french_only"])
+        job = self.manager.jobs[snapshot["id"]]
+        job.records.append(RECORD)
+        job.save()
+        response = self.client.get(f"/api/jobs/{job.id}/download")
+        self.assertIn("Test_recherche.txt", response.headers["content-disposition"])
+
+    def test_option_entete_transmise_reprise_et_telechargee(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag':'été', 'inclure_metadonnees_txt':True, 'include_sources':False})
+        self.assertEqual(response.status_code, 202)
+        reprise = self.client.get('/api/session').json()['job']
+        self.assertTrue(reprise['inclure_metadonnees_txt'])
+        job = self.manager.jobs[reprise['id']]
+        job.records.append(dict(RECORD, created_at='2026-10-09T12:00:00+00:00'))
+        job.save()
+        fichier = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(fichier.status_code, 200)
+        self.assertIn('*date_2026-10-09 *profil_@test *id_'+RECORD['id'], fichier.text)
+        self.assertIn(RECORD['description'], fichier.text)
+
+    def test_choix_profil_seul_et_commentaires_dans_le_meme_telechargement(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag':'été', 'variables_txt':['profil'], 'collecter_commentaires':True,
+                  'inclure_metadonnees_txt':True, 'include_sources':True})
+        self.assertEqual(response.status_code, 202)
+        reprise = self.client.get('/api/session').json()['job']
+        self.assertEqual(reprise['variables_txt'], ['profil'])
+        job = self.manager.jobs[reprise['id']]
+        job.records.append(RECORD)
+        job.commentaires.append({'publication_id':RECORD['id'], 'texte':'Réaction conservée'})
+        job.save()
+        fichier = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(fichier.status_code, 200)
+        self.assertEqual(fichier.text, '*profil_@test\n'+RECORD['description']+'\n\nCommentaire 1 :\nRéaction conservée\n')
+
+    def test_choix_arobase_persistant_txt_apercu_et_zip_sans_doublon_compte(self):
+        from zipfile import ZipFile
+        from corpus.export_zip import exporter_zip
+        reponse = self.client.post('/api/jobs', headers=HEADERS, json={
+            'nom_sauvegarde': 'Test recherche', 'hashtag': 'manifestation', 'inclure_texte_genere_ia': True,
+            'supprimer_arobase_profil': True, 'variables_txt': ['date', 'profil']})
+        self.assertEqual(reponse.status_code, 202, reponse.text)
+        etat = self.client.get('/api/session').json()['job']
+        self.assertTrue(etat['supprimer_arobase_profil'])
+        tache = self.manager.jobs[etat['id']]
+        publication = dict(RECORD, author='baddydeadpool', created_at='2026-10-25',
+                           description='Original avec une mention @autre.',
+                           resume_ia_tiktok='Résumé IA avec une mention @autre.')
+        tache.records.append(publication)
+        tache.save()
+        texte = tache.path.read_text()
+        self.assertEqual(texte.count('*profil_baddydeadpool'), 2)
+        self.assertNotIn('*compte_', texte)
+        self.assertNotIn('*profil_@', texte)
+        self.assertEqual(texte.count('@autre'), 2)
+        apercu = self.client.get(f'/api/jobs/{tache.id}').json()['preview'][0]
+        self.assertEqual(apercu['texte_export'], texte)
+        self.assertEqual(apercu['texte_export_sans_arobase'], texte)
+        self.assertEqual(apercu['texte_export_avec_arobase'].count('*profil_@baddydeadpool'), 2)
+        tache.stop.set()
+        tache.thread.join(1)
+        tache.archive_prete = True
+        # Simuler un ancien export : le téléchargement doit le régénérer.
+        tache.path.write_text('**** *compte_baddydeadpool *profil_@baddydeadpool\nAncien texte')
+        exporter_zip(tache.directory, tache.directory / 'archive.zip')
+        archive_initiale = (tache.directory / 'archive.zip').read_bytes()
+        for choix, marqueur in [('', '*profil_baddydeadpool'),
+                               ('?supprimer_arobase_profil=true', '*profil_baddydeadpool'),
+                               ('?supprimer_arobase_profil=false', '*profil_@baddydeadpool')]:
+            fichier = self.client.get(f'/api/jobs/{tache.id}/download{choix}')
+            self.assertEqual(fichier.status_code, 200)
+            self.assertEqual(fichier.text.count(marqueur), 2)
+            self.assertNotIn('*compte_', fichier.text)
+            for historique in (False, True):
+                tache.historique = historique
+                with patch('stockage.historique_analyses.exporter_zip',
+                           return_value=io.BytesIO(archive_initiale)):
+                    archive = self.client.get(f'/api/jobs/{tache.id}/archive{choix}')
+                self.assertEqual(archive.status_code, 200, archive.text if archive.status_code != 200 else '')
+                with ZipFile(io.BytesIO(archive.content)) as zip_recu:
+                    self.assertEqual(zip_recu.read('textes.txt'), fichier.content)
+                    self.assertEqual(zip_recu.read('corpus_iramuteq.txt'), fichier.content)
+        self.assertTrue(tache.settings.supprimer_arobase_profil)
+        self.assertEqual((tache.directory / 'archive.zip').read_bytes(), archive_initiale)
+
+    def test_telechargement_ia_en_deux_segments_et_option_transmise(self):
+        response = self.client.post('/api/jobs', headers=HEADERS,
+            json={'nom_sauvegarde': 'Test recherche', 'hashtag': 'manifestation', 'inclure_texte_genere_ia': True, 'variables_txt': ['profil','id']})
+        self.assertEqual(response.status_code, 202, response.text)
+        session = self.client.get('/api/session').json()['job']
+        self.assertTrue(session['inclure_texte_genere_ia'])
+        job = self.manager.jobs[session['id']]
+        legende = "La police réprime violemment les manifestants."
+        resume = "Des tensions ont été observées entre les forces de l'ordre."
+        job.records.append(dict(RECORD, author='ulyces', description=legende,
+                                resume_ia_tiktok=resume))
+        job.save()
+        reponse = self.client.get(f'/api/jobs/{job.id}/download')
+        self.assertEqual(reponse.status_code, 200)
+        apercu=self.client.get(f'/api/jobs/{job.id}').json()['preview'][0]['texte_export']
+        self.assertEqual(apercu,reponse.text)
+        self.assertEqual(reponse.text,
+            f"**** *source_original *theme_manifestation *profil_@ulyces *id_{RECORD['id']}\n"
+            + legende + "\n\n"
+            + f"**** *source_ia *theme_manifestation *profil_@ulyces *id_{RECORD['id']}\n"
+            + resume + "\n")
+
+    def test_validation_and_csrf_guard(self):
+        self.assertEqual(self.client.post("/api/jobs", json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 403)
+        for payload in ({"hashtag": "test", "second_hashtag": "deux mots"}, {"hashtag": "test", "operator": "XOR"}, {"hashtag": "deux mots"}, {"hashtag": "test", "limit": 0}, {"hashtag": "test", "limit": 1001}):
+            response = self.client.post("/api/jobs", headers=HEADERS, json=payload)
+            self.assertEqual(response.status_code, 422)
+        self.assertEqual(len(self.manager.jobs), 0)
+
+    def test_other_session_cannot_see_control_or_download(self):
+        job_id = self.start()
+        stranger = TestClient(self.app)
+        self.addCleanup(stranger.close)
+        stranger.get("/")
+        self.assertIsNone(stranger.get("/api/session").json()["job"])
+        for suffix in ("", "/frame", "/download"):
+            self.assertEqual(stranger.get(f"/api/jobs/{job_id}{suffix}").status_code, 404)
+        for suffix in ("stop", "continue"):
+            self.assertEqual(stranger.post(f"/api/jobs/{job_id}/{suffix}", json={}, headers=HEADERS).status_code, 404)
+        response = stranger.post(f"/api/jobs/{job_id}/action", headers=HEADERS,
+                                 json={"kind": "click", "points": [{"x": 0.5, "y": 0.5}]})
+        self.assertEqual(response.status_code, 404)
+
+    def test_concurrency_limit_and_existing_job_survive_refresh(self):
+        job_id = self.start()
+        self.assertEqual(self.client.get("/api/session").json()["job"]["id"], job_id)
+        self.assertEqual(self.client.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 409)
+        stranger = TestClient(self.app)
+        self.addCleanup(stranger.close)
+        stranger.get("/")
+        self.assertEqual(stranger.post("/api/jobs", headers=HEADERS, json={"nom_sauvegarde": "Test recherche", "hashtag": "test"}).status_code, 429)
+
+    def test_utf8_text_download_and_stop_preserve_corpus(self):
+        job_id = self.start()
+        job = self.manager.jobs[job_id]
+        with job.lock:
+            job.records.append(RECORD)
+        job.save()
+        response = self.client.get(f"/api/jobs/{job_id}/download")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers["content-type"].startswith("text/plain"))
+        self.assertIn("Test_recherche.txt", response.headers["content-disposition"])
+        self.assertIn(RECORD["description"], response.content.decode("utf-8"))
+        self.client.post(f"/api/jobs/{job_id}/stop", json={}, headers=HEADERS)
+        job.thread.join(1)
+        self.assertFalse(job.busy)
+        self.assertEqual(self.client.get(f"/api/jobs/{job_id}/download").content, response.content)
+
+    def test_browser_commands_require_attention_and_valid_coordinates(self):
+        job_id = self.start()
+        job = self.manager.jobs[job_id]
+        self.assertEqual(self.client.post(f"/api/jobs/{job_id}/action", headers=HEADERS,
+                         json={"kind": "click", "points": [{"x": 2, "y": 0}]}).status_code, 422)
+        for kind in ("pointer_down", "pointer_move", "pointer_up"):
+            self.assertEqual(self.client.post(f"/api/jobs/{job_id}/action", headers=HEADERS,
+                             json={"kind": kind}).status_code, 422)
+        job.update(status="collecting")
+        self.assertEqual(self.client.post(f"/api/jobs/{job_id}/continue", headers=HEADERS, json={}).status_code, 409)
+
+    def test_exports_compteurs_et_commentaires_prives_sans_perdre_zero_ou_inconnues(self):
+        from collecte.engagement import extraire_engagement
+        identifiant = self.start()
+        job = self.manager.jobs[identifiant]
+        publication = dict(RECORD, retenue=True, langue_detection='unknown',
+            engagement=extraire_engagement({'stats': {'diggCount': 0, 'commentCount': 12, 'shareCount': '1.2K'}}))
+        job.records.append(publication)
+        job.commentaires.extend([
+            {'publication_id': '123', 'auteur': 'lecteur', 'texte': 'Très bien !'},
+            {'publication_id': '999', 'auteur': 'autre', 'texte': 'Commentaire hors sélection'},
+        ])
+        r = self.client.get(f'/api/jobs/{identifiant}/engagement.csv')
+        self.assertEqual(r.status_code, 200)
+        ligne = list(csv.DictReader(io.StringIO(r.content.decode('utf-8-sig')), delimiter=';'))[0]
+        self.assertEqual(ligne['likes'], '0')
+        self.assertEqual(ligne['vues'], '')
+        self.assertEqual(ligne['commentaires'], '12')
+        self.assertEqual(ligne['partages'], '1200')
+        self.assertEqual(ligne['partages_brut'], '1.2K')
+        self.assertNotIn('partages_estime', ligne)
+        self.assertEqual(ligne['id_'], RECORD['id'])
+        self.assertEqual(ligne['url'], RECORD['url'])
+        self.assertEqual(ligne['langue_detection'], 'unknown')
+        self.assertEqual(ligne['legende'], RECORD['description'])
+        self.assertEqual(job.snapshot()['apercu_engagement'][0]['engagement']['likes']['valeur'], 0)
+        commentaires = self.client.get(f'/api/jobs/{identifiant}/commentaires.txt')
+        self.assertEqual(commentaires.status_code, 200)
+        self.assertIn('Très bien !', commentaires.text)
+        self.assertNotIn('hors sélection', commentaires.text)
+        with TestClient(self.app) as autre:
+            autre.get('/')
+            for fichier in ('engagement.csv', 'commentaires.txt'):
+                self.assertEqual(autre.get(f'/api/jobs/{identifiant}/{fichier}').status_code, 404)
+
+    def test_expiration_stops_abandoned_job_and_removes_finished_files(self):
+        job_id = self.start()
+        job = self.manager.jobs[job_id]
+        job.last_seen -= self.manager.idle_timeout + 1
+        self.manager.cleanup()
+        job.thread.join(1)
+        self.assertTrue(job.stop.is_set())
+        job.finished -= self.manager.retention + 1
+        self.manager.cleanup()
+        self.assertNotIn(job_id, self.manager.jobs)
+        self.assertFalse(job.directory.exists())
+
+    def test_optional_access_password_protects_page_and_not_healthcheck(self):
+        with patch.dict(web.os.environ, {"APP_ACCESS_PASSWORD": "test-password", "APP_ACCESS_USER": "test"}):
+            self.assertEqual(self.client.get("/").status_code, 401)
+            with patch("urllib.request.urlopen"):
+                self.assertEqual(self.client.get("/healthz").status_code, 200)
+            self.assertEqual(self.client.get("/controle", auth=("test", "test-password")).status_code, 200)
+            self.assertEqual(self.client.get("/", headers={"Authorization": "Basic ??"}).status_code, 401)
+
+
+class WorkerTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.job = web.Job("test", web.StartRequest(hashtag="été", limit=2), Path(directory.name))
+
+    def test_plain_text_has_no_sources_when_unchecked(self):
+        self.assertEqual(web.text_export([RECORD], False), "Café 🍋\n#été\n")
+
+    def test_entete_facultatif_par_post_sans_modifier_les_legendes(self):
+        date = '2026-10-09T12:00:00+00:00'
+        premiere = dict(RECORD, created_at=date)
+        seconde = dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Oui !')
+        attendu = (f"*date_{date[:10]} *profil_@test *id_{RECORD['id']}\n{RECORD['description']}\n\n"
+                   f"*date_indetermine *profil_@autre *id_{seconde['id']}\nOui !\n")
+        for sources in (False, True):
+            self.assertEqual(web.text_export([premiere, seconde], sources, True), attendu)
+        self.assertEqual(web.text_export([premiere], True), f"*profil_@test *id_{RECORD['id']}\n{RECORD['description']}\n")
+        self.assertEqual(web.text_export([dict(premiere, description='')], True, True), '')
+
+    def test_toutes_les_combinaisons_de_variables_et_commentaires_rattaches(self):
+        from itertools import combinations
+        posts = [dict(RECORD, created_at='2026-10-09T12:00:00+00:00'),
+                 dict(RECORD, id='456', author='autre', url='https://www.tiktok.com/@autre/video/456', description='Deuxième post')]
+        commentaires = [{'publication_id':'456', 'texte':'Réaction au deuxième post'},
+                        {'publication_id':'123', 'texte':'Très bien !'},
+                        {'publication_id':'123', 'texte':'Une réponse', 'est_reponse':True},
+                        {'publication_id':'999', 'texte':'Ne doit pas apparaître'}]
+        for taille in range(4):
+            for variables in combinations(('date', 'profil', 'id'), taille):
+                with self.subTest(variables=variables):
+                    # Une sélection explicite prime aussi sur les anciennes options.
+                    texte = web.text_export(posts, True, True, list(variables), commentaires)
+                    for variable, marqueur in [('date','*date_'), ('profil','*profil_'), ('id','*id_')]:
+                        self.assertEqual(texte.count(marqueur), 2 if variable in variables else 0)
+                    self.assertEqual(('*id_'+RECORD['id']) in texte, 'id' in variables)
+                    self.assertNotIn(RECORD['url'], texte)
+                    self.assertEqual('*profil_@test' in texte, 'profil' in variables)
+                    self.assertNotIn('\n@test\n', '\n'+texte)
+                    self.assertIn(RECORD['description'], texte)
+                    self.assertLess(texte.index('Très bien !'), texte.index('Deuxième post'))
+                    self.assertGreater(texte.index('Réaction au deuxième post'), texte.index('Deuxième post'))
+                    self.assertIn('Réponse 2 :\nUne réponse', texte)
+                    self.assertNotIn('Ne doit pas apparaître', texte)
+
+    def test_commentaires_dans_txt_seulement_si_option_cochee(self):
+        self.job.records.append(RECORD)
+        self.job.commentaires.append({'publication_id':RECORD['id'], 'texte':'Un commentaire 🍋'})
+        self.job.settings.variables_txt = ['date']
+        for active in (False, True):
+            self.job.settings.collecter_commentaires = active
+            self.job.save()
+            texte = self.job.path.read_text()
+            self.assertEqual('Un commentaire 🍋' in texte, active)
+            self.assertIn('*date_indetermine', texte)
+            self.assertNotIn('*profil', texte)
+            self.assertNotIn(RECORD['url'], texte)
+
+    def test_worker_exports_and_quits_browser(self):
+        driver = Mock()
+        with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
+            web.execute_job(self.job, driver_factory=lambda args: driver)
+        self.assertEqual(self.job.status, "completed")
+        self.assertIn("Café 🍋", self.job.path.read_text())
+        driver.quit.assert_called_once()
+
+    def test_cancellation_closes_browser_and_keeps_existing_text(self):
+        self.job.records.append(RECORD)
+        driver = Mock()
+        with patch.object(web.scraper, "collect_links", side_effect=web.Stopped):
+            web.execute_job(self.job, driver_factory=lambda args: driver)
+        self.assertEqual(self.job.status, "stopped")
+        self.assertIn(RECORD["description"], self.job.path.read_text())
+        driver.quit.assert_called_once()
+
+    def test_two_hashtags_filter_exact_words_unicode_and_case(self):
+        settings = web.StartRequest(hashtag="#GRÈVE", second_hashtag="#école")
+        self.assertTrue(web.matches_hashtags("#GRÈVE #école", settings))
+        self.assertFalse(web.matches_hashtags("#grève #écolerie", settings))
+        self.assertFalse(web.matches_hashtags("#grève et école", settings))
+        settings.operator = "OR"
+        self.assertTrue(web.matches_hashtags("#ÉCOLE", settings))
+        self.assertFalse(web.matches_hashtags("#gréviste", settings))
+        self.assertEqual(settings.filename, "tiktok_GRÈVE_OU_école.txt")
+
+    def test_hashtag_variantes_accents_optionnelles_et_compteurs(self):
+        strict = web.StartRequest(hashtag="lyceen")
+        self.assertFalse(strict.variantes_accents)
+        self.assertTrue(web.matches_hashtags("Manifestation #lyceen", strict))
+        self.assertFalse(web.matches_hashtags("Manifestation #lycéen", strict))
+        self.assertFalse(web.matches_hashtags("Manifestation de lycéen", strict))
+
+        variantes = web.StartRequest(hashtag="lyceen", variantes_accents=True)
+        self.assertTrue(web.matches_hashtags("Manifestation #lycéen", variantes))
+        self.assertTrue(web.matches_hashtags("Manifestation #LycéEn", variantes))
+        self.assertFalse(web.matches_hashtags("Manifestation de lycéen", variantes))
+        self.assertFalse(web.matches_hashtags("#lycéens et #manifestation", variantes))
+        self.assertTrue(web.StartRequest(hashtag="lycéen", variantes_accents=True).rechercher_dans_texte is False)
+        self.assertTrue(web.matches_hashtags("#lyceen", web.StartRequest(
+            hashtag="lycéen", variantes_accents=True)))
+
+        or_settings = web.StartRequest(
+            hashtag="lyceen", second_hashtag="manifestation", operator="OR",
+            variantes_accents=True)
+        self.assertTrue(web.matches_hashtags("#lycéen", or_settings))
+        or_settings.operator = "AND"
+        self.assertFalse(web.matches_hashtags("#lycéen", or_settings))
+        self.assertTrue(web.matches_hashtags("#lycéen #manifestation", or_settings))
+
+    def test_hashtag_variantes_accents_filtre_les_publications_et_compte(self):
+        url = "https://www.tiktok.com/@test/video/123456"
+        publication = dict(RECORD, id="123456", url=url,
+                           description="Un rassemblement #lycéen aujourd'hui")
+        for option, attendu in ((False, 0), (True, 1)):
+            reglages = web.StartRequest(hashtag="lyceen", variantes_accents=option)
+            job = web.Job("test", reglages, self.job.directory)
+            job.base = None
+            with patch("collecte.hashtags.collecter_hashtag", return_value=[url]), \
+                 patch.object(web.scraper, "read_post", return_value=dict(publication)), \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(len(job.records), attendu)
+            self.assertEqual(job.bilan_hashtags["lyceen"], attendu)
+            self.assertEqual(job.snapshot()["variantes_accents"], option)
+            self.assertEqual(job.exportees, attendu)
+
+    def test_texte_optionnel_17octobre_et_lyceen_avec_accents(self):
+        settings = web.StartRequest(hashtag="17octobre")
+        self.assertTrue(web.matches_hashtags("#17octobre mobilisation", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation le 17 octobre au lycée", settings))
+        settings.rechercher_dans_texte = True
+        self.assertTrue(web.matches_hashtags("Manifestation le 17 octobre au lycée", settings))
+        self.assertTrue(web.matches_hashtags("Le 17octobre mobilisation", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation du 18 octobre", settings))
+        self.assertFalse(web.matches_hashtags("Manifestation des lycéens", settings))
+
+        settings = web.StartRequest(hashtag="lyceen")
+        self.assertFalse(web.matches_hashtags("Un lycéen manifeste", settings))
+        self.assertTrue(web.matches_hashtags("#lyceen manifeste", settings))
+        settings.rechercher_dans_texte = True
+        self.assertTrue(web.matches_hashtags("Un lycéen manifeste", settings))
+        self.assertTrue(web.matches_hashtags("UN LYCÉEN MANIFESTE", settings))
+        self.assertFalse(web.matches_hashtags("Des lycéens manifestent", settings))
+        self.assertFalse(web.matches_hashtags("Un ancien lyceenisme", settings))
+
+    def test_texte_sans_hashtag_est_retenu_et_exporte_si_option_active(self):
+        """Le mot dans la légende doit produire réellement une ligne dans le TXT."""
+        liens=[f"https://www.tiktok.com/@test/video/{i}" for i in (101,102,103)]
+        publications={
+            liens[0]:dict(RECORD,id="101",url=liens[0],
+                description="Un lycéen participe au rassemblement"),
+            liens[1]:dict(RECORD,id="102",url=liens[1],
+                description="Une manifestation est organisée"),
+            liens[2]:dict(RECORD,id="103",url=liens[2],
+                description="Promenade sur la plage")
+        }
+        for option,compte in ((False,0),(True,2)):
+            params=web.StartRequest(hashtag="lyceen",second_hashtag="manifestation",
+                                    operator="OR",rechercher_dans_texte=option,
+                                    french_only=False)
+            job=web.Job("test",params,self.job.directory)
+            job.base=None
+            with patch("collecte.hashtags.collecter_hashtag",side_effect=[liens,liens]), \
+                 patch.object(web.scraper,"read_post",
+                    side_effect=lambda _driver,url,*args,**kw: dict(publications[url])), \
+                 patch.object(job,"pause"):
+                web.execute_job(job,driver_factory=lambda args: Mock())
+            texte=job.path.read_text(encoding="utf-8")
+            self.assertEqual(job.exportees,compte)
+            self.assertEqual(len(job.records),compte)
+            self.assertEqual("Un lycéen participe" in texte,option)
+            self.assertEqual("Une manifestation est organisée" in texte,option)
+            self.assertNotIn("Promenade sur la plage",texte)
+
+        # Avec ET, les deux occurrences peuvent être des mots du texte sans aucun #.
+        params=web.StartRequest(hashtag="lyceen",second_hashtag="manifestation",
+                                operator="AND",rechercher_dans_texte=True,
+                                french_only=False)
+        job=web.Job("test",params,self.job.directory)
+        job.base=None
+        publication=dict(RECORD,id="104",url="https://www.tiktok.com/@test/video/104",
+                         description="Un lycéen décrit la manifestation")
+        with patch("collecte.hashtags.collecter_hashtag",return_value=[publication["url"]]), \
+             patch.object(web.scraper,"read_post",return_value=publication), \
+             patch.object(job,"pause"):
+            web.execute_job(job,driver_factory=lambda args: Mock())
+        self.assertEqual(job.exportees,1)
+        self.assertIn("Un lycéen décrit la manifestation",job.path.read_text(encoding="utf-8"))
+
+    def test_hashtag_et_texte_mixte_avec_operateur_et_ou(self):
+        settings = web.StartRequest(hashtag="lyceen", second_hashtag="manifestation",
+                                    operator="AND", rechercher_dans_texte=True)
+        self.assertTrue(web.matches_hashtags("#lyceen et manifestation pacifique", settings))
+        self.assertTrue(web.matches_hashtags("Lycéen dans une #manifestation", settings))
+        self.assertFalse(web.matches_hashtags("Une manifestation populaire", settings))
+        self.assertFalse(web.matches_hashtags("Lycéen en colère", settings))
+        settings.operator = "OR"
+        self.assertTrue(web.matches_hashtags("Une manifestation populaire", settings))
+        self.assertFalse(web.matches_hashtags("Le lycée est fermé", settings))
+
+    def test_presse_ignore_option_texte_et_aucun_hashtag(self):
+        settings = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                    rechercher_dans_texte=True)
+        self.assertFalse(settings.rechercher_dans_texte)
+        self.assertTrue(web.matches_hashtags("Publication sans hashtag", settings))
+
+    def test_reprise_api_retient_choix_recherche_texte(self):
+        response = self.client.post("/api/jobs", headers=HEADERS,
+                                    json={"nom_sauvegarde": "Test recherche", "hashtag": "lyceen", "rechercher_dans_texte": True})
+        self.assertEqual(response.status_code, 202)
+        job = self.manager.jobs[response.json()["id"]]
+        self.assertTrue(job.settings.rechercher_dans_texte)
+        self.assertTrue(job.snapshot()["rechercher_dans_texte"])
+        self.assertTrue(self.client.get("/api/session").json()["job"]["rechercher_dans_texte"])
+
+    def test_filtre_recherche_texte_preserve_le_corpus_et_les_compteurs(self):
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
+        records = {url: dict(RECORD, id=str(i), url=url, description=caption) for i, url, caption in zip(
+            (111, 222, 333), urls, ("Un lycéen participe à la manifestation", "#lyceen témoigne", "Journée à la plage"))}
+        for active, expected in ((False, 1), (True, 2)):
+            job = web.Job("test", web.StartRequest(hashtag="lyceen", rechercher_dans_texte=active), self.job.directory)
+            with patch.object(web.scraper, "collect_links", return_value=urls), \
+                 patch.object(web.scraper, "read_post", side_effect=lambda _driver, url, *a, **k: dict(records[url])), \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(job.processed, 3)
+            self.assertEqual(job.filtered, 3 - expected)
+            self.assertEqual(job.correspondances_hashtags, expected)
+            self.assertEqual(job.bilan_hashtags["lyceen"], expected)
+            self.assertEqual(job.exportees, expected)
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual(job.path.read_text(encoding="utf-8").count("lycéen"), 1 if active else 0)
+
+    def test_two_searches_deduplicate_and_export_only_matching_descriptions(self):
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111, 222, 333)]
+        records = {url: dict(RECORD, id=str(i), url=url, description=caption) for i, url, caption in zip(
+            (111, 222, 333), urls, ("#été #voyage", "#été", "#voyage"))}
+        for operator, expected in (("AND", 1), ("OR", 3)):
+            job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator), self.job.directory)
+            driver = Mock()
+            with patch.object(web.scraper, "collect_links", side_effect=[urls[:2], urls[1:]]) as discover, \
+                 patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]) as read, \
+                 patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: driver)
+            self.assertEqual(discover.call_count, 2)
+            self.assertEqual(read.call_count, 3)
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual(job.filtered, 3 - expected)
+            self.assertEqual(job.processed, 3)
+            self.assertEqual(job.status, "completed")
+            self.assertEqual(job.path.read_text().count("#été #voyage"), 1)
+
+    def test_one_inaccessible_hashtag_preserves_partial_results(self):
+        self.job.settings = web.StartRequest(hashtag="été", second_hashtag="voyage", operator="OR")
+        with patch.object(web.scraper, "collect_links", side_effect=[RuntimeError("blocked"), [RECORD["url"]]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        self.assertEqual(self.job.status, "partial")
+        self.assertEqual(self.job.search_errors, 1)
+        self.assertEqual(len(self.job.records), 1)
+
+    def test_presse_sans_hashtag_et_sans_filtre_sur_les_legendes(self):
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"], limit=2)
+        self.assertEqual(params.hashtags, [])
+        self.assertTrue(web.matches_hashtags("Une légende de presse sans aucun hashtag", params))
+        self.assertEqual(params.hashtag, "")
+        self.assertEqual(params.second_hashtag, "")
+
+        # Une ancienne requête ne doit pas réintroduire de hashtags en mode médias.
+        stale = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                 hashtag="#actualité", second_hashtag="#politique")
+        self.assertEqual(stale.hashtags, [])
+        self.assertTrue(web.matches_hashtags("Une légende indépendante", stale))
+        with self.assertRaises(ValueError):
+            web.StartRequest(source_collecte="comptes", comptes=["lemondefr"])
+        with self.assertRaises(ValueError):
+            web.StartRequest(source_collecte="hashtags")
+
+    def test_presse_deux_medias_lit_le_premier_avant_le_second(self):
+        params = web.StartRequest(
+            source_collecte="presse", medias=["lemonde", "franceinfo"],
+            limit=1, french_only=False,
+        )
+        job = web.Job("presse", params, self.job.directory)
+        job.base = None
+        urls = {
+            "lemondefr": "https://www.tiktok.com/@lemondefr/video/123456789",
+            "franceinfo": "https://www.tiktok.com/@franceinfo/video/987654321",
+        }
+        textes = {
+            url: dict(RECORD, id=url.rsplit("/", 1)[-1], url=url,
+                      author=compte, description="Actualité sans hashtag : " + compte,
+                      created_at="2026-10-20T14:00:00+00:00")
+            for compte, url in urls.items()
+        }
+        passages = []
+
+        def decouvrir(source, rapport, **options):
+            compte = source["compte"]
+            passages.append((compte, job.processed))
+            if compte == "franceinfo":
+                # Le premier TXT doit exister AVANT de chercher le deuxième média.
+                self.assertEqual(job.processed, 1)
+                self.assertIn("Actualité sans hashtag : lemondefr",
+                              job.path.read_text(encoding="utf-8"))
+            return [urls[compte]]
+
+        with patch("connect_presse.ConnexionPresse.decouvrir",
+                   side_effect=decouvrir), \
+             patch.object(web.scraper, "read_post",
+                          side_effect=lambda driver, url, *a, **kw: dict(textes[url])) as lecture, \
+             patch.object(job, "pause"):
+            web.execute_job(job, driver_factory=lambda args: Mock())
+
+        self.assertEqual(passages, [("lemondefr", 0), ("franceinfo", 1)])
+        self.assertEqual(job.processed, 2)
+        self.assertEqual(lecture.call_count, 2)
+        self.assertEqual(len(job.records), 2)
+        self.assertEqual(job.filtered, 0)
+        self.assertEqual(job.status, "completed")
+        self.assertIn("Actualité sans hashtag : franceinfo",
+                      job.path.read_text(encoding="utf-8"))
+
+    def test_connecteur_medias_transmet_un_profil_sans_hashtags(self):
+        from connect_presse import ConnexionPresse
+
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"])
+        connexion = ConnexionPresse(Mock())
+        sources = connexion.preparer_sources(params)
+        self.assertEqual([s["compte"] for s in sources], ["lemondefr"])
+        connexion.navigateur = Mock()
+        with patch("collecte.comptes.collecter_compte", return_value=[]) as collecte:
+            self.assertEqual(connexion.decouvrir(sources[0], {}), [])
+        self.assertEqual(collecte.call_args.args[2], "lemondefr")
+        self.assertEqual(collecte.call_args.kwargs["hashtags"], ())
+
+    def test_presse_ne_lit_et_n_exporte_que_les_comptes_selectionnes(self):
+        params = web.StartRequest(source_collecte="presse", medias=["lemonde"],
+                                  limit=2, french_only=False)
+        job = web.Job("presse", params, self.job.directory)
+        job.base = None
+        bon = "https://www.tiktok.com/@lemondefr/video/123456"
+        autre = "https://www.tiktok.com/@autre/video/987654"
+        texte = "Une légende journalistique sans hashtag."
+        publication = dict(RECORD, id="123456", url=bon, author="lemondefr",
+                           description=texte, created_at="2026-10-20T14:00:00+00:00")
+        with patch("connect_presse.ConnexionPresse.decouvrir", return_value=[bon, autre]), \
+             patch.object(web.scraper, "read_post", return_value=publication) as lecture, \
+             patch.object(job, "pause"):
+            web.execute_job(job, driver_factory=lambda args: Mock())
+        self.assertEqual(lecture.call_count, 1)
+        self.assertEqual(job.processed, 1)
+        self.assertEqual(len(job.records), 1)
+        self.assertIn(texte, job.path.read_text(encoding="utf-8"))
+        self.assertEqual(job.filtered, 0)
+
+    def test_une_validation_partagee_entre_sources(self):
+        for reglages in (web.StartRequest(hashtag='été', second_hashtag='voyage'),
+                        web.StartRequest(source_collecte='presse', medias=['lemonde','franceinfo'])):
+            job = web.Job('test', reglages, self.job.directory)
+            pilote = Mock()
+            validations = []
+
+            def decouvrir(navigateur, arguments, rapport, **options):
+                self.assertIs(navigateur, pilote)
+                validations.append(options['validation_initiale'])
+                if options['validation_initiale']:
+                    options['interact']('Première vérification')
+                return [RECORD['url']]
+
+            def decouvrir_profil(navigateur, arguments, compte, rapport, **options):
+                self.assertIs(navigateur, pilote)
+                validations.append(options['validation_initiale'])
+                if options['validation_initiale']:
+                    options['interact']('Première vérification')
+                return [f"https://www.tiktok.com/@{compte}/video/123"]
+
+            with patch.object(web.scraper, 'collect_links', side_effect=decouvrir), \
+                 patch('collecte.comptes.collecter_profil_public', side_effect=decouvrir_profil), \
+                 patch.object(web, 'wait_for_user') as intervention, \
+                 patch.object(web.scraper, 'read_post', return_value=RECORD), \
+                 patch.object(job, 'pause'):
+                web.execute_job(job, driver_factory=lambda args: pilote)
+            self.assertEqual(validations, [True, False])
+            intervention.assert_called_once()
+
+    def test_identical_hashtags_and_blank_second_input(self):
+        self.assertEqual(len(web.StartRequest(hashtag="été", second_hashtag="#ÉTÉ").hashtags), 1)
+        self.assertEqual(web.StartRequest(hashtag="été", second_hashtag="  ").second_hashtag, "")
+
+    def test_language_filter_combines_with_and_or_and_keeps_original_text(self):
+        captions = [
+            "Les manifestants demandent une augmentation des salaires et de meilleures conditions de travail. 🍋 #été #voyage",
+            "Today we are visiting the city and sharing our favorite places with friends. #été #voyage",
+            "#été #voyage 😀",
+            "Nous sommes réunis pour défendre nos droits et améliorer nos conditions de travail. #été",
+        ]
+        urls = [f"https://www.tiktok.com/@test/video/{i}" for i in (111,222,333,444)]
+        records = {url: dict(RECORD, url=url, description=text) for url, text in zip(urls, captions)}
+        for operator, expected in (("AND", 2), ("OR", 3)):
+            job = web.Job("test", web.StartRequest(hashtag="été", second_hashtag="voyage", operator=operator, french_only=True), self.job.directory)
+            with patch.object(web.scraper, "collect_links", return_value=urls), \
+                 patch.object(web.scraper, "read_post", side_effect=lambda d, url, *a, **k: records[url]), patch.object(job, "pause"):
+                web.execute_job(job, driver_factory=lambda args: Mock())
+            self.assertEqual(len(job.records), expected)
+            self.assertEqual((job.non_french, job.language_unknown), (1, 1))
+            self.assertEqual(job.filtered, 1 if operator == "AND" else 0)
+            self.assertIn(captions[0], job.path.read_text())
+            self.assertNotIn(captions[1], job.path.read_text())
+            self.assertIn(captions[2], job.path.read_text())
+            self.assertEqual(
+                {r['langue_detection'] for r in job.records}, {'fr', 'unknown'})
+            self.assertTrue(any(r.get('motif_non_retenue') ==
+                                'retenue_langue_indeterminee' for r in job.records))
+            self.assertTrue(job.settings.filename.endswith("_fr.txt"))
+
+    def test_disabled_language_filter_does_not_discard_short_text(self):
+        with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"), \
+             patch.object(web, "classify_description") as detect:
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        detect.assert_not_called()
+        self.assertEqual(len(self.job.records), 1)
+
+    def test_filtre_francais_conserve_les_textes_courts_indetermines(self):
+        """Une légende réellement fournie n'est pas écartée par incertitude."""
+        self.job.settings.french_only = True
+        with patch.object(web.scraper, "collect_links", return_value=[RECORD["url"]]), \
+             patch.object(web.scraper, "read_post", return_value=RECORD), patch.object(self.job, "pause"):
+            web.execute_job(self.job, driver_factory=lambda args: Mock())
+        self.assertEqual(self.job.language_unknown, 1)
+        self.assertTrue(self.job.snapshot()["can_download"])
+        self.assertIn(RECORD['description'], self.job.path.read_text())
+        self.assertIn("langue indéterminée conservée(s)", self.job.message)
+        self.assertEqual(self.job.records[0]["langue_detection"], "unknown")
+        self.assertEqual(self.job.records[0]["motif_non_retenue"],
+                         "retenue_langue_indeterminee")
+        self.assertEqual(self.job.status, "completed")
+
+    def test_live_action_acknowledged_after_execution_and_reports_failure(self):
+        for failure in (False, True):
+            driver = Mock()
+            driver.execute_script.return_value = False
+            driver.get_screenshot_as_png.return_value = b"png"
+            command = web.LiveAction(web.BrowserAction(kind="pointer_down", points=[web.Point(x=.2, y=.3)]))
+            self.job.commands.put(command)
+            self.job.commands.put("continue")
+            def perform(*args):
+                self.assertFalse(command.done.is_set())
+                if failure:
+                    raise web.scraper.WebDriverException("unavailable")
+            with patch.object(web, "perform_action", side_effect=perform), patch.object(web, "release_pointer") as release:
+                web.wait_for_user(driver, self.job, "Vérifiez TikTok")
+            self.assertTrue(command.done.is_set())
+            self.assertEqual(bool(command.error), failure)
+            release.assert_called_once_with(driver)
+
+    def test_captcha_seul_bloque_la_confirmation(self):
+        driver = Mock(); etat = {'captcha': True}
+        driver.get_screenshot_as_png.return_value = b'png'
+        driver.execute_script.side_effect = lambda code: ('captcha' if etat['captcha'] else '') if code == web.scraper.TYPE_INTERVENTION_JS else []
+        self.job.commands.put('continue')
+        self.job.commands.put(web.BrowserAction(kind='key', key='Tab'))
+        self.job.commands.put('continue')
+        def observer(*arguments):
+            self.assertEqual(self.job.snapshot()['type_intervention'], 'captcha')
+            self.assertIn('CAPTCHA', self.job.snapshot()['action_error'])
+            etat['captcha'] = False
+        with patch.object(web,'perform_action',side_effect=observer), patch.object(web,'release_pointer'), patch.object(web.scraper,'fermer_invitation_connexion'):
+            web.wait_for_user(driver, self.job, 'TikTok demande une vérification')
+
+    def test_identification_tiktok_n_est_jamais_exigee_pour_continuer(self):
+        driver = Mock()
+        driver.get_screenshot_as_png.return_value = b'png'
+        driver.execute_script.side_effect = lambda code: 'connexion' if code == web.scraper.TYPE_INTERVENTION_JS else False
+        self.job.commands.put('continue')
+        with patch.object(web,'release_pointer'), patch.object(web.scraper,'fermer_invitation_connexion') as fermer:
+            web.wait_for_user(driver, self.job, 'Accès anonyme limité')
+        fermer.assert_called_once_with(driver)
+        self.assertEqual(self.job.frame, b'')
+        self.assertEqual(self.job.action_error, '')
+
+    def test_attention_loop_processes_actions_before_continuing(self):
+        driver = Mock()
+        driver.execute_script.return_value = False
+        driver.get_screenshot_as_png.return_value = b"png"
+        self.job.commands.put(web.BrowserAction(kind="key", key="Enter"))
+        self.job.commands.put("continue")
+        with patch.object(web, "perform_action") as action:
+            web.wait_for_user(driver, self.job, "Vérifiez TikTok")
+        action.assert_called_once()
+        self.assertEqual(self.job.frame, b"")
+        self.assertEqual(self.job.status, "starting")
+
+
+if __name__ == "__main__":
+    unittest.main()
+

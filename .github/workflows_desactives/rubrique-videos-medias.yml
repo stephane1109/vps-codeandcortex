@@ -1,0 +1,42 @@
+name: ScrapTikTok - Rubrique Vidéos médias
+
+on:
+  pull_request:
+    paths:
+      - "collecte/profil_selenium.py"
+      - "collecte/reseau_profils.py"
+      - "tests/test_rubrique_videos_medias.py"
+      - ".github/workflows/rubrique-videos-medias.yml"
+  push:
+    paths:
+      - "collecte/profil_selenium.py"
+      - "collecte/reseau_profils.py"
+      - "tests/test_rubrique_videos_medias.py"
+      - ".github/workflows/rubrique-videos-medias.yml"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q collecte/profil_selenium.py collecte/reseau_profils.py tests/test_rubrique_videos_medias.py
+      - name: Vérifier la syntaxe JS du contrôle de l'onglet
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from collecte.profil_selenium import ONGLET_PUBLICATIONS_JS
+          Path('/tmp/onglet-tiktok.js').write_text(
+              'function naviguerVersPublications() {\n' + ONGLET_PUBLICATIONS_JS + '\n}\n'
+          )
+          PY
+          node --check /tmp/onglet-tiktok.js
+      - name: Tester les parcours médias et l'ancienne pagination
+        run: |
+          python -m unittest discover -s tests -p test_rubrique_videos_medias.py -v
+          python -m unittest discover -s tests -p test_pagination_profils.py -v

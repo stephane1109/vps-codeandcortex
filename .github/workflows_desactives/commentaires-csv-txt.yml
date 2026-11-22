@@ -1,0 +1,35 @@
+name: ScrapTikTok - Choix TXT ou CSV des commentaires
+
+on:
+  push:
+    branches: [deploy-scraptiktok]
+    paths:
+      - "streamlit_app.py"
+      - "webapp.py"
+      - "corpus/construction.py"
+      - "corpus/export_zip.py"
+      - "tests/test_export_commentaires_csv_ou_txt.py"
+      - ".github/workflows/commentaires-csv-txt.yml"
+  workflow_dispatch:
+
+jobs:
+  tests-commentaires:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe
+        run: |
+          python -m compileall -q streamlit_app.py webapp.py corpus tests/test_export_commentaires_csv_ou_txt.py
+      - name: Vérifier le choix TXT ou CSV
+        run: python -m unittest discover -s tests -p test_export_commentaires_csv_ou_txt.py -v
+      - name: Vérifier la compatibilité des exports TXT
+        run: python -m unittest discover -s tests -p test_format_txt.py -v
+      - name: Vérifier les commentaires déjà collectés
+        run: python -m unittest discover -s tests -p test_commentaires.py -v
+      - name: Vérifier les ZIP et PostgreSQL
+        run: python -m unittest discover -s tests -p test_export_zip_postgres.py -v

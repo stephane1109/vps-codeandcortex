@@ -1,0 +1,61 @@
+"""Archive des exports ; profils navigateur et base globale exclus."""
+from pathlib import Path
+from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
+
+def exporter_zip(dossier, destination, inclure_medias=False, *, inclure_mp4=False,
+                 commentaires_csv_uniquement=False):
+    dossier = Path(dossier).resolve(); destination = Path(destination).resolve()
+    temporaire = destination.with_suffix(".zip.tmp")
+    with ZipFile(temporaire, "w", ZIP_DEFLATED) as archive:
+        for chemin in sorted(dossier.rglob("*")):
+            if not chemin.is_file() or chemin.is_symlink() or chemin.resolve() in {destination, temporaire}: continue
+            relatif = chemin.relative_to(dossier)
+            if (commentaires_csv_uniquement and relatif.as_posix() in {
+                    "commentaires.txt", "corpus_commentaires_iramuteq.txt",
+                    "commentaires.json"}):
+                # Le JSON interne reste disponible pour l'historique, les réseaux
+                # et PostgreSQL. Il n'est pas exporté en mode CSV uniquement.
+                continue
+            if not inclure_medias and relatif.parts[0] in {"videos", "images", "audio"}:
+                if not (inclure_mp4 and relatif.parts[0] == "videos" and len(relatif.parts) == 2 and chemin.suffix == ".mp4"):
+                    continue
+            if chemin.suffix not in {".txt", ".csv", ".json", ".mp4", ".jpg", ".wav"}: continue
+            archive.write(chemin, relatif.as_posix(), compress_type=ZIP_STORED if chemin.suffix == ".mp4" else ZIP_DEFLATED)
+    temporaire.replace(destination)
+    return destination
+
+
+def archive_avec_texte(chemin, contenu_txt, fichiers_supplementaires=None, *,
+                       commentaires_csv_uniquement=False):
+    """Réunir les résultats dans un seul ZIP en actualisant les TXT principaux.
+
+    Les fichiers supplémentaires (commentaires et diagnostic) sont inclus
+    sans supprimer les autres exports déjà présents dans l'archive.
+    """
+    from shutil import copyfileobj
+    from tempfile import SpooledTemporaryFile
+    # Au-delà de 8 Mio, utiliser un fichier temporaire pour ménager la mémoire du VPS.
+    flux = SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+    try:
+        ajouts = dict(fichiers_supplementaires or {})
+        with ZipFile(chemin, "r") as source, ZipFile(flux, "w", ZIP_DEFLATED) as cible:
+            fichiers_remplaces = {"textes.txt", "corpus_iramuteq.txt", *ajouts}
+            if commentaires_csv_uniquement:
+                fichiers_remplaces.update({
+                    "commentaires.txt", "corpus_commentaires_iramuteq.txt",
+                    "commentaires.json"})
+            for entree in source.infolist():
+                if entree.filename in fichiers_remplaces:
+                    continue
+                with source.open(entree) as lecture, cible.open(entree, "w") as ecriture:
+                    copyfileobj(lecture, ecriture, length=1024 * 1024)
+            for nom in ("textes.txt", "corpus_iramuteq.txt"):
+                cible.writestr(nom, contenu_txt)
+            for nom, contenu in ajouts.items():
+                if nom not in {"textes.txt", "corpus_iramuteq.txt"}:
+                    cible.writestr(nom, contenu)
+        flux.seek(0)
+        return flux
+    except Exception:
+        flux.close()
+        raise

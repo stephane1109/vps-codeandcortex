@@ -1,0 +1,32 @@
+name: ScrapTikTok - Variables personnalisées Désordre visuel
+
+on:
+  push:
+    paths:
+      - "analyse_desordre/codages_personnalises.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_codages_personnalises.py"
+      - ".github/workflows/desordre-codages.yml"
+  pull_request:
+    paths:
+      - "analyse_desordre/codages_personnalises.py"
+      - "webapp.py"
+      - "streamlit_app.py"
+      - "tests/test_codages_personnalises.py"
+      - ".github/workflows/desordre-codages.yml"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Installer les dépendances de test
+        run: python -m pip install -r requirements-dev.txt
+      - name: Vérifier la syntaxe
+        run: python -m compileall -q analyse_desordre/codages_personnalises.py webapp.py streamlit_app.py tests/test_codages_personnalises.py
+      - name: Tester les variables SHS et leur persistance
+        run: python -m unittest discover -s tests -p test_codages_personnalises.py -v
