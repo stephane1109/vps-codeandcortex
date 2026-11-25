@@ -775,15 +775,7 @@ tracer_afc_classes_termes <- function(
     )
     x_lab <- coords$x
     y_lab <- coords$y
-    # Les segments rattachent les étiquettes déplacées aux positions AFC fixes.
-    deplaces <- is.finite(x_lab) & is.finite(y_lab) &
-      (abs(x_lab - x_m) > 1e-10 | abs(y_lab - y_m) > 1e-10)
-    if (any(deplaces)) {
-      graphics::segments(
-        x_m[deplaces], y_m[deplaces], x_lab[deplaces], y_lab[deplaces],
-        col = "gray65", lwd = 0.6
-      )
-    }
+    # La méthode classique n'ajoute aucune ligne de liaison aux étiquettes.
   }
 
   points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
@@ -1335,15 +1327,7 @@ tracer_afc_variables_etoilees <- function(
     )
     x_lab <- coords$x
     y_lab <- coords$y
-    # Les segments rattachent les étiquettes déplacées aux positions AFC fixes.
-    deplaces <- is.finite(x_lab) & is.finite(y_lab) &
-      (abs(x_lab - x_m) > 1e-10 | abs(y_lab - y_m) > 1e-10)
-    if (any(deplaces)) {
-      graphics::segments(
-        x_m[deplaces], y_m[deplaces], x_lab[deplaces], y_lab[deplaces],
-        col = "gray65", lwd = 0.6
-      )
-    }
+    # La méthode classique n'ajoute aucune ligne de liaison aux étiquettes.
   }
 
   points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
