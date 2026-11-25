@@ -282,6 +282,7 @@ const suiviConfigSourceCards = Array.from(document.querySelectorAll("[data-suivi
 const resultContainers = {
   chdDendrogramme: document.getElementById("chdDendrogramme"),
   chdStatsTable: document.getElementById("chdStatsTable"),
+  chdPerformances: document.getElementById("chdPerformances"),
   chdConcordancier: document.getElementById("chdConcordancier"),
   chdWordclouds: document.getElementById("chdWordclouds"),
   afcClassesPlot: document.getElementById("afcClassesPlot"),
@@ -8480,6 +8481,7 @@ function renderAnalysisDiagnostic(message, navigationTarget = "resultats_chd") {
     containers = [
       resultContainers.chdDendrogramme,
       resultContainers.chdStatsTable,
+      resultContainers.chdPerformances,
       resultContainers.chdConcordancier,
       resultContainers.chdWordclouds,
       resultContainers.afcClassesPlot,
@@ -12496,6 +12498,16 @@ async function renderExports(entries, index) {
       }
     }
 
+    await renderCsvFromFile(
+      resultContainers.chdPerformances,
+      findFile(index, [(path) => path.endsWith("journal_performances_chd.csv")]),
+      {
+        title: "journal_performances_chd.csv",
+        maxRows: 100,
+        emptyMessage: "Aucun journal de performances disponible. Relancez une analyse CHD pour générer les mesures."
+      }
+    );
+
     const concordancierFile = findFile(index, [
       (path) => path.endsWith("segments_par_classe.html"),
       (path) => path.endsWith("concordancier.html"),
@@ -12682,6 +12694,7 @@ function resetResultPanes() {
   const messages = {
     chdDendrogramme: "Chargez un dossier d'exports pour afficher les dendrogrammes CHD.",
     chdStatsTable: "Chargez un dossier d'exports pour afficher les statistiques CHD.",
+    chdPerformances: "Chargez un dossier d'exports pour afficher les performances CHD.",
     chdConcordancier: "Chargez un dossier d'exports pour afficher le concordancier HTML.",
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",
     afcClassesPlot: "Chargez un dossier d'exports pour afficher l'AFC des classes.",
