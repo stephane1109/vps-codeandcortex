@@ -1830,6 +1830,14 @@ progress {
   cursor: zoom-in;
 }
 
+/* Les graphiques des classes et des termes extrêmes ont la même géométrie. */
+/* Cette règle harmonise également les anciennes images déjà exportées. */
+#afcClassesPlot .result-image,
+#afcExtremesPlot .result-image {
+  aspect-ratio: 9 / 7;
+  object-fit: contain;
+}
+
 #afcClassesPlot .result-image.is-afc-zoomed,
 #afcTermsPlot .result-image.is-afc-zoomed,
 #afcExtremesPlot .result-image.is-afc-zoomed,
