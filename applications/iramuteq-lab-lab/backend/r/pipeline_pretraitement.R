@@ -502,7 +502,9 @@ preparer_corpus_avant_segmentation_iramuteq3 <- function(corpus_importe, config)
     compatibilite_corpus_iramuteq = scalar_bool(config$labbe_pretraitement_iramuteq, FALSE)
   )
   corpus_prepare <- corpus_importe
-  quanteda::texts(corpus_prepare) <- textes
+  # quanteda >= 3 : remplacer les textes par l'opérateur [<-.
+  # Les identifiants et les métadonnées du corpus sont conservés.
+  corpus_prepare[] <- textes
   log_info("IRaMuTeQ 3.0 : nettoyage et expressions réalisés avant le découpage.", progress = 16)
   list(corpus = corpus_prepare,
        expressions_actives_df = expressions$expressions_actives_df,

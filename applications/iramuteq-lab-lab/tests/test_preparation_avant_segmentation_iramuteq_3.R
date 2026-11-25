@@ -28,6 +28,11 @@ config <- list(source_dictionnaire = "lexique_fr",
 
 preparation <- preparer_corpus_avant_segmentation_iramuteq3(corpus, config)
 texte <- as.character(preparation$corpus)[[1L]]
+# Le remplacement des textes ne modifie ni les identifiants ni les métadonnées.
+stopifnot(identical(quanteda::docnames(preparation$corpus),
+                    quanteda::docnames(corpus)))
+stopifnot(identical(quanteda::docvars(preparation$corpus, "*theme"),
+                    quanteda::docvars(corpus, "*theme")))
 stopifnot(grepl("salut monde , bonjour !", texte, fixed = TRUE))
 stopifnot(grepl("j'aime .", texte, fixed = TRUE))
 stopifnot(identical(as.character(corpus)[[1L]], "SALUT MONDE, bonjour! J'aime."))
