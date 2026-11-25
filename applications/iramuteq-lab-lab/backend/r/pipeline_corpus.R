@@ -66,6 +66,85 @@ import_corpus_iramuteq <- function(chemin_fichier) {
 
   quanteda::corpus(base_df, text_field = "text")
 }
+# Découpage indexé : chaque token est examiné une seule fois pour déterminer
+# son type, puis les frontières sont recherchées uniquement à la taille cible.
+# Cette fonction conserve les priorités et les départages du code précédent.
+.segmenter_ponctuation_indices <- function(tok, taille_segment, supprimer_ponctuation = FALSE) {
+  nb_tokens <- length(tok)
+  if (nb_tokens == 0L) return(character(0))
+
+  est_ponctuation <- grepl("^[[:punct:]]+$", tok)
+  rangs <- rep.int(4L, nb_tokens)
+  rangs[est_ponctuation & grepl("^[.!?…]+$", tok)] <- 1L
+  rangs[est_ponctuation & grepl("^[;:]+$", tok)] <- 2L
+  rangs[est_ponctuation & grepl("^[,]+$", tok)] <- 3L
+
+  # Une position préfixe permet de compter les mots sans reparcourir
+  # l'ensemble des tokens déjà analysés à chaque nouveau mot.
+  comptes_cumules <- c(0L, cumsum(as.integer(!est_ponctuation & tok != "__NL_SEG_BREAK__")))
+  seuil_candidat <- max(1L, floor(taille_segment * 0.5))
+
+  segments <- character(max(1L, ceiling(nb_tokens / taille_segment)))
+  nb_segments <- 0L
+  debut_segment <- 1L
+
+  ajouter_segment <- function(debut, fin) {
+    if (debut > fin) return(invisible(NULL))
+    mots <- tok[seq.int(debut, fin)]
+    mots <- mots[mots != "__NL_SEG_BREAK__"]
+    if (isTRUE(supprimer_ponctuation)) {
+      mots <- mots[!grepl("^[[:punct:]]+$", mots)]
+    }
+    texte <- paste(mots, collapse = " ")
+    if (!nzchar(texte)) return(invisible(NULL))
+    nb_segments <<- nb_segments + 1L
+    if (nb_segments > length(segments)) {
+      segments <<- c(segments, character(max(1L, length(segments))))
+    }
+    segments[[nb_segments]] <<- texte
+    invisible(NULL)
+  }
+
+  for (position in seq_len(nb_tokens)) {
+    if (identical(tok[[position]], "__NL_SEG_BREAK__")) {
+      # Conserver le traitement existant des retours à la ligne.
+      if (debut_segment < position) {
+        ajouter_segment(debut_segment, position - 1L)
+      }
+      debut_segment <- position + 1L
+      next
+    }
+
+    # Contrairement à l'ancienne version, la recherche n'est déclenchée
+    # que lorsque le nombre de mots atteint la taille demandée.
+    while (debut_segment <= position &&
+           comptes_cumules[[position + 1L]] - comptes_cumules[[debut_segment]] >= taille_segment) {
+      positions <- seq.int(debut_segment, position)
+      comptes <- comptes_cumules[positions + 1L] - comptes_cumules[[debut_segment]]
+      candidats <- which(comptes >= seuil_candidat)
+      if (!length(candidats)) candidats <- seq_along(positions)
+
+      # Priorité : ponctuation, distance à la taille cible, position la plus à droite.
+      ordre <- order(
+        rangs[positions[candidats]],
+        abs(comptes[candidats] - taille_segment),
+        -positions[candidats]
+      )
+      position_coupure <- positions[candidats[ordre[[1L]]]]
+      ajouter_segment(debut_segment, position_coupure)
+      debut_segment <- position_coupure + 1L
+    }
+  }
+
+  # Le reliquat final peut être inférieur à la taille cible.
+  if (debut_segment <= nb_tokens) {
+    ajouter_segment(debut_segment, nb_tokens)
+  }
+
+  if (!nb_segments) return(character(0))
+  segments[seq_len(nb_segments)]
+}
+
 split_segments <- function(corpus,
                            segment_size = 40,
                            remove_punct = FALSE,
@@ -77,12 +156,11 @@ split_segments <- function(corpus,
   docs <- as.character(corpus)
   dn <- as.character(quanteda::docnames(corpus))
   if (!length(dn) || any(!nzchar(dn))) dn <- paste0("doc_", seq_along(docs))
-
-  out_text <- character(0)
-  out_id <- character(0)
-  out_src <- character(0)
-  out_docvars <- list()
   dv_in <- tryCatch(quanteda::docvars(corpus), error = function(e) NULL)
+
+  # Conserver l'ordre des textes et les options de tokenisation existantes,
+  # sans multiplier les concaténations de vecteurs pour chaque nouveau segment.
+  textes_par_document <- vector("list", length(docs))
 
   for (i in seq_along(docs)) {
     if (isTRUE(force_split_on_strong_punct)) {
@@ -99,104 +177,13 @@ split_segments <- function(corpus,
       tok <- tok[nzchar(tok)]
       if (!length(tok)) next
 
-      seg_tokens <- character(0)
-      seg_idx <- 0L
-
-      append_segment <- function(tokens_to_write) {
-        seg <- paste(tokens_to_write, collapse = " ")
-        if (!nzchar(seg)) return(invisible(NULL))
-        seg_idx <<- seg_idx + 1L
-        out_text <<- c(out_text, seg)
-        out_id <<- c(out_id, paste0(dn[[i]], "_seg", seg_idx))
-        out_src <<- c(out_src, dn[[i]])
-        if (!is.null(dv_in) && nrow(dv_in) >= i) {
-          out_docvars[[length(out_docvars) + 1L]] <<- dv_in[i, , drop = FALSE]
-        } else {
-          out_docvars[[length(out_docvars) + 1L]] <<- NULL
-        }
-      }
-
-      rank_boundary <- function(token) {
-        if (!nzchar(token)) return(4L)
-        if (grepl("^[.!?…]+$", token)) return(1L)
-        if (grepl("^[;:]+$", token)) return(2L)
-        if (grepl("^[,]+$", token)) return(3L)
-        4L
-      }
-
-      compute_state <- function(tokens_vec) {
-        candidates <- list()
-        non_punct_count <- 0L
-        for (idx_tok in seq_along(tokens_vec)) {
-          tk2 <- tokens_vec[[idx_tok]]
-          if (identical(tk2, "__NL_SEG_BREAK__")) next
-          is_punct2 <- grepl("^[[:punct:]]+$", tk2)
-          if (!isTRUE(is_punct2)) non_punct_count <- non_punct_count + 1L
-          boundary_rank <- if (isTRUE(is_punct2)) rank_boundary(tk2) else 4L
-          candidates[[length(candidates) + 1L]] <- list(pos = idx_tok, count = non_punct_count, rank = boundary_rank)
-        }
-        list(candidates = candidates, non_punct_count = non_punct_count)
-      }
-
-      choose_boundary <- function(candidates, target_size) {
-        if (!length(candidates)) return(NULL)
-        min_count <- max(1L, floor(target_size * 0.5))
-        cand_ok <- Filter(function(x) x$count >= min_count, candidates)
-        if (!length(cand_ok)) cand_ok <- candidates
-        ord <- order(
-          vapply(cand_ok, function(x) x$rank, integer(1)),
-          vapply(cand_ok, function(x) abs(x$count - target_size), integer(1)),
-          -vapply(cand_ok, function(x) x$pos, integer(1))
-        )
-        cand_ok[[ord[[1]]]]
-      }
-
-      flush_by_policy <- function() {
-        state <- compute_state(seg_tokens)
-        while (state$non_punct_count >= segment_size && length(state$candidates) > 0) {
-          best <- choose_boundary(state$candidates, segment_size)
-          if (is.null(best)) break
-          write_tokens <- seg_tokens[seq_len(best$pos)]
-          write_tokens <- write_tokens[write_tokens != "__NL_SEG_BREAK__"]
-          if (isTRUE(remove_punct)) {
-            write_tokens <- write_tokens[!grepl("^[[:punct:]]+$", write_tokens)]
-          }
-          append_segment(write_tokens)
-          if (best$pos < length(seg_tokens)) {
-            seg_tokens <<- seg_tokens[(best$pos + 1L):length(seg_tokens)]
-          } else {
-            seg_tokens <<- character(0)
-          }
-          state <- compute_state(seg_tokens)
-        }
-      }
-
-      for (k in seq_along(tok)) {
-        tk <- tok[[k]]
-        if (identical(tk, "__NL_SEG_BREAK__")) {
-          flush_by_policy()
-          if (length(seg_tokens) > 0) {
-            remain_tokens <- seg_tokens[seg_tokens != "__NL_SEG_BREAK__"]
-            if (isTRUE(remove_punct)) {
-              remain_tokens <- remain_tokens[!grepl("^[[:punct:]]+$", remain_tokens)]
-            }
-            append_segment(remain_tokens)
-            seg_tokens <- character(0)
-          }
-          next
-        }
-        seg_tokens <- c(seg_tokens, tk)
-        flush_by_policy()
-      }
-
-      if (length(seg_tokens) > 0) {
-        remain_tokens <- seg_tokens[seg_tokens != "__NL_SEG_BREAK__"]
-        if (isTRUE(remove_punct)) {
-          remain_tokens <- remain_tokens[!grepl("^[[:punct:]]+$", remain_tokens)]
-        }
-        append_segment(remain_tokens)
-      }
+      textes_par_document[[i]] <- .segmenter_ponctuation_indices(
+        tok,
+        taille_segment = segment_size,
+        supprimer_ponctuation = isTRUE(remove_punct)
+      )
     } else {
+      # Le découpage strict par nombre de mots et toutes ses options restent inchangés.
       tok_doc <- quanteda::tokens(
         docs[[i]],
         remove_punct = isTRUE(remove_punct),
@@ -208,24 +195,25 @@ split_segments <- function(corpus,
       tok <- as.character(tok_doc[[1]])
       tok <- tok[nzchar(tok)]
       if (!length(tok)) next
+
       nseg <- ceiling(length(tok) / segment_size)
-      for (j in seq_len(nseg)) {
-        deb <- ((j - 1L) * segment_size) + 1L
-        fin <- min(j * segment_size, length(tok))
-        seg <- paste(tok[deb:fin], collapse = " ")
-        out_text <- c(out_text, seg)
-        out_id <- c(out_id, paste0(dn[[i]], "_seg", j))
-        out_src <- c(out_src, dn[[i]])
-        if (!is.null(dv_in) && nrow(dv_in) >= i) {
-          out_docvars[[length(out_docvars) + 1L]] <- dv_in[i, , drop = FALSE]
-        } else {
-          out_docvars[[length(out_docvars) + 1L]] <- NULL
-        }
-      }
+      debuts <- ((seq_len(nseg) - 1L) * segment_size) + 1L
+      fins <- pmin(seq_len(nseg) * segment_size, length(tok))
+      textes_par_document[[i]] <- vapply(seq_len(nseg), function(j) {
+        paste(tok[debuts[[j]]:fins[[j]]], collapse = " ")
+      }, character(1))
     }
   }
 
-  if (!length(out_text)) stop("Segmentation impossible : aucun segment généré.")
+  nombres_segments <- lengths(textes_par_document)
+  if (!sum(nombres_segments)) stop("Segmentation impossible : aucun segment généré.")
+
+  # Les indices remplacent la copie répétée des métadonnées documentaires.
+  indices_documents <- rep.int(seq_along(docs), nombres_segments)
+  numeros_segments <- sequence(nombres_segments)
+  out_text <- unlist(textes_par_document, use.names = FALSE)
+  out_id <- paste0(dn[indices_documents], "_seg", numeros_segments)
+  out_src <- dn[indices_documents]
 
   corp <- quanteda::corpus(
     data.frame(doc_id = out_id, text = out_text, segment_source = out_src, stringsAsFactors = FALSE),
@@ -233,15 +221,16 @@ split_segments <- function(corpus,
   )
   quanteda::docvars(corp, "segment_source") <- out_src
 
-  if (length(out_docvars) > 0 && any(vapply(out_docvars, Negate(is.null), logical(1)))) {
-    idx_valid <- which(vapply(out_docvars, Negate(is.null), logical(1)))
-    dv_seg <- do.call(rbind, out_docvars[idx_valid])
-    if (!is.null(dv_seg) && nrow(dv_seg) == length(idx_valid)) {
-      cn_copy <- setdiff(colnames(dv_seg), "segment_source")
-      for (cn in cn_copy) {
-        vals <- rep(NA, quanteda::ndoc(corp))
-        vals[idx_valid] <- dv_seg[[cn]]
-        quanteda::docvars(corp, cn) <- vals
+  if (!is.null(dv_in) && nrow(dv_in) > 0L) {
+    indices_valides <- which(indices_documents <= nrow(dv_in))
+    if (length(indices_valides)) {
+      # Reproduire les affectations de l'ancien code, avec les mêmes types
+      # de colonnes, sans construire un data.frame pour chaque segment.
+      colonnes <- setdiff(colnames(dv_in), "segment_source")
+      for (cn in colonnes) {
+        valeurs <- rep(NA, length(out_text))
+        valeurs[indices_valides] <- dv_in[[cn]][indices_documents[indices_valides]]
+        quanteda::docvars(corp, cn) <- valeurs
       }
     }
   }
