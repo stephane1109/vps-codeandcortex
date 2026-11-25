@@ -899,7 +899,7 @@ run_batch <- function() {
       chronometre$terminer("png_termes")
       chronometre$demarrer("png_extremes", "Graphique AFC termes extrêmes", "afc")
       afc_extremes_png <- file.path(afc_dir, "afc_termes_extremes.png")
-      grDevices::png(afc_extremes_png, width = 2000, height = 1600, res = 180)
+      grDevices::png(afc_extremes_png, width = 1800, height = 1400, res = 180)
       tryCatch(
         {
           # Reuse the official AFC terms renderer. Only its term list is
