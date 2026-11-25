@@ -3287,6 +3287,7 @@ function buildJobConfig(analysisKind = "chd") {
     morpho_exclure_etre_verbe: document.getElementById("excludeEtre").checked,
     morpho_conserver_hors_lexique: document.getElementById("keepUnknownForms").checked,
     afc_reduire_chevauchement: document.getElementById("reduceOverlap").checked,
+    afc_affichage_ggrepel: document.getElementById("afcGgrepelMode").checked,
     afc_taille_mots: document.getElementById("wordSizeMode").value,
     afc_variables_etoilees: splitCsvValues(document.getElementById("afcStarredVariables").value),
     suivi_variable_etoilee: normalizeStarredVariableName(document.getElementById("suiviVariable")?.value || ""),
