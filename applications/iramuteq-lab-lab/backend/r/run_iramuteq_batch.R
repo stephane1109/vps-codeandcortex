@@ -851,6 +851,8 @@ run_batch <- function() {
     )
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
       activer_repel <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
+      affichage_ggrepel <- scalar_bool(config$afc_affichage_ggrepel, FALSE)
+      log_info(paste0("Placement des étiquettes AFC : ", if (!activer_repel) "sans anti-chevauchement" else if (affichage_ggrepel) "ggrepel" else "spirale classique", "."))
       taille_sel <- scalar_chr(config$afc_taille_mots, "frequency")
       if (!taille_sel %in% c("frequency", "chi2")) taille_sel <- "frequency"
       top_termes <- 120L
@@ -884,7 +886,8 @@ run_batch <- function() {
           top_termes = top_termes,
           termes_forces = termes_reperes_axes_final,
           taille_sel = taille_sel,
-          activer_repel = activer_repel
+          activer_repel = activer_repel,
+          affichage_ggrepel = affichage_ggrepel
         ),
         error = function(e) {
           plot.new()
@@ -913,7 +916,8 @@ run_batch <- function() {
             top_termes = max(1L, length(termes_extremes)),
             termes_forces = termes_extremes,
             taille_sel = taille_sel,
-            activer_repel = activer_repel
+            activer_repel = activer_repel,
+            affichage_ggrepel = affichage_ggrepel
           )
         },
         error = function(e) {
@@ -1020,6 +1024,7 @@ run_batch <- function() {
     chronometre$terminer("afc_variables")
     if (!is.null(afc_vars_obj) && !is.null(afc_vars_obj$ca)) {
       activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
+      affichage_ggrepel2 <- scalar_bool(config$afc_affichage_ggrepel, FALSE)
       top_mod <- 120L
       afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
       chronometre$demarrer("png_modalites", "Graphique AFC variables étoilées", "afc")
@@ -1040,7 +1045,8 @@ run_batch <- function() {
               afc_vars_obj,
               axes = c(1, 2),
               top_modalites = top_mod,
-              activer_repel = activer_repel2
+              activer_repel = activer_repel2,
+              affichage_ggrepel = affichage_ggrepel2
             )
           }
         },
