@@ -147,7 +147,7 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
       point.padding = 0.12,
       force = 1,
       max.overlaps = Inf,
-      max.time = 1.5,
+      max.time = 0.35,
       max.iter = nombre_iterations,
       seed = 42,
       min.segment.length = 0,
@@ -470,6 +470,7 @@ tracer_afc_classes_termes <- function(
   top_termes = 120,
   taille_sel = c("frequency", "chi2"),
   activer_repel = TRUE,
+  affichage_ggrepel = TRUE,
   cex_min = 0.8,
   cex_max = 2.0,
   repel_max_iter = 220,
@@ -546,7 +547,7 @@ tracer_afc_classes_termes <- function(
   }
 
 
-  if (isTRUE(activer_repel)) {
+  if (isTRUE(activer_repel) && isTRUE(affichage_ggrepel)) {
     .tracer_afc_avec_ggrepel(
       x_points = x_m,
       y_points = y_m,
@@ -581,8 +582,28 @@ tracer_afc_classes_termes <- function(
     pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
     cex = 1.0
   )
+  # La méthode classique déplace uniquement les étiquettes, pas les points AFC.
+  x_etiquettes <- x_m
+  y_etiquettes <- y_m
+  if (isTRUE(activer_repel)) {
+    positions <- placer_labels_sans_chevauchement_spirale(
+      x = x_m, y = y_m, labels = mots, cex_vec = cex_vec,
+      max_iter = repel_max_iter
+    )
+    x_etiquettes <- positions$x
+    y_etiquettes <- positions$y
+    deplacements <- is.finite(x_etiquettes) & is.finite(y_etiquettes) &
+      (abs(x_etiquettes - x_m) > 1e-10 | abs(y_etiquettes - y_m) > 1e-10)
+    if (any(deplacements)) {
+      graphics::segments(
+        x_m[deplacements], y_m[deplacements],
+        x_etiquettes[deplacements], y_etiquettes[deplacements],
+        col = "gray65", lwd = 0.6
+      )
+    }
+  }
   points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
-  text(x_m, y_m, labels = mots, cex = cex_vec, col = col_m)
+  text(x_etiquettes, y_etiquettes, labels = mots, cex = cex_vec, col = col_m)
 }
 
 
@@ -984,6 +1005,7 @@ tracer_afc_variables_etoilees <- function(
   axes = c(1, 2),
   top_modalites = 120,
   activer_repel = TRUE,
+  affichage_ggrepel = TRUE,
   cex_min = 0.8,
   cex_max = 2.0,
   repel_max_iter = 220
@@ -1058,7 +1080,7 @@ tracer_afc_variables_etoilees <- function(
   }
 
 
-  if (isTRUE(activer_repel)) {
+  if (isTRUE(activer_repel) && isTRUE(affichage_ggrepel)) {
     .tracer_afc_avec_ggrepel(
       x_points = x_m,
       y_points = y_m,
@@ -1093,6 +1115,26 @@ tracer_afc_variables_etoilees <- function(
     pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
     cex = 1.0
   )
+  # La méthode classique déplace uniquement les étiquettes, pas les points AFC.
+  x_etiquettes <- x_m
+  y_etiquettes <- y_m
+  if (isTRUE(activer_repel)) {
+    positions <- placer_labels_sans_chevauchement_spirale(
+      x = x_m, y = y_m, labels = mods, cex_vec = cex_vec,
+      max_iter = repel_max_iter
+    )
+    x_etiquettes <- positions$x
+    y_etiquettes <- positions$y
+    deplacements <- is.finite(x_etiquettes) & is.finite(y_etiquettes) &
+      (abs(x_etiquettes - x_m) > 1e-10 | abs(y_etiquettes - y_m) > 1e-10)
+    if (any(deplacements)) {
+      graphics::segments(
+        x_m[deplacements], y_m[deplacements],
+        x_etiquettes[deplacements], y_etiquettes[deplacements],
+        col = "gray65", lwd = 0.6
+      )
+    }
+  }
   points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
-  text(x_m, y_m, labels = mods, cex = cex_vec, col = col_m)
+  text(x_etiquettes, y_etiquettes, labels = mods, cex = cex_vec, col = col_m)
 }
