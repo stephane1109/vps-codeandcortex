@@ -249,16 +249,36 @@ ajouter_coordonnees_afc_aux_termes_iramuteq <- function(termes_df,
   !(r1$xmax < r2$xmin || r2$xmax < r1$xmin || r1$ymax < r2$ymin || r2$ymax < r1$ymin)
 }
 
-# Placement anti-chevauchement des labels
-# Technique : on place les mots un par un. Si collision avec un label déjà placé, on déplace le label le long d'une spirale
-# (rayon croissant + angle) jusqu'à trouver une position non collisionnante, ou jusqu'à max_iter.
+# Cache des placements AFC : réutilisation uniquement si la géométrie, la
+# typographie, les dimensions du périphérique et les données sont identiques.
+# Le cache ne stocke pas les coordonnées factorielles modifiées : seules les
+# positions des étiquettes, séparées des points AFC, sont mémorisées.
+.cache_placements_afc <- local({
+  entrees <- list()
+  list(
+    rechercher = function(cle) {
+      for (entree in entrees) {
+        if (identical(entree$cle, cle)) return(entree$positions)
+      }
+      NULL
+    },
+    enregistrer = function(cle, positions) {
+      entrees <<- c(list(list(cle = cle, positions = positions)), entrees)
+      if (length(entrees) > 3L) entrees <<- entrees[seq_len(3L)]
+      invisible(NULL)
+    }
+  )
+})
+
+# Placement anti-chevauchement en spirale, compatible avec la méthode initiale.
+# Les tests de collision sont vectorisés : les comparaisons ne déclenchent
+# plus une boucle R par étiquette déjà placée, ni par candidat de la spirale.
 placer_labels_sans_chevauchement_spirale <- function(x, y, labels, cex_vec, max_iter = 220) {
   x <- as.numeric(x)
   y <- as.numeric(y)
   n <- length(labels)
-  if (n == 0) return(list(x = x, y = y))
-
-  if (length(cex_vec) == 1) cex_vec <- rep(cex_vec, n)
+  if (n == 0L) return(list(x = x, y = y))
+  if (length(cex_vec) == 1L) cex_vec <- rep(cex_vec, n)
   cex_vec <- as.numeric(cex_vec)
   cex_vec[!is.finite(cex_vec)] <- 1
 
@@ -267,90 +287,94 @@ placer_labels_sans_chevauchement_spirale <- function(x, y, labels, cex_vec, max_
   ry <- usr[4] - usr[3]
   if (!is.finite(rx) || rx == 0) rx <- 1
   if (!is.finite(ry) || ry == 0) ry <- 1
+  max_iter <- as.integer(max_iter)
+  if (!is.finite(max_iter) || is.na(max_iter) || max_iter < 0L) max_iter <- 0L
 
-  # Pas de déplacement relatif à l'étendue du graphe
+  cle_cache <- list(
+    x = x, y = y, labels = as.character(labels), cex = cex_vec,
+    max_iter = max_iter, usr = usr, pixels = grDevices::dev.size("px"),
+    famille = par("family"), police = par("font"), taille = par("ps")
+  )
+  positions_cache <- .cache_placements_afc$rechercher(cle_cache)
+  if (!is.null(positions_cache)) return(positions_cache)
+
   pas <- 0.012 * max(rx, ry)
-
   x2 <- x
   y2 <- y
+  xmin <- rep(NA_real_, n)
+  xmax <- rep(NA_real_, n)
+  ymin <- rep(NA_real_, n)
+  ymax <- rep(NA_real_, n)
 
-  rects <- vector("list", n)
+  # Mesurer une seule fois les dimensions des textes pour chaque graphique.
+  largeurs <- vapply(seq_len(n), function(i) {
+    strwidth(labels[i], units = "user", cex = cex_vec[i])
+  }, numeric(1))
+  hauteurs <- vapply(seq_len(n), function(i) {
+    strheight(labels[i], units = "user", cex = cex_vec[i])
+  }, numeric(1))
+  largeurs[!is.finite(largeurs) | largeurs == 0] <- 0.02 * rx
+  hauteurs[!is.finite(hauteurs) | hauteurs == 0] <- 0.02 * ry
 
+  # Conserver exactement la trajectoire de recherche du tracé historique.
+  # Seule l'évaluation des collisions est remplacée par des vecteurs.
   for (i in seq_len(n)) {
-    lab <- labels[i]
-    cexi <- cex_vec[i]
-
-    wi <- strwidth(lab, units = "user", cex = cexi)
-    hi <- strheight(lab, units = "user", cex = cexi)
-
-    if (!is.finite(wi) || wi == 0) wi <- 0.02 * rx
-    if (!is.finite(hi) || hi == 0) hi <- 0.02 * ry
-
+    demi_largeur <- largeurs[i] / 2
+    demi_hauteur <- hauteurs[i] / 2
     xi <- x2[i]
     yi <- y2[i]
+    precedent <- i - 1L
 
-    ri <- list(
-      xmin = xi - wi / 2, xmax = xi + wi / 2,
-      ymin = yi - hi / 2, ymax = yi + hi / 2
-    )
-
-    collision <- FALSE
-    if (i > 1) {
-      for (j in seq_len(i - 1)) {
-        if (!is.null(rects[[j]]) && .rectangles_chevauchent(ri, rects[[j]])) {
-          collision <- TRUE
-          break
-        }
-      }
-    }
-
-    if (!collision) {
-      rects[[i]] <- ri
-      next
-    }
-
-    # Recherche en spirale
-    angle <- 0
-    rayon <- pas
-
-    trouve <- FALSE
-    for (k in seq_len(max_iter)) {
-      angle <- angle + 0.65
-      rayon <- rayon + pas * 0.15
-
-      xi_try <- x[i] + rayon * cos(angle)
-      yi_try <- y[i] + rayon * sin(angle)
-
-      ri_try <- list(
-        xmin = xi_try - wi / 2, xmax = xi_try + wi / 2,
-        ymin = yi_try - hi / 2, ymax = yi_try + hi / 2
+    collision <- function(xcentre, ycentre) {
+      if (precedent == 0L) return(FALSE)
+      gauche <- xcentre - demi_largeur
+      droite <- xcentre + demi_largeur
+      bas <- ycentre - demi_hauteur
+      haut <- ycentre + demi_hauteur
+      any(
+        xmin[seq_len(precedent)] <= droite &
+          xmax[seq_len(precedent)] >= gauche &
+          ymin[seq_len(precedent)] <= haut &
+          ymax[seq_len(precedent)] >= bas
       )
+    }
 
-      collision2 <- FALSE
-      if (i > 1) {
-        for (j in seq_len(i - 1)) {
-          if (!is.null(rects[[j]]) && .rectangles_chevauchent(ri_try, rects[[j]])) {
-            collision2 <- TRUE
+    if (collision(xi, yi)) {
+      angle <- 0
+      rayon <- pas
+      trouve <- FALSE
+      if (max_iter > 0L) {
+        for (k in seq_len(max_iter)) {
+          angle <- angle + 0.65
+          rayon <- rayon + pas * 0.15
+          candidat_x <- x[i] + rayon * cos(angle)
+          candidat_y <- y[i] + rayon * sin(angle)
+          if (!collision(candidat_x, candidat_y)) {
+            x2[i] <- candidat_x
+            y2[i] <- candidat_y
+            xi <- candidat_x
+            yi <- candidat_y
+            trouve <- TRUE
             break
           }
         }
       }
-
-      if (!collision2) {
-        x2[i] <- xi_try
-        y2[i] <- yi_try
-        rects[[i]] <- ri_try
-        trouve <- TRUE
-        break
+      # Même repli que le placement original si aucun point libre n'existe.
+      if (!trouve) {
+        xi <- x[i]
+        yi <- y[i]
       }
     }
 
-    if (!trouve) {
-      rects[[i]] <- ri
-    }
+    xmin[i] <- xi - demi_largeur
+    xmax[i] <- xi + demi_largeur
+    ymin[i] <- yi - demi_hauteur
+    ymax[i] <- yi + demi_hauteur
   }
 
-  list(x = x2, y = y2)
+  resultat <- list(x = x2, y = y2)
+  .cache_placements_afc$enregistrer(cle_cache, resultat)
+  resultat
 }
 
 # Calcul des résidus standardisés par colonne (terme/modalité) et par classe
