@@ -27,7 +27,7 @@ scalar_chr <- function(x, default = "") {
 required_packages <- c(
   "jsonlite", "Matrix", "quanteda", "dplyr", "wordcloud", "RColorBrewer",
   "FactoMineR", "igraph", "proxy", "htmltools", "htmlwidgets", "irlba", "factoextra",
-  "visNetwork"
+  "ggplot2", "ggrepel", "visNetwork"
 )
 
 # Leaflet only powers the optional AFC explorer. Its absence must never block CHD.
