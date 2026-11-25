@@ -114,6 +114,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       r-cran-factominer \
       r-cran-fs \
       r-cran-ggplot2 \
+      r-cran-ggrepel \
       r-cran-htmlwidgets \
       r-cran-htmltools \
       r-cran-igraph \
