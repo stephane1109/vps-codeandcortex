@@ -1218,6 +1218,7 @@ progress {
 
 #afcClassesPlot,
 #afcTermsPlot,
+#afcExtremeTermsPlot,
 #afcVarsPlot {
   --afc-plot-base-width: 1120px;
   overflow: auto;
@@ -1230,6 +1231,7 @@ progress {
 
 #afcClassesPlot .result-image,
 #afcTermsPlot .result-image,
+#afcExtremeTermsPlot .result-image,
 #afcVarsPlot .result-image {
   width: min(100%, var(--afc-plot-base-width));
   max-width: none;
@@ -1242,6 +1244,7 @@ progress {
 
 #afcClassesPlot .result-image.is-afc-zoomed,
 #afcTermsPlot .result-image.is-afc-zoomed,
+#afcExtremeTermsPlot .result-image.is-afc-zoomed,
 #afcVarsPlot .result-image.is-afc-zoomed {
   max-height: none;
 }
@@ -3440,6 +3443,7 @@ code {
 
   #afcClassesPlot .result-image,
   #afcTermsPlot .result-image,
+  #afcExtremeTermsPlot .result-image,
   #afcVarsPlot .result-image {
     max-height: none;
   }
