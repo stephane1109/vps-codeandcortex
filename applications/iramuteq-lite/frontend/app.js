@@ -84,6 +84,7 @@ const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
 const afcActiverGgrepel = document.getElementById("afcActiverGgrepel");
 const afcGgrepelEtat = document.getElementById("afcGgrepelEtat");
 const reduceOverlapInput = document.getElementById("reduceOverlap");
+const affichageGgrepelInput = document.getElementById("affichageGgrepel");
 const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcExtremeTermsPlot", "afcVarsPlot"]);
 const simiZoomInBtn = document.getElementById("simiZoomInBtn");
 const simiZoomOutBtn = document.getElementById("simiZoomOutBtn");
@@ -2094,6 +2095,7 @@ function buildJobConfig(analysisKind = "chd") {
     morpho_exclure_etre_verbe: document.getElementById("excludeEtre").checked,
     morpho_conserver_hors_lexique: document.getElementById("keepUnknownForms").checked,
     afc_reduire_chevauchement: Boolean(reduceOverlapInput?.checked),
+    afc_affichage_ggrepel: Boolean(affichageGgrepelInput?.checked),
     afc_taille_mots: document.getElementById("wordSizeMode").value,
     afc_variables_etoilees: splitCsvValues(document.getElementById("afcStarredVariables").value),
     suivi_variable_etoilee: normalizeStarredVariableName(document.getElementById("suiviVariable")?.value || ""),
@@ -12167,6 +12169,9 @@ function openChdConfigDialog() {
 
   try {
     populateConfigDialog(chdConfigDialogContent, chdConfigSourceCards, "__dialog");
+    const caseGgrepel = chdConfigDialogContent.querySelector("#affichageGgrepel__dialog");
+    const caseChevauchement = chdConfigDialogContent.querySelector("#reduceOverlap__dialog");
+    if (caseGgrepel) caseGgrepel.disabled = !caseChevauchement?.checked;
     renderMorphoPickers(chdConfigDialogContent);
     renderAfcStarredVariablesPickers(chdConfigDialogContent);
     renderClassificationModeCards(chdConfigDialogContent);
@@ -14557,24 +14562,36 @@ async function startAnalysis(analysisKind = "chd") {
   }
 }
 
-// Les deux contrôles ggrepel pilotent le même paramètre de la prochaine analyse.
-function synchroniserOptionGgrepel(estActive) {
-  const valeur = Boolean(estActive);
-  if (reduceOverlapInput) reduceOverlapInput.checked = valeur;
-  if (afcActiverGgrepel) afcActiverGgrepel.checked = valeur;
+// L'anti-chevauchement et le choix de ggrepel sont deux paramètres indépendants.
+// La case de l'onglet AFC reprend le choix du moteur ggrepel dans les paramètres CHD.
+function rafraichirOptionsAfc() {
+  const eviterChevauchement = Boolean(reduceOverlapInput?.checked);
+  const utiliserGgrepel = Boolean(affichageGgrepelInput?.checked);
+  if (afcActiverGgrepel) {
+    afcActiverGgrepel.checked = utiliserGgrepel;
+    afcActiverGgrepel.disabled = !eviterChevauchement;
+  }
+  if (affichageGgrepelInput) affichageGgrepelInput.disabled = !eviterChevauchement;
   if (afcGgrepelEtat) {
-    afcGgrepelEtat.textContent = valeur
-      ? "ggrepel est activé pour la prochaine analyse. Les graphiques déjà générés ne changent pas."
-      : "ggrepel est désactivé pour la prochaine analyse. Les étiquettes seront affichées aux coordonnées d'origine.";
+    afcGgrepelEtat.textContent = !eviterChevauchement
+      ? "L'anti-chevauchement est désactivé : les étiquettes sont affichées aux positions d'origine."
+      : utiliserGgrepel
+        ? "Affichage ggrepel rapide sélectionné pour la prochaine analyse. Le temps de rendu peut varier selon le nombre de mots."
+        : "Placement classique en spirale sélectionné pour la prochaine analyse.";
   }
 }
-reduceOverlapInput?.addEventListener("change", () => {
-  synchroniserOptionGgrepel(reduceOverlapInput.checked);
-});
+reduceOverlapInput?.addEventListener("change", rafraichirOptionsAfc);
+affichageGgrepelInput?.addEventListener("change", rafraichirOptionsAfc);
 afcActiverGgrepel?.addEventListener("change", () => {
-  synchroniserOptionGgrepel(afcActiverGgrepel.checked);
+  if (affichageGgrepelInput) affichageGgrepelInput.checked = afcActiverGgrepel.checked;
+  rafraichirOptionsAfc();
 });
-synchroniserOptionGgrepel(reduceOverlapInput?.checked ?? true);
+chdConfigDialogContent?.addEventListener("change", (evenement) => {
+  if (evenement.target?.id !== "reduceOverlap__dialog") return;
+  const caseMethode = chdConfigDialogContent.querySelector("#affichageGgrepel__dialog");
+  if (caseMethode) caseMethode.disabled = !evenement.target.checked;
+});
+rafraichirOptionsAfc();
 
 activateTopTab("analyse");
 activateChdSubTab("dendrogramme");
