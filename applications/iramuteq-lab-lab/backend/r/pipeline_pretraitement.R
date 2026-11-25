@@ -470,9 +470,10 @@ preparer_corpus_avant_segmentation_iramuteq3 <- function(corpus_importe, config)
   textes <- gsub("[’´ʼʹ]", "'", textes, perl = TRUE)
   textes <- gsub(intToUtf8(96L), "'", textes, fixed = TRUE)
   textes <- gsub("œ", "oe", textes, fixed = TRUE)
-  # Normaliser les points de suspension en séparateur de poids fort.
-  textes <- gsub("...", " . ", textes, fixed = TRUE)
-  textes <- gsub("…", " . ", textes, fixed = TRUE)
+  # firstclean() : les points de suspension deviennent le marqueur £$£.
+  # Il peut ensuite être éliminé par le nettoyage de caractères officiel.
+  textes <- gsub("...", " £$£ ", textes, fixed = TRUE)
+  textes <- gsub("…", " £$£ ", textes, fixed = TRUE)
   textes <- gsub("([?!.,;:])", " \\1 ", textes, perl = TRUE)
 
   # Caractères nettoyés avant les expressions, apostrophes/tirets ensuite.
@@ -497,10 +498,16 @@ preparer_corpus_avant_segmentation_iramuteq3 <- function(corpus_importe, config)
     activer_nettoyage = FALSE,
     forcer_minuscules = TRUE,
     supprimer_chiffres = FALSE,
-    supprimer_apostrophes = scalar_bool(config$supprimer_apostrophes, TRUE),
+    supprimer_apostrophes = FALSE,
     remplacer_tirets_espaces = scalar_bool(config$remplacer_tirets_espaces, FALSE),
     compatibilite_corpus_iramuteq = scalar_bool(config$labbe_pretraitement_iramuteq, FALSE)
   )
+  if (scalar_bool(config$supprimer_apostrophes, TRUE)) {
+    # corpus.py::doapos() : l'auteur devient l auteur, sans perte de l'élision.
+    textes <- gsub("'", " ", textes, fixed = TRUE)
+    textes <- gsub("[[:space:]]+", " ", textes, perl = TRUE)
+    textes <- trimws(textes)
+  }
   corpus_prepare <- corpus_importe
   # quanteda >= 3 : remplacer les textes par l'opérateur [<-.
   # Les identifiants et les métadonnées du corpus sont conservés.
@@ -509,6 +516,23 @@ preparer_corpus_avant_segmentation_iramuteq3 <- function(corpus_importe, config)
   list(corpus = corpus_prepare,
        expressions_actives_df = expressions$expressions_actives_df,
        deja_nettoye = TRUE)
+}
+
+# Les statistiques générales doivent porter sur les formes du corpus,
+# avant la lemmatisation et les sélections morphosyntaxiques de la CHD.
+# Le logiciel officiel calcule gettotocc() et len(corpus.formes).
+calculer_statistiques_generales_corpus <- function(tok) {
+  frequences <- sort(
+    as.numeric(Matrix::colSums(quanteda::dfm(tok))),
+    decreasing = TRUE
+  )
+  frequences <- frequences[is.finite(frequences) & !is.na(frequences) & frequences > 0]
+  list(
+    n_tokens = sum(frequences),
+    n_formes = length(frequences),
+    n_hapax = sum(frequences == 1),
+    frequences = frequences
+  )
 }
 
 preparer_pipeline_chd <- function(segmented_corpus, config, preparation_initiale = NULL) {
@@ -604,13 +628,31 @@ preparer_pipeline_chd <- function(segmented_corpus, config, preparation_initiale
     progress = 33
   )
 
+  est_segmentation_officielle <- identical(
+    normaliser_mode_segmentation(
+      config$mode_segmentation,
+      scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+    ),
+    "iramuteq_3"
+  )
   tok <- quanteda::tokens(
     textes_tok,
-    remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
+    # En mode officiel, les séparateurs sont déjà éliminés après découpage.
+    remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE) && !est_segmentation_officielle,
     remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE)
   )
   quanteda::docnames(tok) <- ids_docs
   tok <- quanteda::tokens_tolower(tok)
+
+  # Compter toutes les formes avant lemmatisation, stopwords et morphologie.
+  stats_corpus <- calculer_statistiques_generales_corpus(tok)
+  log_info(
+    paste0(
+      "Statistiques générales du corpus (avant sélection morphosyntaxique) : ",
+      stats_corpus$n_tokens, " occurrences ; ", stats_corpus$n_formes, " formes."
+    ),
+    progress = 34
+  )
 
   lexique_df <- if (isTRUE(utiliser_spacy)) spacy_pipeline$lexique else NULL
   if (!isTRUE(utiliser_spacy) && (scalar_bool(config$lexique_utiliser_lemmes, TRUE) || scalar_bool(config$filtrage_morpho, FALSE))) {
@@ -722,19 +764,23 @@ preparer_pipeline_chd <- function(segmented_corpus, config, preparation_initiale
     }
   }
 
-  dfm_stats <- dfm_obj
-  freq_termes <- sort(as.numeric(Matrix::colSums(dfm_stats)), decreasing = TRUE)
-  freq_termes <- freq_termes[is.finite(freq_termes) & !is.na(freq_termes) & freq_termes > 0]
-  zipf_df <- if (length(freq_termes) >= 2) {
-    rang <- seq_along(freq_termes)
-    fit <- tryCatch(stats::lm(log(freq_termes) ~ log(rang)), error = function(e) NULL)
-    pred <- if (is.null(fit)) rep(NA_real_, length(freq_termes)) else as.numeric(exp(stats::predict(fit)))
+  # Statistiques actives avant seuil : distinctes des formes générales.
+  frequences_actives <- sort(as.numeric(Matrix::colSums(dfm_obj)), decreasing = TRUE)
+  frequences_actives <- frequences_actives[
+    is.finite(frequences_actives) & !is.na(frequences_actives) & frequences_actives > 0
+  ]
+  # La loi de Zipf reprend le vocabulaire général, sans filtrage morphologique.
+  frequences_corpus <- stats_corpus$frequences
+  zipf_df <- if (length(frequences_corpus) >= 2) {
+    rang <- seq_along(frequences_corpus)
+    fit <- tryCatch(stats::lm(log(frequences_corpus) ~ log(rang)), error = function(e) NULL)
+    pred <- if (is.null(fit)) rep(NA_real_, length(frequences_corpus)) else as.numeric(exp(stats::predict(fit)))
     data.frame(
       rang = rang,
-      frequence = freq_termes,
+      frequence = frequences_corpus,
       pred = pred,
       log_rang = log(rang),
-      log_frequence = log(freq_termes),
+      log_frequence = log(frequences_corpus),
       log_pred = ifelse(is.na(pred), NA_real_, log(pred)),
       stringsAsFactors = FALSE
     )
@@ -798,9 +844,13 @@ preparer_pipeline_chd <- function(segmented_corpus, config, preparation_initiale
     langue = infos_langue$langue,
     expressions_actives_df = expressions_actives_df,
     corpus_stats = list(
-      n_tokens = sum(freq_termes),
-      n_formes = length(freq_termes),
-      n_hapax = if (length(freq_termes)) sum(freq_termes == 1) else 0L,
+      n_tokens = stats_corpus$n_tokens,
+      n_formes = stats_corpus$n_formes,
+      n_hapax = stats_corpus$n_hapax,
+      n_tokens_actifs = sum(frequences_actives),
+      n_formes_actives = length(frequences_actives),
+      n_tokens_chd = sum(Matrix::colSums(cleaned$dfm_obj)),
+      n_formes_chd = quanteda::nfeat(cleaned$dfm_obj),
       zipf = if (is.null(zipf_df)) NULL else utils::head(zipf_df, 160L)
     )
   )

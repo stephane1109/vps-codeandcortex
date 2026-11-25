@@ -968,12 +968,13 @@
 
           <div class="field">
             <label class="check-option" for="removePunctuation">
-              <input id="removePunctuation" type="checkbox" />
+              <input id="removePunctuation" type="checkbox" checked />
               <span>Supprimer la ponctuation</span>
             </label>
             <p class="field-help">
-              Supprime la ponctuation à la tokenisation quanteda (remove_punct), par ex.
-              . , ; : ! ? ' ’ " - ( ) [ ] …
+              Par défaut en mode IRaMuTeQ 3.0, écarte les séparateurs
+              . , ; : ! ? et £$£ après le choix des frontières. Dans les modes
+              historiques, utilise la suppression quanteda (remove_punct).
             </p>
           </div>
 

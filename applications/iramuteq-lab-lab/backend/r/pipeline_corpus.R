@@ -193,7 +193,9 @@ normaliser_mode_segmentation <- function(mode_segmentation = NULL,
     }
     mots <- tok[seq.int(debut, fin)]
     if (isTRUE(supprimer_ponctuation)) {
-      mots <- mots[!grepl("^[[:punct:]…]+$", mots)]
+      # corpus.py : ponctuation_espace quand keep_ponct = 0.
+      # Le choix provient de l'option « Supprimer la ponctuation » existante.
+      mots <- mots[!(mots %in% c("", ".", "£$£", ";", "?", "!", ",", ":"))]
     }
     texte <- paste(mots, collapse = " ")
     if (nzchar(texte)) segments <- c(segments, texte)

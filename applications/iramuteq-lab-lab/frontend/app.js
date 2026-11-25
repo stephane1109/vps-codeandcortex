@@ -12898,9 +12898,15 @@ function renderAnalysisSummary(summary) {
         ["Corpus", summary.corpus],
         ["Nombre de textes", summary.n_texts],
         ["Nombre de segments", summary.n_segments],
-        ["Nombre d'occurrences", summary.n_tokens],
-        ["Nombre de formes", summary.n_formes],
+        ["Nombre d'occurrences (corpus)", summary.n_tokens],
+        ["Nombre de formes (corpus)", summary.n_formes],
         ["Nombre d'hapax", summary.n_hapax],
+        ...(summary.n_tokens_actifs !== undefined ? [
+          ["Occurrences actives (avant seuil)", summary.n_tokens_actifs],
+          ["Formes actives (avant seuil)", summary.n_formes_actives],
+          ["Occurrences retenues pour la CHD", summary.n_tokens_chd],
+          ["Formes retenues pour la CHD", summary.n_formes_chd]
+        ] : []),
         ["Nombre de classes", summary.n_classes]
       ];
 
