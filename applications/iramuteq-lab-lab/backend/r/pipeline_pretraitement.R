@@ -333,6 +333,12 @@ appliquer_dictionnaire_expressions <- function(textes, expressions_df) {
   list(textes = textes_out, n_patterns = nrow(dic), n_occurrences = as.integer(n_occurrences))
 }
 
+# Sélectionne les formes selon leur fréquence totale dans le corpus.
+# La clé de configuration min_docfreq est conservée pour compatibilité.
+filtrer_formes_par_occurrences <- function(dfm_obj, frequence_minimale) {
+  quanteda::dfm_trim(dfm_obj, min_termfreq = frequence_minimale, termfreq_type = "count")
+}
+
 preparer_pipeline_chd <- function(segmented_corpus, config) {
   ids_docs <- as.character(quanteda::docnames(segmented_corpus))
   textes_orig <- as.character(segmented_corpus)
@@ -662,12 +668,15 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     NULL
   }
 
-  dfm_obj <- quanteda::dfm_trim(dfm_obj, min_docfreq = scalar_int(config$min_docfreq, 3L, 1L))
+  # Le seuil concerne le nombre total d'occurrences de chaque forme,
+  # et non le nombre de segments contenant cette forme.
+  frequence_minimale <- scalar_int(config$min_docfreq, 3L, 1L)
+  dfm_obj <- filtrer_formes_par_occurrences(dfm_obj, frequence_minimale)
   log_info(
     paste0(
-      "min_docfreq appliqué (IRaMuTeQ-lite) = ",
-      scalar_int(config$min_docfreq, 3L, 1L),
-      " (manuel)."
+      "Fréquence minimale des formes (occurrences totales) = ",
+      frequence_minimale,
+      " (clé de configuration min_docfreq)."
     ),
     progress = 40
   )

@@ -667,7 +667,8 @@
           </div>
 
           <div class="field">
-            <label for="minFreq">Fréquence minimale des termes (min_docfreq)</label>
+            <label for="minFreq">Fréquence minimale des termes</label>
+            <p class="field-help">Nombre minimal d'occurrences d'un terme dans le corpus, et non de segments.</p>
             <input id="minFreq" type="number" min="1" value="3" />
           </div>
 
@@ -757,8 +758,9 @@
                 <div class="auto-discriminant-option" data-auto-discriminant-option="min_docfreq">
                   <label class="check-option">
                     <input id="autoDiscriminantVaryMinDocfreq" type="checkbox" checked data-auto-discriminant-toggle="min_docfreq" />
-                    <span>Croiser la fréquence minimale des termes (min_docfreq)</span>
+                    <span>Croiser la fréquence minimale des termes</span>
                   </label>
+                  <p class="field-help">Valeurs exprimées en occurrences totales dans le corpus.</p>
                   <div class="auto-discriminant-range" data-auto-discriminant-range="min_docfreq">
                     <label for="autoDiscriminantMinDocfreqMin">De</label>
                     <input id="autoDiscriminantMinDocfreqMin" type="number" min="2" max="5" value="2" data-auto-discriminant-range-input="min_docfreq" />
