@@ -244,6 +244,81 @@ ajouter_coordonnees_afc_aux_termes_iramuteq <- function(termes_df,
   "Projection 1D"
 }
 
+# Repulsion optionnelle des etiquettes : conserver les coordonnees factorielles.
+# Les classes et les mots sont consideres simultanement dans le placement.
+.tracer_afc_ggrepel <- function(
+  x_termes, y_termes, termes, couleurs_termes, tailles_termes,
+  x_classes, y_classes, noms_classes, limites_x, limites_y, axes
+) {
+  if (!requireNamespace("ggplot2", quietly = TRUE) ||
+      !requireNamespace("ggrepel", quietly = TRUE)) {
+    stop("Le mode ggrepel requiert les packages R ggplot2 et ggrepel.")
+  }
+
+  donnees_classes <- data.frame(
+    x = as.numeric(x_classes), y = as.numeric(y_classes),
+    etiquette = as.character(noms_classes),
+    couleur = rep("black", length(x_classes)),
+    taille = rep(3.5, length(x_classes)),
+    stringsAsFactors = FALSE
+  )
+  donnees_termes <- data.frame(
+    x = as.numeric(x_termes), y = as.numeric(y_termes),
+    etiquette = as.character(termes),
+    couleur = as.character(couleurs_termes),
+    taille = as.numeric(tailles_termes) * 3.2,
+    stringsAsFactors = FALSE
+  )
+  donnees_etiquettes <- rbind(donnees_classes, donnees_termes)
+
+  graphique <- ggplot2::ggplot() +
+    ggplot2::geom_hline(yintercept = 0, colour = "gray80", linewidth = 0.35) +
+    ggplot2::geom_vline(xintercept = 0, colour = "gray80", linewidth = 0.35) +
+    ggplot2::geom_point(
+      data = donnees_classes,
+      mapping = ggplot2::aes(x = x, y = y),
+      colour = "black", size = 2.1
+    ) +
+    ggplot2::geom_point(
+      data = donnees_termes,
+      mapping = ggplot2::aes(x = x, y = y, colour = couleur),
+      size = 1.0
+    ) +
+    ggrepel::geom_text_repel(
+      data = donnees_etiquettes,
+      mapping = ggplot2::aes(
+        x = x, y = y, label = etiquette, colour = couleur, size = taille
+      ),
+      box.padding = 0.22,
+      point.padding = 0.12,
+      max.overlaps = Inf,
+      max.time = 0.35,
+      max.iter = 1500L,
+      seed = 42,
+      min.segment.length = 0,
+      segment.colour = "gray65",
+      segment.size = 0.25,
+      show.legend = FALSE
+    ) +
+    ggplot2::scale_colour_identity() +
+    ggplot2::scale_size_identity() +
+    ggplot2::coord_cartesian(
+      xlim = limites_x, ylim = limites_y, expand = TRUE, clip = "off"
+    ) +
+    ggplot2::labs(
+      x = paste0("Axe ", axes$ax1),
+      y = .etiquette_axe_y_afc(axes)
+    ) +
+    ggplot2::theme_classic(base_size = 12) +
+    ggplot2::theme(
+      legend.position = "none",
+      plot.margin = ggplot2::margin(20, 38, 20, 30)
+    )
+
+  print(graphique)
+  invisible(graphique)
+}
+
 # Test de chevauchement rectangles
 .rectangles_chevauchent <- function(r1, r2) {
   !(r1$xmax < r2$xmin || r2$xmax < r1$xmin || r1$ymax < r2$ymin || r2$ymax < r1$ymin)
@@ -581,6 +656,7 @@ tracer_afc_classes_termes <- function(
   termes_forces = character(0),
   taille_sel = c("frequency", "chi2"),
   activer_repel = TRUE,
+  affichage_ggrepel = FALSE,
   cex_min = 0.8,
   cex_max = 2.0,
   repel_max_iter = 220,
@@ -625,26 +701,7 @@ tracer_afc_classes_termes <- function(
   if (!is.null(ylim_zoom) && length(ylim_zoom) == 2 && all(is.finite(ylim_zoom))) {
     ylim_use <- as.numeric(ylim_zoom)
   }
-  plot(
-    0, 0,
-    type = "n",
-    xlab = paste0("Axe ", axis_info$ax1),
-    ylab = .etiquette_axe_y_afc(axis_info),
-    xlim = xlim_use, ylim = ylim_use
-  )
-  abline(h = 0, v = 0, col = "gray80")
 
-  # Note sur la technique : si activer_repel=TRUE, on applique un placement itératif en spirale
-  # avec tests de collision rectangles afin de réduire le chevauchement des étiquettes.
-  # Cela ne garantit pas 0 collision dans tous les cas, mais réduit fortement les superpositions.
-  points(x_c, y_c, pch = 19, cex = 1.25)
-  text(
-    x_c,
-    y_c,
-    labels = rownames(rc),
-    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
-    cex = 1.0
-  )
 
   # Couleurs par classe
   classes <- sort(unique(rownames(rc)))
@@ -672,18 +729,64 @@ tracer_afc_classes_termes <- function(
     cex_vec <- cex_min + v * (cex_max - cex_min)
   }
 
+  if (isTRUE(activer_repel) && isTRUE(affichage_ggrepel)) {
+    rendu_ggrepel <- tryCatch(
+      {
+        .tracer_afc_ggrepel(
+          x_termes = x_m, y_termes = y_m, termes = mots,
+          couleurs_termes = col_m, tailles_termes = cex_vec,
+          x_classes = x_c, y_classes = y_c,
+          noms_classes = rownames(rc),
+          limites_x = xlim_use, limites_y = ylim_use, axes = axis_info
+        )
+        TRUE
+      },
+      error = function(e) {
+        warning(paste0("Affichage ggrepel indisponible : ", conditionMessage(e)))
+        FALSE
+      }
+    )
+    if (isTRUE(rendu_ggrepel)) return(invisible(NULL))
+  }
+
+  # Tracé classique préservé si ggrepel est désactivé ou indisponible.
+  plot(
+    0, 0,
+    type = "n",
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = xlim_use, ylim = ylim_use
+  )
+  abline(h = 0, v = 0, col = "gray80")
+  points(x_c, y_c, pch = 19, cex = 1.25)
+  text(
+    x_c, y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
+
+  x_lab <- x_m
+  y_lab <- y_m
   if (isTRUE(activer_repel)) {
     coords <- placer_labels_sans_chevauchement_spirale(
-      x = x_m, y = y_m, labels = mots, cex_vec = cex_vec, max_iter = repel_max_iter
+      x = x_m, y = y_m, labels = mots, cex_vec = cex_vec,
+      max_iter = repel_max_iter
     )
     x_lab <- coords$x
     y_lab <- coords$y
-  } else {
-    x_lab <- x_m
-    y_lab <- y_m
+    # Les segments rattachent les étiquettes déplacées aux positions AFC fixes.
+    deplaces <- is.finite(x_lab) & is.finite(y_lab) &
+      (abs(x_lab - x_m) > 1e-10 | abs(y_lab - y_m) > 1e-10)
+    if (any(deplaces)) {
+      graphics::segments(
+        x_m[deplaces], y_m[deplaces], x_lab[deplaces], y_lab[deplaces],
+        col = "gray65", lwd = 0.6
+      )
+    }
   }
 
-  points(x_lab, y_lab, pch = 16, cex = 0.5, col = col_m)
+  points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
   text(x_lab, y_lab, labels = mots, cex = cex_vec, col = col_m)
 }
 
@@ -1083,6 +1186,7 @@ tracer_afc_variables_etoilees <- function(
   axes = c(1, 2),
   top_modalites = 120,
   activer_repel = TRUE,
+  affichage_ggrepel = FALSE,
   cex_min = 0.8,
   cex_max = 2.0,
   repel_max_iter = 220
@@ -1158,23 +1262,7 @@ tracer_afc_variables_etoilees <- function(
   y_c <- coords_classes$y
 
   lim <- .calculer_limites_trace_afc(c(x_m, x_c), c(y_m, y_c), axis_info$has_second)
-  plot(
-    0, 0,
-    type = "n",
-    xlab = paste0("Axe ", axis_info$ax1),
-    ylab = .etiquette_axe_y_afc(axis_info),
-    xlim = lim$xlim, ylim = lim$ylim
-  )
-  abline(h = 0, v = 0, col = "gray80")
 
-  points(x_c, y_c, pch = 19, cex = 1.25)
-  text(
-    x_c,
-    y_c,
-    labels = rownames(rc),
-    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
-    cex = 1.0
-  )
 
   # Couleurs par classe (classe max)
   classes <- sort(unique(rownames(rc)))
@@ -1201,17 +1289,63 @@ tracer_afc_variables_etoilees <- function(
     cex_vec <- cex_min + v * (cex_max - cex_min)
   }
 
+  if (isTRUE(activer_repel) && isTRUE(affichage_ggrepel)) {
+    rendu_ggrepel <- tryCatch(
+      {
+        .tracer_afc_ggrepel(
+          x_termes = x_m, y_termes = y_m, termes = mods,
+          couleurs_termes = col_m, tailles_termes = cex_vec,
+          x_classes = x_c, y_classes = y_c,
+          noms_classes = rownames(rc),
+          limites_x = lim$xlim, limites_y = lim$ylim, axes = axis_info
+        )
+        TRUE
+      },
+      error = function(e) {
+        warning(paste0("Affichage ggrepel indisponible : ", conditionMessage(e)))
+        FALSE
+      }
+    )
+    if (isTRUE(rendu_ggrepel)) return(invisible(NULL))
+  }
+
+  # Tracé classique préservé si ggrepel est désactivé ou indisponible.
+  plot(
+    0, 0,
+    type = "n",
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = lim$xlim, ylim = lim$ylim
+  )
+  abline(h = 0, v = 0, col = "gray80")
+  points(x_c, y_c, pch = 19, cex = 1.25)
+  text(
+    x_c, y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
+
+  x_lab <- x_m
+  y_lab <- y_m
   if (isTRUE(activer_repel)) {
     coords <- placer_labels_sans_chevauchement_spirale(
-      x = x_m, y = y_m, labels = mods, cex_vec = cex_vec, max_iter = repel_max_iter
+      x = x_m, y = y_m, labels = mods, cex_vec = cex_vec,
+      max_iter = repel_max_iter
     )
     x_lab <- coords$x
     y_lab <- coords$y
-  } else {
-    x_lab <- x_m
-    y_lab <- y_m
+    # Les segments rattachent les étiquettes déplacées aux positions AFC fixes.
+    deplaces <- is.finite(x_lab) & is.finite(y_lab) &
+      (abs(x_lab - x_m) > 1e-10 | abs(y_lab - y_m) > 1e-10)
+    if (any(deplaces)) {
+      graphics::segments(
+        x_m[deplaces], y_m[deplaces], x_lab[deplaces], y_lab[deplaces],
+        col = "gray65", lwd = 0.6
+      )
+    }
   }
 
-  points(x_lab, y_lab, pch = 16, cex = 0.5, col = col_m)
+  points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
   text(x_lab, y_lab, labels = mods, cex = cex_vec, col = col_m)
 }
