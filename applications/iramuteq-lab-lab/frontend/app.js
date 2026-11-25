@@ -13116,6 +13116,9 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setChecked("excludeEtre", manualReplayConfig.morpho_exclure_etre_verbe);
       setChecked("keepUnknownForms", manualReplayConfig.morpho_conserver_hors_lexique);
       setChecked("reduceOverlap", manualReplayConfig.afc_reduire_chevauchement);
+      if (typeof manualReplayConfig.afc_affichage_ggrepel === "boolean") {
+        setChecked("afcGgrepelMode", manualReplayConfig.afc_affichage_ggrepel);
+      }
       setValue("wordSizeMode", manualReplayConfig.afc_taille_mots);
 
       renderClassesModeCards(document);
