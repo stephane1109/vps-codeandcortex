@@ -130,7 +130,8 @@ run_batch <- function() {
       rst2 = scalar_int(config$iramuteq_rst2, 14L, 2L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
-      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE),
+      mode_segmentation = config$mode_segmentation
     )
     log_info(
       paste0(
@@ -148,7 +149,8 @@ run_batch <- function() {
       segment_size = scalar_int(config$segment_size, 40L, 1L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
-      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE),
+      mode_segmentation = config$mode_segmentation
     )
   }
   durees <- attr(segmented_corpus, "durees_segmentation")
@@ -227,6 +229,11 @@ run_batch <- function() {
         } else {
           ""
         },
+        " | mode_segmentation=",
+        normaliser_mode_segmentation(
+          config$mode_segmentation,
+          scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+        ),
         " | segmenter_sur_ponctuation_forte=",
         ifelse(scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE), "1", "0"),
         " | svd_method=",
@@ -1228,7 +1235,8 @@ preview_simi_terms_batch <- function() {
       rst2 = scalar_int(config$iramuteq_rst2, 14L, 2L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
-      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE),
+      mode_segmentation = config$mode_segmentation
     )
   } else {
     segmented_corpus <- split_segments(
@@ -1236,7 +1244,8 @@ preview_simi_terms_batch <- function() {
       segment_size = scalar_int(config$segment_size, 40L, 1L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
-      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+      force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE),
+      mode_segmentation = config$mode_segmentation
     )
   }
 

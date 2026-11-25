@@ -3236,10 +3236,13 @@ function buildJobConfig(analysisKind = "chd") {
     dic_morpho: String(entry.dic_morpho || "").trim()
   }));
 
+  const modeSegmentation = document.getElementById("segmentMode")?.value || "iramuteq_3";
+
   return {
     analyses: buildAnalysesConfig(analysisKind),
     segment_size: Number(document.getElementById("segmentSize").value) || 40,
-    segmenter_sur_ponctuation_forte: document.getElementById("useStrongPunctuation").checked,
+    mode_segmentation: modeSegmentation,
+    segmenter_sur_ponctuation_forte: modeSegmentation !== "taille_fixe",
     min_docfreq: Number(document.getElementById("minFreq").value) || 1,
     max_p: Number(document.getElementById("maxP").value) || 0.05,
     filtrer_affichage_pvalue: document.getElementById("filterPvalue").checked,
@@ -13072,7 +13075,16 @@ function renderDiscriminationSimpleSummary(container, payload) {
       setValue("classesMode", "manuel");
       setValue("kIramuteq", selectedManualK);
       setValue("segmentSize", manualReplayConfig.segment_size);
-      setChecked("useStrongPunctuation", manualReplayConfig.segmenter_sur_ponctuation_forte);
+      // Relire le booléen des anciennes configurations lorsque le mode manque.
+      const anciennePonctuation = manualReplayConfig.segmenter_sur_ponctuation_forte;
+      const modeRepris = manualReplayConfig.mode_segmentation || (
+        anciennePonctuation === undefined || anciennePonctuation === null
+          ? null
+          : (anciennePonctuation === true ||
+              ["true", "1", "oui", "yes"].includes(normalizeAsciiKey(anciennePonctuation))
+                ? "ponctuation_prioritaire" : "taille_fixe")
+      );
+      setValue("segmentMode", modeRepris);
       setValue("minFreq", manualReplayConfig.min_docfreq ?? selected.min_docfreq);
       setValue("maxP", manualReplayConfig.max_p);
       setChecked("filterPvalue", manualReplayConfig.filtrer_affichage_pvalue);

@@ -655,14 +655,15 @@
           </div>
 
           <div class="field">
-            <label class="check-option" for="useStrongPunctuation">
-              <input id="useStrongPunctuation" type="checkbox" checked />
-              <span>Tenir compte de la ponctuation forte (. ! ?) dans le découpage</span>
-            </label>
+            <label for="segmentMode">Mode de segmentation</label>
+            <select id="segmentMode">
+              <option value="iramuteq_3" selected>IRaMuTeQ 3.0 : ponctuation pondérée (par défaut)</option>
+              <option value="ponctuation_prioritaire">Ponctuation prioritaire (ancien mode)</option>
+              <option value="taille_fixe">Taille fixe, sans priorité de ponctuation</option>
+            </select>
             <p class="field-help">
-              Si activé, le découpage recherche la meilleure frontière autour de
-              segment_size avec priorité . ! ?, puis ; :, puis , puis espace ;
-              un retour à la ligne clôture aussi le segment.
+              IRaMuTeQ 3.0 : coupure selon le poids du signe et sa distance
+              à la taille cible (+15 occurrences). Les anciens modes restent disponibles.
             </p>
           </div>
 

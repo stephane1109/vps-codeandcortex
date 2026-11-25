@@ -145,11 +145,69 @@ import_corpus_iramuteq <- function(chemin_fichier) {
   segments[seq_len(nb_segments)]
 }
 
+
+# Choisit le mode explicite sans modifier les anciennes configurations booléennes.
+normaliser_mode_segmentation <- function(mode_segmentation = NULL,
+                                         force_split_on_strong_punct = FALSE) {
+  valeur <- if (is.null(mode_segmentation) || !length(mode_segmentation)) {
+    ""
+  } else {
+    trimws(as.character(mode_segmentation[[1L]]))
+  }
+  modes <- c("iramuteq_3", "ponctuation_prioritaire", "taille_fixe")
+  if (valeur %in% modes) return(valeur)
+  if (isTRUE(force_split_on_strong_punct)) "ponctuation_prioritaire" else "taille_fixe"
+}
+
+# Frontières compatibles avec corpus.py::decouperlist() d'IRaMuTeQ 3.0.
+# La fenêtre contient les positions 0 à (taille + 15), incluses.
+# Le poids du séparateur est divisé par sa distance à la position cible.
+# En cas d'égalité, le parcours de droite à gauche retient la droite.
+.segmenter_iramuteq_3 <- function(tok, taille_segment,
+                                 supprimer_ponctuation = FALSE) {
+  tok <- as.character(tok)
+  nb_tokens <- length(tok)
+  if (!nb_tokens) return(character(0))
+
+  segments <- character(0)
+  debut <- 1L
+  while (debut <= nb_tokens) {
+    reste <- nb_tokens - debut + 1L
+    if (reste <= taille_segment + 15L) {
+      # Le marqueur final $ de prep_txtlist() est dans la fenêtre.
+      fin <- nb_tokens
+    } else {
+      positions <- seq.int(debut, min(nb_tokens, debut + taille_segment + 15L))
+      fenetre <- tok[positions]
+      poids <- rep(0.01, length(fenetre))
+      poids[fenetre %in% c(".", "?", "!", "£$£") |
+              grepl("^([.]{3,}|…)$", fenetre)] <- 6.0
+      poids[fenetre == ":"] <- 5.0
+      poids[fenetre == ";"] <- 4.0
+      poids[fenetre == ","] <- 1.0
+
+      indices_zero <- seq_along(fenetre) - 1L
+      scores <- poids / (abs(taille_segment - indices_zero) + 1L)
+      indice_coupure <- length(scores) - which.max(rev(scores)) + 1L
+      fin <- positions[[indice_coupure]]
+    }
+    mots <- tok[seq.int(debut, fin)]
+    if (isTRUE(supprimer_ponctuation)) {
+      mots <- mots[!grepl("^[[:punct:]…]+$", mots)]
+    }
+    texte <- paste(mots, collapse = " ")
+    if (nzchar(texte)) segments <- c(segments, texte)
+    debut <- fin + 1L
+  }
+  segments
+}
+
 split_segments <- function(corpus,
                            segment_size = 40,
                            remove_punct = FALSE,
                            remove_numbers = FALSE,
-                           force_split_on_strong_punct = FALSE) {
+                           force_split_on_strong_punct = FALSE,
+                           mode_segmentation = NULL) {
   segment_size <- suppressWarnings(as.integer(segment_size))
   if (!is.finite(segment_size) || is.na(segment_size) || segment_size < 1) segment_size <- 40L
 
@@ -167,7 +225,11 @@ split_segments <- function(corpus,
   taille_lot <- 512L
   duree_tokenisation <- 0
   duree_decoupage <- 0
-  ponctuation_forte <- isTRUE(force_split_on_strong_punct)
+  mode_applique <- normaliser_mode_segmentation(
+    mode_segmentation, force_split_on_strong_punct
+  )
+  ponctuation_forte <- identical(mode_applique, "ponctuation_prioritaire")
+  ponctuation_ponderee <- identical(mode_applique, "iramuteq_3")
 
   if (length(docs) > 0L) {
     for (debut_lot in seq.int(1L, length(docs), by = taille_lot)) {
@@ -180,7 +242,7 @@ split_segments <- function(corpus,
       t_tokenisation <- proc.time()[["elapsed"]]
       tokens_lot <- quanteda::tokens(
         textes_lot,
-        remove_punct = if (ponctuation_forte) FALSE else isTRUE(remove_punct),
+        remove_punct = if (ponctuation_forte || ponctuation_ponderee) FALSE else isTRUE(remove_punct),
         remove_numbers = isTRUE(remove_numbers),
         remove_symbols = TRUE,
         remove_separators = TRUE,
@@ -198,6 +260,12 @@ split_segments <- function(corpus,
 
         if (ponctuation_forte) {
           textes_par_document[[i]] <- .segmenter_ponctuation_indices(
+            tok,
+            taille_segment = segment_size,
+            supprimer_ponctuation = isTRUE(remove_punct)
+          )
+        } else if (ponctuation_ponderee) {
+          textes_par_document[[i]] <- .segmenter_iramuteq_3(
             tok,
             taille_segment = segment_size,
             supprimer_ponctuation = isTRUE(remove_punct)
@@ -260,20 +328,23 @@ split_segments_double_rst <- function(corpus,
                                       rst2 = 14,
                                       remove_punct = FALSE,
                                       remove_numbers = FALSE,
-                                      force_split_on_strong_punct = FALSE) {
+                                      force_split_on_strong_punct = FALSE,
+                                      mode_segmentation = NULL) {
   corpus_rst1 <- split_segments(
     corpus,
     segment_size = rst1,
     remove_punct = isTRUE(remove_punct),
     remove_numbers = isTRUE(remove_numbers),
-    force_split_on_strong_punct = isTRUE(force_split_on_strong_punct)
+    force_split_on_strong_punct = isTRUE(force_split_on_strong_punct),
+    mode_segmentation = mode_segmentation
   )
   corpus_rst2 <- split_segments(
     corpus,
     segment_size = rst2,
     remove_punct = isTRUE(remove_punct),
     remove_numbers = isTRUE(remove_numbers),
-    force_split_on_strong_punct = isTRUE(force_split_on_strong_punct)
+    force_split_on_strong_punct = isTRUE(force_split_on_strong_punct),
+    mode_segmentation = mode_segmentation
   )
   t_fusion_rst <- proc.time()[["elapsed"]]
   txt1 <- as.character(corpus_rst1)

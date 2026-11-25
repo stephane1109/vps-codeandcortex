@@ -516,6 +516,11 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
       ifelse(scalar_bool(config$retirer_stopwords, FALSE), "1", "0"),
       " | supprimer_ponctuation=",
       ifelse(scalar_bool(config$supprimer_ponctuation, FALSE), "1", "0"),
+      " | mode_segmentation=",
+      normaliser_mode_segmentation(
+        config$mode_segmentation,
+        scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+      ),
       " | segmenter_sur_ponctuation_forte=",
       ifelse(scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE), "1", "0"),
       " | supprimer_chiffres=",
