@@ -81,7 +81,7 @@ const applyMultimodalCompareAbDialogBtn = document.getElementById("applyMultimod
 const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
-const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcVarsPlot"]);
+const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcExtremeTermsPlot", "afcVarsPlot"]);
 const simiZoomInBtn = document.getElementById("simiZoomInBtn");
 const simiZoomOutBtn = document.getElementById("simiZoomOutBtn");
 const simiZoomResetBtn = document.getElementById("simiZoomResetBtn");
@@ -287,6 +287,7 @@ const resultContainers = {
   chdWordclouds: document.getElementById("chdWordclouds"),
   afcClassesPlot: document.getElementById("afcClassesPlot"),
   afcTermsPlot: document.getElementById("afcTermsPlot"),
+  afcExtremeTermsPlot: document.getElementById("afcExtremeTermsPlot"),
   afcTermsTable: document.getElementById("afcTermsTable"),
   afcVarsPlot: document.getElementById("afcVarsPlot"),
   afcVarsTable: document.getElementById("afcVarsTable"),
@@ -12564,6 +12565,13 @@ async function renderExports(entries, index) {
     );
 
     renderImage(
+      resultContainers.afcExtremeTermsPlot,
+      findFile(index, [(path) => path.endsWith("afc/afc_termes_extremes.png")]),
+      "AFC : termes significatifs les plus extrêmes",
+      "Le fichier afc/afc_termes_extremes.png n'est pas disponible dans ces exports."
+    );
+
+    renderImage(
       resultContainers.afcVarsPlot,
       findFile(index, [(path) => path.endsWith("afc/afc_variables_etoilees.png")]),
       "AFC des variables etoilees"
@@ -12699,6 +12707,7 @@ function resetResultPanes() {
     chdWordclouds: "Chargez un dossier d'exports pour afficher les nuages de mots.",
     afcClassesPlot: "Chargez un dossier d'exports pour afficher l'AFC des classes.",
     afcTermsPlot: "Chargez un dossier d'exports pour afficher l'AFC des termes.",
+    afcExtremeTermsPlot: "Chargez un dossier d'exports pour afficher les termes significatifs les plus extrêmes.",
     afcTermsTable: "Chargez un dossier d'exports pour afficher la table AFC des termes.",
     afcVarsPlot: "Chargez un dossier d'exports pour afficher les variables etoilees.",
     afcVarsTable: "Chargez un dossier d'exports pour afficher les modalites projetees.",
