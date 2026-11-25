@@ -1679,6 +1679,7 @@ run_batch <- function() {
     terminer_mesure_performance("afc_classes", "AFC classes-termes et enrichissement", "AFC")
     afc_classes_png <- NULL
     afc_termes_png <- NULL
+    afc_termes_extremes_png <- NULL
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
       activer_repel <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
       taille_sel <- scalar_chr(config$afc_taille_mots, "frequency")
@@ -1687,6 +1688,7 @@ run_batch <- function() {
 
       afc_classes_png <- file.path(afc_dir, "afc_classes.png")
       afc_termes_png <- file.path(afc_dir, "afc_termes.png")
+      afc_termes_extremes_png <- file.path(afc_dir, "afc_termes_extremes.png")
       demarrer_mesure_performance("png_afc_classes")
       grDevices::png(afc_classes_png, width = 1800, height = 1400, res = 180)
       tryCatch(
@@ -1716,8 +1718,35 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
-      if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
       terminer_mesure_performance("png_afc_termes", "PNG AFC termes", "Graphiques")
+
+      # Le second graphique reprend exactement le format de l'AFC des termes.
+      # Les termes sont significatifs (p <= 0,05) et éloignés de l'origine factorielle.
+      demarrer_mesure_performance("png_afc_termes_extremes")
+      grDevices::png(afc_termes_extremes_png, width = 2000, height = 1600, res = 180)
+      tryCatch(
+        {
+          afc_extremes <- selectionner_termes_significatifs_extremes_afc(
+            afc_obj, nb_termes = 40L, seuil_p = 0.05, axes = c(1, 2)
+          )
+          tracer_afc_classes_termes(
+            afc_extremes,
+            axes = c(1, 2),
+            top_termes = 40L,
+            taille_sel = taille_sel,
+            activer_repel = activer_repel
+          )
+        },
+        error = function(e) {
+          plot.new()
+          text(0.5, 0.5, paste0("AFC termes extremes indisponible : ", e$message), cex = 1.0)
+          log_info(paste0("AFC termes extremes : rendu de secours utilise (", e$message, ")."))
+        }
+      )
+      grDevices::dev.off()
+      terminer_mesure_performance("png_afc_termes_extremes", "PNG AFC termes significatifs extremes", "Graphiques")
+
+      if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
         log_info("AFC classes x termes : calcul terminé.", progress = 78)
       } else {
         log_info("AFC classes x termes : un seul axe disponible, export PNG en projection 1D.", progress = 78)
@@ -1738,6 +1767,7 @@ run_batch <- function() {
     artifacts$afc <- list(
       afc_classes_png = relative_to_output(afc_classes_png),
       afc_termes_png = relative_to_output(afc_termes_png),
+      afc_termes_extremes_png = relative_to_output(afc_termes_extremes_png),
       stats_termes_csv = relative_to_output(file.path(afc_dir, "stats_termes.csv")),
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))
     )
