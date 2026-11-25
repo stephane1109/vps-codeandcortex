@@ -306,18 +306,10 @@
             </div>
 
             <div class="section-stack">
-              <article class="card">
-                <h3>Positionnement des étiquettes AFC</h3>
-                <label class="check-option" for="afcActiverGgrepel">
-                  <input id="afcActiverGgrepel" type="checkbox" checked />
-                  <span>Affichage ggrepel (mode rapide)</span>
-                </label>
-                <p class="section-copy" id="afcGgrepelEtat" aria-live="polite">
-                  La méthode ggrepel est sélectionnée pour la prochaine analyse. Les graphiques déjà générés ne changent pas.
-                </p>
-              </article>
               <p class="section-copy" id="afcPlacementVersionInfo">
-                Tracé AFC : lorsque l’option anti-chevauchement est activée, ggrepel (mode rapide) ou la méthode classique en spirale positionne les étiquettes selon le réglage choisi avant l’analyse.
+                Le choix du placement des étiquettes (méthode classique ou ggrepel)
+                se trouve dans la boîte de dialogue "Paramètres de l'analyse CHD",
+                sous "Paramètres AFC complémentaires".
                 Les points conservent leurs coordonnées factorielles. Les graphiques déjà
                 exportés ne sont pas modifiés : relancer l’analyse après le déploiement.
                 Branche du code : deploy-iramuteq-lite_autoCHD (mise à jour ggrepel du 25-11-2026).
@@ -718,11 +710,8 @@
               <input id="reduceOverlap" type="checkbox" checked />
               <span>Éviter les chevauchements des mots (AFC)</span>
             </label>
-            <label class="check-option" for="affichageGgrepel">
-              <input id="affichageGgrepel" type="checkbox" checked />
-              <span>Affichage ggrepel (mode rapide)</span>
-            </label>
-            <p class="section-copy">La méthode ggrepel est optionnelle. Le mode rapide limite le temps consacré au positionnement des étiquettes ; il n'est pas systématiquement plus rapide que la méthode classique.</p>
+            <input id="affichageGgrepel" type="checkbox" checked hidden />
+            <!-- Cette option est insérée directement dans la boîte de dialogue CHD par app.js. -->
           </div>
           <div class="field">
             <label for="wordSizeMode">Taille des mots (AFC termes)</label>
