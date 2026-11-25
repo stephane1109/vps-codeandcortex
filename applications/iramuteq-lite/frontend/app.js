@@ -81,6 +81,9 @@ const applyMultimodalCompareAbDialogBtn = document.getElementById("applyMultimod
 const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
+const afcActiverGgrepel = document.getElementById("afcActiverGgrepel");
+const afcGgrepelEtat = document.getElementById("afcGgrepelEtat");
+const reduceOverlapInput = document.getElementById("reduceOverlap");
 const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcExtremeTermsPlot", "afcVarsPlot"]);
 const simiZoomInBtn = document.getElementById("simiZoomInBtn");
 const simiZoomOutBtn = document.getElementById("simiZoomOutBtn");
@@ -2090,7 +2093,7 @@ function buildJobConfig(analysisKind = "chd") {
     pos_lexique_a_conserver: splitCsvValues(document.getElementById("posKeep").value),
     morpho_exclure_etre_verbe: document.getElementById("excludeEtre").checked,
     morpho_conserver_hors_lexique: document.getElementById("keepUnknownForms").checked,
-    afc_reduire_chevauchement: document.getElementById("reduceOverlap").checked,
+    afc_reduire_chevauchement: Boolean(reduceOverlapInput?.checked),
     afc_taille_mots: document.getElementById("wordSizeMode").value,
     afc_variables_etoilees: splitCsvValues(document.getElementById("afcStarredVariables").value),
     suivi_variable_etoilee: normalizeStarredVariableName(document.getElementById("suiviVariable")?.value || ""),
@@ -14553,6 +14556,25 @@ async function startAnalysis(analysisKind = "chd") {
     await refreshTicketSidebarStatus();
   }
 }
+
+// Les deux contrôles ggrepel pilotent le même paramètre de la prochaine analyse.
+function synchroniserOptionGgrepel(estActive) {
+  const valeur = Boolean(estActive);
+  if (reduceOverlapInput) reduceOverlapInput.checked = valeur;
+  if (afcActiverGgrepel) afcActiverGgrepel.checked = valeur;
+  if (afcGgrepelEtat) {
+    afcGgrepelEtat.textContent = valeur
+      ? "ggrepel est activé pour la prochaine analyse. Les graphiques déjà générés ne changent pas."
+      : "ggrepel est désactivé pour la prochaine analyse. Les étiquettes seront affichées aux coordonnées d'origine.";
+  }
+}
+reduceOverlapInput?.addEventListener("change", () => {
+  synchroniserOptionGgrepel(reduceOverlapInput.checked);
+});
+afcActiverGgrepel?.addEventListener("change", () => {
+  synchroniserOptionGgrepel(afcActiverGgrepel.checked);
+});
+synchroniserOptionGgrepel(reduceOverlapInput?.checked ?? true);
 
 activateTopTab("analyse");
 activateChdSubTab("dendrogramme");
