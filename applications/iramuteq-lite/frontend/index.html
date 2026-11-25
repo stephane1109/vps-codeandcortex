@@ -198,6 +198,7 @@
               <button class="sub-nav-link" data-subtab-target="stats_chd" type="button">Stats CHD</button>
               <button class="sub-nav-link" data-subtab-target="concordancier" type="button">Concordancier</button>
               <button class="sub-nav-link" data-subtab-target="nuage_de_mots" type="button">Nuage de mots</button>
+              <button class="sub-nav-link" data-subtab-target="performances_chd" type="button">Performances</button>
             </nav>
 
             <section class="subpanel is-active" data-subpanel="dendrogramme">
@@ -282,6 +283,15 @@
                 <article class="card">
                   <h3>Résultat</h3>
                   <div id="chdWordclouds" class="result-pane"></div>
+                </article>
+              </div>
+            </section>
+            <section class="subpanel" data-subpanel="performances_chd" hidden>
+              <div class="section-stack">
+                <article class="card">
+                  <h3>Journal de performances CHD</h3>
+                  <p class="section-copy">Durée de chaque étape, pourcentage du temps total et caractéristiques du corpus. Le fichier journal_performances_chd.csv est inclus dans les exports de l'analyse.</p>
+                  <div id="chdPerformances" class="result-pane"></div>
                 </article>
               </div>
             </section>
