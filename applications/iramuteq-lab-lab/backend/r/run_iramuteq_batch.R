@@ -82,8 +82,10 @@ run_batch <- function() {
   log_info("Import du corpus.", progress = 8)
   corpus_md5 <- unname(tools::md5sum(input_path))
   log_info(paste0("MD5 fichier = ", corpus_md5), progress = 9)
+  t_import <- proc.time()[["elapsed"]]
   corpus_importe <- import_corpus_iramuteq(input_path)
   log_info(paste0("Nombre de documents importés : ", quanteda::ndoc(corpus_importe)), progress = 10)
+  log_info(sprintf("Durée importation : %.2f s.", proc.time()[["elapsed"]] - t_import), progress = 10)
 
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
@@ -120,6 +122,7 @@ run_batch <- function() {
     config_chd$iramuteq_discrimination_simple_score_mode <- auto_discriminant_score_mode
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
+  t_segmentation <- proc.time()[["elapsed"]]
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
       corpus_importe,
@@ -148,11 +151,22 @@ run_batch <- function() {
       force_split_on_strong_punct = scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
     )
   }
+  durees <- attr(segmented_corpus, "durees_segmentation")
+  log_info(sprintf("Durée segmentation totale : %.2f s.", proc.time()[["elapsed"]] - t_segmentation), progress = 18)
+  if (!is.null(durees)) {
+    log_info(sprintf(
+      "Détail segmentation : tokenisation %.2f s | découpage %.2f s | assemblage %.2f s.",
+      durees[["tokenisation"]], durees[["decoupage"]], durees[["assemblage"]]
+    ), progress = 18)
+  }
   log_info(paste0("Corpus segmenté en ", quanteda::ndoc(segmented_corpus), " segments."), progress = 18)
   log_info(paste0("Nombre de segments analysés : ", quanteda::ndoc(segmented_corpus)), progress = 19)
   log_info(paste0("Nombre de segments après découpage : ", quanteda::ndoc(segmented_corpus)), progress = 20)
 
+  t_pretraitement <- proc.time()[["elapsed"]]
   pipeline <- preparer_pipeline_chd(segmented_corpus, config)
+  log_info(sprintf("Durée préparation lexicale / DFM : %.2f s.",
+                   proc.time()[["elapsed"]] - t_pretraitement), progress = 41)
   filtered_corpus <- pipeline$filtered_corpus
   dfm_obj <- pipeline$dfm_obj
   tok <- pipeline$tok
@@ -224,6 +238,7 @@ run_batch <- function() {
       ),
       progress = 53
     )
+    t_chd <- proc.time()[["elapsed"]]
     res_ira <- lancer_moteur_chd_iramuteq(
       dfm_obj = dfm_obj,
       k = scalar_int(config_chd$k_iramuteq, 10L, 2L),
@@ -260,6 +275,8 @@ run_batch <- function() {
         NULL
       }
     )
+    log_info(sprintf("Durée calcul CHD : %.2f s.",
+                     proc.time()[["elapsed"]] - t_chd), progress = 59)
     res_ira$classes_mode <- classes_mode
     if (identical(classes_mode, "discrimination_simple") &&
         is.list(res_ira$auto_selection) &&

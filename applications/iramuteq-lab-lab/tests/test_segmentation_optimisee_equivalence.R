@@ -279,3 +279,35 @@ for (forte in c(FALSE, TRUE)) {
 }
 
 cat("Segmentation optimisée : textes, identifiants et métadonnées identiques à la référence.\n")
+
+
+# Les mêmes résultats doivent être obtenus de part et d'autre de 512 documents.
+corpus_lots <- quanteda::corpus(
+  data.frame(
+    doc_id = paste0("lot_", seq_len(515L)),
+    text = rep("Une scène est filmée. La foule manifeste, puis elle repart !", 515L),
+    stringsAsFactors = FALSE
+  ),
+  text_field = "text"
+)
+quanteda::docvars(corpus_lots, "*profil") <- rep("presse", 515L)
+
+for (forte in c(FALSE, TRUE)) {
+  arguments_lots <- list(
+    corpus = corpus_lots,
+    segment_size = 12L,
+    remove_punct = TRUE,
+    remove_numbers = TRUE,
+    force_split_on_strong_punct = forte
+  )
+  ancien <- do.call(segmenter_reference_avant_optimisation, arguments_lots)
+  nouveau <- do.call(split_segments, arguments_lots)
+  stopifnot(identical(as.character(nouveau), as.character(ancien)))
+  stopifnot(identical(quanteda::docnames(nouveau), quanteda::docnames(ancien)))
+  stopifnot(identical(as.data.frame(quanteda::docvars(nouveau)),
+                      as.data.frame(quanteda::docvars(ancien))))
+  durees <- attr(nouveau, "durees_segmentation")
+  stopifnot(all(c("tokenisation", "decoupage", "assemblage") %in% names(durees)))
+  stopifnot(all(is.finite(durees) & durees >= 0))
+}
+cat("Tokenisation par lots et mesures de durée : comparaisons conformes.\n")

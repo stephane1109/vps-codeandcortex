@@ -162,49 +162,61 @@ split_segments <- function(corpus,
   # sans multiplier les concaténations de vecteurs pour chaque nouveau segment.
   textes_par_document <- vector("list", length(docs))
 
-  for (i in seq_along(docs)) {
-    if (isTRUE(force_split_on_strong_punct)) {
-      doc_with_newlines <- gsub("\r\n|\r|\n", " __NL_SEG_BREAK__ ", docs[[i]], perl = TRUE)
-      tok_doc <- quanteda::tokens(
-        doc_with_newlines,
-        remove_punct = FALSE,
+  # Traitement par lots : les mêmes options quanteda sont appliquées à un
+  # ensemble de documents, sans conserver tous les tokens du corpus en mémoire.
+  taille_lot <- 512L
+  duree_tokenisation <- 0
+  duree_decoupage <- 0
+  ponctuation_forte <- isTRUE(force_split_on_strong_punct)
+
+  if (length(docs) > 0L) {
+    for (debut_lot in seq.int(1L, length(docs), by = taille_lot)) {
+      indices_lot <- seq.int(debut_lot, min(length(docs), debut_lot + taille_lot - 1L))
+      textes_lot <- docs[indices_lot]
+      if (ponctuation_forte) {
+        textes_lot <- gsub("\r\n|\r|\n", " __NL_SEG_BREAK__ ", textes_lot, perl = TRUE)
+      }
+
+      t_tokenisation <- proc.time()[["elapsed"]]
+      tokens_lot <- quanteda::tokens(
+        textes_lot,
+        remove_punct = if (ponctuation_forte) FALSE else isTRUE(remove_punct),
         remove_numbers = isTRUE(remove_numbers),
         remove_symbols = TRUE,
         remove_separators = TRUE,
         split_hyphens = FALSE
       )
-      tok <- as.character(tok_doc[[1]])
-      tok <- tok[nzchar(tok)]
-      if (!length(tok)) next
+      duree_tokenisation <- duree_tokenisation +
+        (proc.time()[["elapsed"]] - t_tokenisation)
 
-      textes_par_document[[i]] <- .segmenter_ponctuation_indices(
-        tok,
-        taille_segment = segment_size,
-        supprimer_ponctuation = isTRUE(remove_punct)
-      )
-    } else {
-      # Le découpage strict par nombre de mots et toutes ses options restent inchangés.
-      tok_doc <- quanteda::tokens(
-        docs[[i]],
-        remove_punct = isTRUE(remove_punct),
-        remove_numbers = isTRUE(remove_numbers),
-        remove_symbols = TRUE,
-        remove_separators = TRUE,
-        split_hyphens = FALSE
-      )
-      tok <- as.character(tok_doc[[1]])
-      tok <- tok[nzchar(tok)]
-      if (!length(tok)) next
+      t_decoupage <- proc.time()[["elapsed"]]
+      for (indice_lot in seq_along(indices_lot)) {
+        i <- indices_lot[[indice_lot]]
+        tok <- as.character(tokens_lot[[indice_lot]])
+        tok <- tok[nzchar(tok)]
+        if (!length(tok)) next
 
-      nseg <- ceiling(length(tok) / segment_size)
-      debuts <- ((seq_len(nseg) - 1L) * segment_size) + 1L
-      fins <- pmin(seq_len(nseg) * segment_size, length(tok))
-      textes_par_document[[i]] <- vapply(seq_len(nseg), function(j) {
-        paste(tok[debuts[[j]]:fins[[j]]], collapse = " ")
-      }, character(1))
+        if (ponctuation_forte) {
+          textes_par_document[[i]] <- .segmenter_ponctuation_indices(
+            tok,
+            taille_segment = segment_size,
+            supprimer_ponctuation = isTRUE(remove_punct)
+          )
+        } else {
+          nseg <- ceiling(length(tok) / segment_size)
+          debuts <- ((seq_len(nseg) - 1L) * segment_size) + 1L
+          fins <- pmin(seq_len(nseg) * segment_size, length(tok))
+          textes_par_document[[i]] <- vapply(seq_len(nseg), function(j) {
+            paste(tok[debuts[[j]]:fins[[j]]], collapse = " ")
+          }, character(1))
+        }
+      }
+      duree_decoupage <- duree_decoupage +
+        (proc.time()[["elapsed"]] - t_decoupage)
     }
   }
 
+  t_assemblage <- proc.time()[["elapsed"]]
   nombres_segments <- lengths(textes_par_document)
   if (!sum(nombres_segments)) stop("Segmentation impossible : aucun segment généré.")
 
@@ -234,6 +246,12 @@ split_segments <- function(corpus,
       }
     }
   }
+  # Ces mesures alimentent le journal sans modifier les options de l'interface.
+  attr(corp, "durees_segmentation") <- c(
+    tokenisation = as.numeric(duree_tokenisation),
+    decoupage = as.numeric(duree_decoupage),
+    assemblage = as.numeric(proc.time()[["elapsed"]] - t_assemblage)
+  )
   corp
 }
 
@@ -257,6 +275,7 @@ split_segments_double_rst <- function(corpus,
     remove_numbers = isTRUE(remove_numbers),
     force_split_on_strong_punct = isTRUE(force_split_on_strong_punct)
   )
+  t_fusion_rst <- proc.time()[["elapsed"]]
   txt1 <- as.character(corpus_rst1)
   txt2 <- as.character(corpus_rst2)
   id1 <- paste0(as.character(quanteda::docnames(corpus_rst1)), "_rst1")
@@ -276,5 +295,12 @@ split_segments_double_rst <- function(corpus,
     }
   }
   quanteda::docvars(corp_out, "rst_source") <- c(rep("rst1", length(txt1)), rep("rst2", length(txt2)))
+  durees_rst1 <- attr(corpus_rst1, "durees_segmentation")
+  durees_rst2 <- attr(corpus_rst2, "durees_segmentation")
+  if (!is.null(durees_rst1) && !is.null(durees_rst2)) {
+    attr(corp_out, "durees_segmentation") <- durees_rst1 + durees_rst2 +
+      c(tokenisation = 0, decoupage = 0,
+        assemblage = as.numeric(proc.time()[["elapsed"]] - t_fusion_rst))
+  }
   corp_out
 }
