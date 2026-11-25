@@ -9,7 +9,7 @@
 # - exécution de l'AFC
 # - statistiques (fréquence, chi2, p-value)
 # - tracés avec axes centrés (0 au centre) et limites symétriques
-# - option anti-chevauchement des labels (placement en spirale + tests de collision)
+# - option anti-chevauchement des étiquettes avec ggrepel, sans déplacement des points
 
 verifier_factominer <- function() {
   if (!requireNamespace("FactoMineR", quietly = TRUE)) {
@@ -89,6 +89,92 @@ calculer_lim_sym <- function(x, y, marge = 0.08) {
     return(paste0("Axe ", axis_info$ax2))
   }
   "Projection 1D"
+}
+
+
+# Tracé AFC avec ggrepel : les points conservent leurs coordonnées factorielles.
+# Les étiquettes des classes et des mots sont repoussées conjointement.
+.tracer_afc_avec_ggrepel <- function(
+  x_points, y_points, etiquettes, couleurs, tailles,
+  x_classes, y_classes, etiquettes_classes,
+  limites_x, limites_y, informations_axes, iterations_max = 220
+) {
+  if (!requireNamespace("ggplot2", quietly = TRUE) ||
+      !requireNamespace("ggrepel", quietly = TRUE)) {
+    stop("AFC : les packages 'ggplot2' et 'ggrepel' sont requis pour réduire les chevauchements.")
+  }
+
+  donnees_classes <- data.frame(
+    x = as.numeric(x_classes),
+    y = as.numeric(y_classes),
+    etiquette = as.character(etiquettes_classes),
+    couleur = rep("black", length(x_classes)),
+    taille = rep(3.5, length(x_classes)),
+    stringsAsFactors = FALSE
+  )
+  donnees_points <- data.frame(
+    x = as.numeric(x_points),
+    y = as.numeric(y_points),
+    etiquette = as.character(etiquettes),
+    couleur = as.character(couleurs),
+    taille = as.numeric(tailles) * 3.2,
+    stringsAsFactors = FALSE
+  )
+
+  donnees_etiquettes <- rbind(donnees_classes, donnees_points)
+  nombre_iterations <- max(1000L, as.integer(iterations_max) * 10L)
+
+  graphique <- ggplot2::ggplot() +
+    ggplot2::geom_hline(yintercept = 0, colour = "gray80", linewidth = 0.35) +
+    ggplot2::geom_vline(xintercept = 0, colour = "gray80", linewidth = 0.35) +
+    ggplot2::geom_point(
+      data = donnees_classes,
+      mapping = ggplot2::aes(x = x, y = y),
+      colour = "black",
+      size = 2.1
+    ) +
+    ggplot2::geom_point(
+      data = donnees_points,
+      mapping = ggplot2::aes(x = x, y = y, colour = couleur),
+      size = 1.0
+    ) +
+    ggrepel::geom_text_repel(
+      data = donnees_etiquettes,
+      mapping = ggplot2::aes(
+        x = x, y = y, label = etiquette, colour = couleur, size = taille
+      ),
+      box.padding = 0.25,
+      point.padding = 0.12,
+      force = 1,
+      max.overlaps = Inf,
+      max.time = 1.5,
+      max.iter = nombre_iterations,
+      seed = 42,
+      min.segment.length = 0,
+      segment.colour = "gray65",
+      segment.size = 0.25,
+      show.legend = FALSE
+    ) +
+    ggplot2::scale_colour_identity() +
+    ggplot2::scale_size_identity() +
+    ggplot2::coord_cartesian(
+      xlim = limites_x,
+      ylim = limites_y,
+      expand = TRUE,
+      clip = "off"
+    ) +
+    ggplot2::labs(
+      x = paste0("Axe ", informations_axes$ax1),
+      y = .etiquette_axe_y_afc(informations_axes)
+    ) +
+    ggplot2::theme_classic(base_size = 12) +
+    ggplot2::theme(
+      legend.position = "none",
+      plot.margin = ggplot2::margin(20, 38, 20, 30)
+    )
+
+  print(graphique)
+  invisible(graphique)
 }
 
 # Test de chevauchement rectangles
@@ -433,27 +519,6 @@ tracer_afc_classes_termes <- function(
   if (!is.null(ylim_zoom) && length(ylim_zoom) == 2 && all(is.finite(ylim_zoom))) {
     ylim_use <- as.numeric(ylim_zoom)
   }
-  plot(
-    0, 0,
-    type = "n",
-    xlab = paste0("Axe ", axis_info$ax1),
-    ylab = .etiquette_axe_y_afc(axis_info),
-    xlim = xlim_use, ylim = ylim_use
-  )
-  abline(h = 0, v = 0, col = "gray80")
-
-  # Note sur la technique : si activer_repel=TRUE, on applique un placement itératif en spirale
-  # avec tests de collision rectangles afin de réduire le chevauchement des étiquettes.
-  # Cela ne garantit pas 0 collision dans tous les cas, mais réduit fortement les superpositions.
-  points(x_c, y_c, pch = 19, cex = 1.25)
-  text(
-    x_c,
-    y_c,
-    labels = rownames(rc),
-    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
-    cex = 1.0
-  )
-
   # Couleurs par classe
   classes <- sort(unique(rownames(rc)))
   ncl <- length(classes)
@@ -480,19 +545,44 @@ tracer_afc_classes_termes <- function(
     cex_vec <- cex_min + v * (cex_max - cex_min)
   }
 
+
   if (isTRUE(activer_repel)) {
-    coords <- placer_labels_sans_chevauchement_spirale(
-      x = x_m, y = y_m, labels = mots, cex_vec = cex_vec, max_iter = repel_max_iter
+    .tracer_afc_avec_ggrepel(
+      x_points = x_m,
+      y_points = y_m,
+      etiquettes = mots,
+      couleurs = col_m,
+      tailles = cex_vec,
+      x_classes = x_c,
+      y_classes = y_c,
+      etiquettes_classes = rownames(rc),
+      limites_x = xlim_use,
+      limites_y = ylim_use,
+      informations_axes = axis_info,
+      iterations_max = repel_max_iter
     )
-    x_lab <- coords$x
-    y_lab <- coords$y
-  } else {
-    x_lab <- x_m
-    y_lab <- y_m
+    return(invisible(NULL))
   }
 
-  points(x_lab, y_lab, pch = 16, cex = 0.5, col = col_m)
-  text(x_lab, y_lab, labels = mots, cex = cex_vec, col = col_m)
+  # Sans répulsion, conserver le dessin classique et les positions factorielles.
+  plot(
+    0, 0,
+    type = "n",
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = xlim_use,
+    ylim = ylim_use
+  )
+  abline(h = 0, v = 0, col = "gray80")
+  points(x_c, y_c, pch = 19, cex = 1.25)
+  text(
+    x_c, y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
+  points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
+  text(x_m, y_m, labels = mots, cex = cex_vec, col = col_m)
 }
 
 # Fallback : extraction de modalités depuis une ligne IRaMuTeQ (si docvars vides)
@@ -908,24 +998,6 @@ tracer_afc_variables_etoilees <- function(
   y_c <- coords_classes$y
 
   lim <- .calculer_limites_trace_afc(c(x_m, x_c), c(y_m, y_c), axis_info$has_second)
-  plot(
-    0, 0,
-    type = "n",
-    xlab = paste0("Axe ", axis_info$ax1),
-    ylab = .etiquette_axe_y_afc(axis_info),
-    xlim = lim$xlim, ylim = lim$ylim
-  )
-  abline(h = 0, v = 0, col = "gray80")
-
-  points(x_c, y_c, pch = 19, cex = 1.25)
-  text(
-    x_c,
-    y_c,
-    labels = rownames(rc),
-    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
-    cex = 1.0
-  )
-
   # Couleurs par classe (classe max)
   classes <- sort(unique(rownames(rc)))
   ncl <- length(classes)
@@ -951,17 +1023,42 @@ tracer_afc_variables_etoilees <- function(
     cex_vec <- cex_min + v * (cex_max - cex_min)
   }
 
+
   if (isTRUE(activer_repel)) {
-    coords <- placer_labels_sans_chevauchement_spirale(
-      x = x_m, y = y_m, labels = mods, cex_vec = cex_vec, max_iter = repel_max_iter
+    .tracer_afc_avec_ggrepel(
+      x_points = x_m,
+      y_points = y_m,
+      etiquettes = mods,
+      couleurs = col_m,
+      tailles = cex_vec,
+      x_classes = x_c,
+      y_classes = y_c,
+      etiquettes_classes = rownames(rc),
+      limites_x = lim$xlim,
+      limites_y = lim$ylim,
+      informations_axes = axis_info,
+      iterations_max = repel_max_iter
     )
-    x_lab <- coords$x
-    y_lab <- coords$y
-  } else {
-    x_lab <- x_m
-    y_lab <- y_m
+    return(invisible(NULL))
   }
 
-  points(x_lab, y_lab, pch = 16, cex = 0.5, col = col_m)
-  text(x_lab, y_lab, labels = mods, cex = cex_vec, col = col_m)
+  # Sans répulsion, conserver le dessin classique et les positions factorielles.
+  plot(
+    0, 0,
+    type = "n",
+    xlab = paste0("Axe ", axis_info$ax1),
+    ylab = .etiquette_axe_y_afc(axis_info),
+    xlim = lim$xlim,
+    ylim = lim$ylim
+  )
+  abline(h = 0, v = 0, col = "gray80")
+  points(x_c, y_c, pch = 19, cex = 1.25)
+  text(
+    x_c, y_c,
+    labels = rownames(rc),
+    pos = if (isTRUE(axis_info$has_second)) rep(3, length(x_c)) else ifelse(seq_along(x_c) %% 2L == 0L, 1L, 3L),
+    cex = 1.0
+  )
+  points(x_m, y_m, pch = 16, cex = 0.5, col = col_m)
+  text(x_m, y_m, labels = mods, cex = cex_vec, col = col_m)
 }
