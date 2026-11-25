@@ -339,15 +339,9 @@ filtrer_formes_par_occurrences <- function(dfm_obj, frequence_minimale) {
   quanteda::dfm_trim(dfm_obj, min_termfreq = frequence_minimale, termfreq_type = "count")
 }
 
-preparer_pipeline_chd <- function(segmented_corpus, config) {
-  ids_docs <- as.character(quanteda::docnames(segmented_corpus))
-  textes_orig <- as.character(segmented_corpus)
-  source_dictionnaire <- normaliser_source_dictionnaire(scalar_chr(config$source_dictionnaire, "lexique_fr"))
-  infos_langue <- infos_dictionnaire(source_dictionnaire)
-  utiliser_spacy <- identical(source_dictionnaire, "spacy")
-  if (isTRUE(utiliser_spacy)) {
-    infos_langue$langue <- sub("_.*$", "", scalar_chr(config$spacy_model, "xx"))
-  }
+# Applique les dictionnaires d'expressions sans modifier les options existantes.
+appliquer_expressions_configurees <- function(textes_orig, config,
+                                             source_dictionnaire, infos_langue) {
   expressions_actives_df <- NULL
 
   if (scalar_bool(config$expression_utiliser_dictionnaire, FALSE)) {
@@ -464,16 +458,89 @@ preparer_pipeline_chd <- function(segmented_corpus, config) {
     log_info("Dictionnaire d'expressions désactivé (expression_utiliser_dictionnaire=0).", progress = 24)
   }
 
-  log_info("Préparation du texte (nettoyage / minuscules).", progress = 30)
-  textes_nettoyes <- appliquer_nettoyage_iramuteq(
-    textes = textes_orig,
+  list(textes = textes_orig, expressions_actives_df = expressions_actives_df)
+}
+
+# Alignement de l'ordre officiel : lower, firstclean, charact,
+# expressions, apos et tiret, puis make_uces() sur le texte préparé.
+preparer_corpus_avant_segmentation_iramuteq3 <- function(corpus_importe, config) {
+  textes <- as.character(corpus_importe)
+  textes[is.na(textes)] <- ""
+  textes <- tolower(gsub("\u00a0", " ", textes, fixed = TRUE))
+  textes <- gsub("[’´ʼʹ]", "'", textes, perl = TRUE)
+  textes <- gsub(intToUtf8(96L), "'", textes, fixed = TRUE)
+  textes <- gsub("œ", "oe", textes, fixed = TRUE)
+  # Normaliser les points de suspension en séparateur de poids fort.
+  textes <- gsub("...", " . ", textes, fixed = TRUE)
+  textes <- gsub("…", " . ", textes, fixed = TRUE)
+  textes <- gsub("([?!.,;:])", " \\1 ", textes, perl = TRUE)
+
+  # Caractères nettoyés avant les expressions, apostrophes/tirets ensuite.
+  textes <- appliquer_nettoyage_iramuteq(
+    textes = textes,
     activer_nettoyage = scalar_bool(config$nettoyage_caracteres, TRUE),
     forcer_minuscules = TRUE,
     supprimer_chiffres = scalar_bool(config$supprimer_chiffres, FALSE),
+    supprimer_apostrophes = FALSE,
+    remplacer_tirets_espaces = FALSE,
+    compatibilite_corpus_iramuteq = FALSE
+  )
+  source_dictionnaire <- normaliser_source_dictionnaire(
+    scalar_chr(config$source_dictionnaire, "lexique_fr")
+  )
+  infos_langue <- infos_dictionnaire(source_dictionnaire)
+  expressions <- appliquer_expressions_configurees(
+    textes, config, source_dictionnaire, infos_langue
+  )
+  textes <- appliquer_nettoyage_iramuteq(
+    textes = expressions$textes,
+    activer_nettoyage = FALSE,
+    forcer_minuscules = TRUE,
+    supprimer_chiffres = FALSE,
     supprimer_apostrophes = scalar_bool(config$supprimer_apostrophes, TRUE),
     remplacer_tirets_espaces = scalar_bool(config$remplacer_tirets_espaces, FALSE),
     compatibilite_corpus_iramuteq = scalar_bool(config$labbe_pretraitement_iramuteq, FALSE)
   )
+  corpus_prepare <- corpus_importe
+  quanteda::texts(corpus_prepare) <- textes
+  log_info("IRaMuTeQ 3.0 : nettoyage et expressions réalisés avant le découpage.", progress = 16)
+  list(corpus = corpus_prepare,
+       expressions_actives_df = expressions$expressions_actives_df,
+       deja_nettoye = TRUE)
+}
+
+preparer_pipeline_chd <- function(segmented_corpus, config, preparation_initiale = NULL) {
+  ids_docs <- as.character(quanteda::docnames(segmented_corpus))
+  textes_orig <- as.character(segmented_corpus)
+  source_dictionnaire <- normaliser_source_dictionnaire(scalar_chr(config$source_dictionnaire, "lexique_fr"))
+  infos_langue <- infos_dictionnaire(source_dictionnaire)
+  utiliser_spacy <- identical(source_dictionnaire, "spacy")
+  if (isTRUE(utiliser_spacy)) {
+    infos_langue$langue <- sub("_.*$", "", scalar_chr(config$spacy_model, "xx"))
+  }
+  if (is.list(preparation_initiale) && isTRUE(preparation_initiale$deja_nettoye)) {
+    # Le nettoyage et les expressions ont déjà été appliqués avant découpage.
+    expressions_actives_df <- preparation_initiale$expressions_actives_df
+    textes_nettoyes <- textes_orig
+    log_info("IRaMuTeQ 3.0 : préparation initiale réutilisée sans double nettoyage.", progress = 30)
+  } else {
+    # Les deux anciens modes gardent exactement leur ordre de traitement.
+    expressions_preparees <- appliquer_expressions_configurees(
+      textes_orig, config, source_dictionnaire, infos_langue
+    )
+    textes_orig <- expressions_preparees$textes
+    expressions_actives_df <- expressions_preparees$expressions_actives_df
+    log_info("Préparation du texte (nettoyage / minuscules).", progress = 30)
+    textes_nettoyes <- appliquer_nettoyage_iramuteq(
+      textes = textes_orig,
+      activer_nettoyage = scalar_bool(config$nettoyage_caracteres, TRUE),
+      forcer_minuscules = TRUE,
+      supprimer_chiffres = scalar_bool(config$supprimer_chiffres, FALSE),
+      supprimer_apostrophes = scalar_bool(config$supprimer_apostrophes, TRUE),
+      remplacer_tirets_espaces = scalar_bool(config$remplacer_tirets_espaces, FALSE),
+      compatibilite_corpus_iramuteq = scalar_bool(config$labbe_pretraitement_iramuteq, FALSE)
+    )
+  }
   textes_chd <- textes_nettoyes
   names(textes_chd) <- ids_docs
 

@@ -122,10 +122,23 @@ run_batch <- function() {
     config_chd$iramuteq_discrimination_simple_score_mode <- auto_discriminant_score_mode
   }
   auto_k_min <- scalar_int(config$iramuteq_auto_k_min, 2L, 2L)
+  # Préparer le corpus avant segmentation uniquement en mode IRaMuTeQ 3.0.
+  mode_segmentation_applique <- normaliser_mode_segmentation(
+    config$mode_segmentation,
+    scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+  )
+  preparation_initiale <- NULL
+  corpus_a_segmenter <- corpus_importe
+  if (identical(mode_segmentation_applique, "iramuteq_3")) {
+    preparation_initiale <- preparer_corpus_avant_segmentation_iramuteq3(
+      corpus_importe, config
+    )
+    corpus_a_segmenter <- preparation_initiale$corpus
+  }
   t_segmentation <- proc.time()[["elapsed"]]
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
-      corpus_importe,
+      corpus_a_segmenter,
       rst1 = scalar_int(config$iramuteq_rst1, 12L, 2L),
       rst2 = scalar_int(config$iramuteq_rst2, 14L, 2L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
@@ -145,7 +158,7 @@ run_batch <- function() {
     )
   } else {
     segmented_corpus <- split_segments(
-      corpus_importe,
+      corpus_a_segmenter,
       segment_size = scalar_int(config$segment_size, 40L, 1L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
@@ -166,7 +179,7 @@ run_batch <- function() {
   log_info(paste0("Nombre de segments après découpage : ", quanteda::ndoc(segmented_corpus)), progress = 20)
 
   t_pretraitement <- proc.time()[["elapsed"]]
-  pipeline <- preparer_pipeline_chd(segmented_corpus, config)
+  pipeline <- preparer_pipeline_chd(segmented_corpus, config, preparation_initiale = preparation_initiale)
   log_info(sprintf("Durée préparation lexicale / DFM : %.2f s.",
                    proc.time()[["elapsed"]] - t_pretraitement), progress = 41)
   filtered_corpus <- pipeline$filtered_corpus
@@ -271,7 +284,7 @@ run_batch <- function() {
             assign("log_info", function(...) invisible(NULL), envir = pipeline_env)
             on.exit(assign("log_info", original_log_info, envir = pipeline_env), add = TRUE)
           }
-          preparer_pipeline_chd(segmented_corpus, config_variant)
+          preparer_pipeline_chd(segmented_corpus, config_variant, preparation_initiale = preparation_initiale)
         }
       } else {
         NULL
@@ -1228,9 +1241,21 @@ preview_simi_terms_batch <- function() {
 
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
+  mode_segmentation_applique <- normaliser_mode_segmentation(
+    config$mode_segmentation,
+    scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
+  )
+  preparation_initiale <- NULL
+  corpus_a_segmenter <- corpus_importe
+  if (identical(mode_segmentation_applique, "iramuteq_3")) {
+    preparation_initiale <- preparer_corpus_avant_segmentation_iramuteq3(
+      corpus_importe, config
+    )
+    corpus_a_segmenter <- preparation_initiale$corpus
+  }
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
-      corpus_importe,
+      corpus_a_segmenter,
       rst1 = scalar_int(config$iramuteq_rst1, 12L, 2L),
       rst2 = scalar_int(config$iramuteq_rst2, 14L, 2L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
@@ -1240,7 +1265,7 @@ preview_simi_terms_batch <- function() {
     )
   } else {
     segmented_corpus <- split_segments(
-      corpus_importe,
+      corpus_a_segmenter,
       segment_size = scalar_int(config$segment_size, 40L, 1L),
       remove_punct = scalar_bool(config$supprimer_ponctuation, FALSE),
       remove_numbers = scalar_bool(config$supprimer_chiffres, FALSE),
@@ -1249,7 +1274,7 @@ preview_simi_terms_batch <- function() {
     )
   }
 
-  pipeline <- preparer_pipeline_chd(segmented_corpus, config)
+  pipeline <- preparer_pipeline_chd(segmented_corpus, config, preparation_initiale = preparation_initiale)
   simi_terms <- get_simi_terms_choices_batch(pipeline$dfm_obj)
   payload <- list(
     success = TRUE,

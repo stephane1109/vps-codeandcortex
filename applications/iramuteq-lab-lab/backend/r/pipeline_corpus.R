@@ -240,14 +240,26 @@ split_segments <- function(corpus,
       }
 
       t_tokenisation <- proc.time()[["elapsed"]]
-      tokens_lot <- quanteda::tokens(
-        textes_lot,
-        remove_punct = if (ponctuation_forte || ponctuation_ponderee) FALSE else isTRUE(remove_punct),
-        remove_numbers = isTRUE(remove_numbers),
-        remove_symbols = TRUE,
-        remove_separators = TRUE,
-        split_hyphens = FALSE
-      )
+      if (ponctuation_ponderee) {
+        # prep_txtlist() de corpus.py sépare les unités sur les espaces.
+        tokens_lot <- lapply(textes_lot, function(texte) {
+          morceaux <- strsplit(trimws(texte), "[[:space:]]+", perl = TRUE)[[1L]]
+          morceaux <- morceaux[nzchar(morceaux)]
+          if (isTRUE(remove_numbers)) {
+            morceaux <- morceaux[!grepl("^[0-9]+$", morceaux)]
+          }
+          morceaux
+        })
+      } else {
+        tokens_lot <- quanteda::tokens(
+          textes_lot,
+          remove_punct = if (ponctuation_forte) FALSE else isTRUE(remove_punct),
+          remove_numbers = isTRUE(remove_numbers),
+          remove_symbols = TRUE,
+          remove_separators = TRUE,
+          split_hyphens = FALSE
+        )
+      }
       duree_tokenisation <- duree_tokenisation +
         (proc.time()[["elapsed"]] - t_tokenisation)
 
