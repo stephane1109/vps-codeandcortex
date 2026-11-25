@@ -585,6 +585,40 @@ tracer_afc_classes_termes <- function(
   text(x_m, y_m, labels = mots, cex = cex_vec, col = col_m)
 }
 
+
+# Sélection des termes significatifs les plus éloignés de l'origine factorielle.
+# Cette sélection ne modifie ni les coordonnées ni les calculs de l'AFC.
+selectionner_termes_significatifs_extremes_afc <- function(
+  obj, nb_termes = 40L, seuil_p = 0.05, axes = c(1, 2)
+) {
+  if (is.null(obj$termes_stats) || is.null(obj$colcoord)) {
+    stop("AFC : statistiques ou coordonnées des termes indisponibles.")
+  }
+  statistiques <- obj$termes_stats
+  p_valeurs <- suppressWarnings(as.numeric(statistiques$p_value))
+  conserve <- is.finite(p_valeurs) & p_valeurs <= seuil_p &
+    !is.na(statistiques$Terme) & as.character(statistiques$Terme) %in% rownames(obj$colcoord)
+  statistiques <- statistiques[conserve, , drop = FALSE]
+
+  if (nrow(statistiques) > 0L) {
+    coordonnees <- .extraire_coordonnees_trace_afc(obj$colcoord, axes = axes)
+    positions <- match(as.character(statistiques$Terme), rownames(obj$colcoord))
+    distances <- sqrt(coordonnees$x[positions]^2 + coordonnees$y[positions]^2)
+    statistiques <- statistiques[is.finite(distances), , drop = FALSE]
+    distances <- distances[is.finite(distances)]
+    if (nrow(statistiques) > 0L) {
+      rang <- order(-distances, as.character(statistiques$Terme))
+      nombre <- max(1L, suppressWarnings(as.integer(nb_termes)))
+      statistiques <- statistiques[head(rang, nombre), , drop = FALSE]
+    }
+  }
+
+  resultat <- obj
+  resultat$termes_stats <- statistiques
+  resultat
+}
+
+
 # Fallback : extraction de modalités depuis une ligne IRaMuTeQ (si docvars vides)
 .normaliser_selection_variables_etoilees <- function(variables_etoilees = NULL) {
   vars <- unique(as.character(variables_etoilees))
