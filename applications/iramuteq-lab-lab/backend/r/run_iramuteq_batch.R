@@ -55,6 +55,7 @@ source(file.path(repo_root, "iramuteqlite", "calcul_specificites.R"), local = TR
 source(file.path(runner_dir, "pipeline_corpus.R"), local = TRUE)
 source(file.path(runner_dir, "pipeline_pretraitement.R"), local = TRUE)
 source(file.path(runner_dir, "pipeline_exports.R"), local = TRUE)
+source(file.path(runner_dir, "pipeline_chronometrage.R"), local = TRUE)
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 input_path <- normalizePath(scalar_chr(args$input), winslash = "/", mustWork = TRUE)
 config_path <- normalizePath(scalar_chr(args$config), winslash = "/", mustWork = TRUE)
@@ -76,6 +77,13 @@ run_batch <- function() {
   run_simi <- scalar_bool(analyses$simi, TRUE)
 
   artifacts <- list()
+  chronometre <- creer_chronometre_pipeline(
+    file.path(output_dir, "durees_etapes_analyse.csv"),
+    journal = function(message) log_info(message)
+  )
+  on.exit(chronometre$fermer(), add = TRUE)
+  artifacts$chronometrage <- relative_to_output(chronometre$chemin)
+  chronometre$demarrer("analyse_complete", "Analyse complète", "total")
 
   write_status(state = "running", progress = 3, message = "Initialisation du runner batch.")
   log_info(paste0("output_dir = ", output_dir), progress = 4)
@@ -83,7 +91,9 @@ run_batch <- function() {
   corpus_md5 <- unname(tools::md5sum(input_path))
   log_info(paste0("MD5 fichier = ", corpus_md5), progress = 9)
   t_import <- proc.time()[["elapsed"]]
+  chronometre$demarrer("importation", "Importation du corpus", "corpus")
   corpus_importe <- import_corpus_iramuteq(input_path)
+  chronometre$terminer("importation")
   log_info(paste0("Nombre de documents importés : ", quanteda::ndoc(corpus_importe)), progress = 10)
   log_info(sprintf("Durée importation : %.2f s.", proc.time()[["elapsed"]] - t_import), progress = 10)
 
@@ -127,6 +137,7 @@ run_batch <- function() {
     config$mode_segmentation,
     scalar_bool(config$segmenter_sur_ponctuation_forte, TRUE)
   )
+  chronometre$demarrer("preparation_initiale", "Préparation avant segmentation", "corpus")
   preparation_initiale <- NULL
   corpus_a_segmenter <- corpus_importe
   if (identical(mode_segmentation_applique, "iramuteq_3")) {
@@ -135,6 +146,8 @@ run_batch <- function() {
     )
     corpus_a_segmenter <- preparation_initiale$corpus
   }
+  chronometre$terminer("preparation_initiale")
+  chronometre$demarrer("segmentation", "Segmentation du corpus", "corpus")
   t_segmentation <- proc.time()[["elapsed"]]
   if (identical(classif_mode, "double")) {
     segmented_corpus <- split_segments_double_rst(
@@ -166,6 +179,7 @@ run_batch <- function() {
       mode_segmentation = config$mode_segmentation
     )
   }
+  chronometre$terminer("segmentation")
   durees <- attr(segmented_corpus, "durees_segmentation")
   log_info(sprintf("Durée segmentation totale : %.2f s.", proc.time()[["elapsed"]] - t_segmentation), progress = 18)
   if (!is.null(durees)) {
@@ -178,8 +192,10 @@ run_batch <- function() {
   log_info(paste0("Nombre de segments analysés : ", quanteda::ndoc(segmented_corpus)), progress = 19)
   log_info(paste0("Nombre de segments après découpage : ", quanteda::ndoc(segmented_corpus)), progress = 20)
 
+  chronometre$demarrer("matrice_dfm", "Préparation lexicale et DFM", "corpus")
   t_pretraitement <- proc.time()[["elapsed"]]
   pipeline <- preparer_pipeline_chd(segmented_corpus, config, preparation_initiale = preparation_initiale)
+  chronometre$terminer("matrice_dfm")
   log_info(sprintf("Durée préparation lexicale / DFM : %.2f s.",
                    proc.time()[["elapsed"]] - t_pretraitement), progress = 41)
   filtered_corpus <- pipeline$filtered_corpus
@@ -258,6 +274,7 @@ run_batch <- function() {
       ),
       progress = 53
     )
+    chronometre$demarrer("moteur_chd", "Calcul CHD", "chd")
     t_chd <- proc.time()[["elapsed"]]
     res_ira <- lancer_moteur_chd_iramuteq(
       dfm_obj = dfm_obj,
@@ -295,6 +312,8 @@ run_batch <- function() {
         NULL
       }
     )
+    chronometre$terminer("moteur_chd")
+    chronometre$demarrer("post_chd_total", "Traitements post-CHD", "total")
     log_info(sprintf("Durée calcul CHD : %.2f s.",
                      proc.time()[["elapsed"]] - t_chd), progress = 59)
     res_ira$classes_mode <- classes_mode
@@ -473,6 +492,7 @@ run_batch <- function() {
       }
     }
 
+    chronometre$demarrer("statistiques_chd", "Statistiques et CSV CHD", "chd")
     log_info("Statistiques CHD : calcul IRaMuTeQ-lite (contingence classe x terme).", progress = 58)
     res_stats_df <- construire_stats_classes_iramuteq(
       dfm_obj = dfm_ok,
@@ -550,6 +570,7 @@ run_batch <- function() {
     res_stats_df$p_log <- NULL
     ecrire_csv_6_decimales(res_stats_df, stats_file, row.names = FALSE)
     artifacts$stats_par_classe <- relative_to_output(stats_file)
+    chronometre$terminer("statistiques_chd")
 
     segments_vec <- as.character(filtered_corpus_ok)
     ids_segments <- as.character(quanteda::docnames(filtered_corpus_ok))
@@ -575,6 +596,7 @@ run_batch <- function() {
       1400L
     )
 
+    chronometre$demarrer("dendrogramme", "Dendrogramme IRaMuTeQ", "chd")
     chd_png <- file.path(output_dir, "dendrogramme_chd.png")
     grDevices::png(chd_png, width = dendrogram_width, height = dendrogram_height, res = 180)
     tracer_dendrogramme_iramuteq_ui(
@@ -594,10 +616,12 @@ run_batch <- function() {
     grDevices::dev.off()
     artifacts$dendrogramme_chd <- relative_to_output(chd_png)
     log_info("Export du dendrogramme IRaMuTeQ terminé.", progress = 63)
+    chronometre$terminer("dendrogramme")
 
     # Le dendrogramme factoextra n'est plus calculé ni exporté.
     # Le dendrogramme IRaMuTeQ demeure le seul rendu CHD.
 
+    chronometre$demarrer("concordancier", "Concordancier HTML", "chd")
     html_file <- file.path(output_dir, "segments_par_classe.html")
     textes_index_ok <- textes_indexation[quanteda::docnames(dfm_ok)]
     names(textes_index_ok) <- quanteda::docnames(dfm_ok)
@@ -675,6 +699,8 @@ run_batch <- function() {
       }
     }
 
+    chronometre$terminer("concordancier")
+    chronometre$demarrer("wordcloud", "Nuages de mots", "chd")
     wordcloud_dir <- file.path(output_dir, "wordclouds")
     dir.create(wordcloud_dir, recursive = TRUE, showWarnings = FALSE)
     classes_uniques <- sort(unique(classes_ok))
@@ -688,6 +714,7 @@ run_batch <- function() {
     )
     artifacts$wordclouds <- unname(vapply(list.files(wordcloud_dir, pattern = "\\.png$", full.names = TRUE), relative_to_output, character(1)))
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
+    chronometre$terminer("wordcloud")
 
     if (is.list(res_ira$simple_discriminant_selection)) {
       tryCatch({
@@ -708,6 +735,7 @@ run_batch <- function() {
 
   if (run_afc && !is.null(classes)) {
     log_info("Calcul AFC.", progress = 74)
+    chronometre$demarrer("afc_total", "Ensemble des traitements AFC", "total")
     afc_dir <- file.path(output_dir, "afc")
     dir.create(afc_dir, recursive = TRUE, showWarnings = FALSE)
     termes_signif <- NULL
@@ -731,6 +759,7 @@ run_batch <- function() {
 
     groupes_docs <- quanteda::docvars(filtered_corpus_ok)$Classes
 
+    chronometre$demarrer("afc_calcul", "Calcul AFC classes-termes", "afc")
     afc_obj <- executer_afc_classes(
       dfm_obj = dfm_ok,
       groupes = groupes_docs,
@@ -740,6 +769,7 @@ run_batch <- function() {
       rv = NULL
     )
 
+    chronometre$terminer("afc_calcul")
     if (!is.null(afc_obj$termes_stats) && !is.null(res_stats_df)) {
       df_m <- afc_obj$termes_stats
       df_m$Classe_num <- suppressWarnings(as.numeric(gsub("^Classe\\s+", "", as.character(df_m$Classe_max))))
@@ -768,6 +798,7 @@ run_batch <- function() {
       afc_obj$termes_stats <- df_m
     }
 
+    chronometre$demarrer("afc_exemples", "Segments exemples AFC", "afc")
     afc_obj$termes_stats <- tryCatch(
       construire_segments_exemples_afc(afc_obj$termes_stats, dfm_obj = dfm_ok, corpus_obj = filtered_corpus_ok),
       error = function(e_seg) {
@@ -776,6 +807,7 @@ run_batch <- function() {
       }
     )
 
+    chronometre$terminer("afc_exemples")
     mots_reperes_axes_final <- NULL
     termes_reperes_axes_final <- character(0)
     if (identical(classes_mode, "discrimination_simple") &&
@@ -825,6 +857,7 @@ run_batch <- function() {
 
       afc_classes_png <- file.path(afc_dir, "afc_classes.png")
       afc_termes_png <- file.path(afc_dir, "afc_termes.png")
+      chronometre$demarrer("png_classes", "Graphique AFC classes", "afc")
       grDevices::png(afc_classes_png, width = 1800, height = 1400, res = 180)
       tryCatch(
         tracer_afc_classes_seules(
@@ -841,6 +874,8 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
+      chronometre$terminer("png_classes")
+      chronometre$demarrer("png_termes", "Graphique AFC termes et étiquettes", "afc")
       grDevices::png(afc_termes_png, width = 2000, height = 1600, res = 180)
       tryCatch(
         tracer_afc_classes_termes(
@@ -858,6 +893,8 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
+      chronometre$terminer("png_termes")
+      chronometre$demarrer("png_extremes", "Graphique AFC termes extrêmes", "afc")
       afc_extremes_png <- file.path(afc_dir, "afc_termes_extremes.png")
       grDevices::png(afc_extremes_png, width = 2000, height = 1600, res = 180)
       tryCatch(
@@ -886,6 +923,7 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
+      chronometre$terminer("png_extremes")
       if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
         log_info("AFC classes x termes : calcul terminé.", progress = 78)
       } else {
@@ -895,13 +933,16 @@ run_batch <- function() {
       log_info("AFC classes/termes : aucun axe exploitable, graphiques PNG ignorés.")
     }
 
+    chronometre$demarrer("afc_csv", "Exports CSV AFC", "afc")
     ecrire_csv_6_decimales(afc_obj$table, file.path(afc_dir, "table_classes_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$rowcoord, file.path(afc_dir, "coords_classes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$termes_stats, file.path(afc_dir, "stats_termes.csv"), row.names = FALSE)
     ecrire_csv_6_decimales(termes_extremes_afc, file.path(afc_dir, "termes_extremes_afc.csv"), row.names = FALSE)
+    chronometre$terminer("afc_csv")
     graph_interactif_file <- file.path(afc_dir, "graph_interactif.json")
     graph_interactif_leaflet_file <- file.path(afc_dir, "graph_interactif_leaflet.html")
+    chronometre$demarrer("afc_json", "Graphe interactif AFC JSON", "afc")
     tryCatch(
       ecrire_graph_interactif_afc(
         coords_classes_file = file.path(afc_dir, "coords_classes.csv"),
@@ -916,6 +957,8 @@ run_batch <- function() {
         log_info(paste0("Graphe AFC interactif indisponible : ", e$message))
       }
     )
+    chronometre$terminer("afc_json")
+    chronometre$demarrer("afc_leaflet", "Carte AFC Leaflet HTML", "afc")
     tryCatch(
       ecrire_graph_interactif_leaflet_afc(
         coords_classes_file = file.path(afc_dir, "coords_classes.csv"),
@@ -930,6 +973,7 @@ run_batch <- function() {
         log_info(paste0("Carte AFC Leaflet indisponible : ", e$message))
       }
     )
+    chronometre$terminer("afc_leaflet")
     if (identical(classes_mode, "discrimination_simple") &&
         is.list(res_ira$simple_discriminant_selection) &&
         is.data.frame(mots_reperes_axes_final)) {
@@ -960,6 +1004,7 @@ run_batch <- function() {
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))
     )
 
+    chronometre$demarrer("afc_variables", "AFC variables étoilées", "afc")
     afc_vars_obj <- tryCatch(
       executer_afc_variables_etoilees(
         corpus_aligne = filtered_corpus_ok,
@@ -972,10 +1017,12 @@ run_batch <- function() {
       ),
       error = function(e) NULL
     )
+    chronometre$terminer("afc_variables")
     if (!is.null(afc_vars_obj) && !is.null(afc_vars_obj$ca)) {
       activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
       top_mod <- 120L
       afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
+      chronometre$demarrer("png_modalites", "Graphique AFC variables étoilées", "afc")
       grDevices::png(afc_vars_png, width = 2000, height = 1600, res = 180)
       tryCatch(
         {
@@ -1012,6 +1059,7 @@ run_batch <- function() {
         }
       )
       grDevices::dev.off()
+      chronometre$terminer("png_modalites")
       if (coords_have_at_least_one_axis(afc_vars_obj$rowcoord) && coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
         if (coords_have_two_axes(afc_vars_obj$rowcoord) && coords_have_two_axes(afc_vars_obj$colcoord)) {
           log_info("AFC variables étoilées : calcul terminé.", progress = 80)
@@ -1029,6 +1077,7 @@ run_batch <- function() {
       artifacts$afc$stats_modalites_csv <- relative_to_output(file.path(afc_dir, "stats_modalites.csv"))
       artifacts$afc$valeurs_propres_vars_csv <- relative_to_output(file.path(afc_dir, "valeurs_propres_vars.csv"))
     }
+    chronometre$terminer("afc_total")
   }
 
   if (run_simi) {
@@ -1152,6 +1201,9 @@ run_batch <- function() {
     log_info("Configuration CHD exportée dans configuration_chd.json.", progress = 94)
   }
 
+  if (run_chd) chronometre$terminer("post_chd_total")
+  chronometre$terminer("analyse_complete")
+  log_info("Fichier de performance : durees_etapes_analyse.csv.")
   summary <- list(
     corpus = basename(input_path),
     n_texts = quanteda::ndoc(corpus_importe),
