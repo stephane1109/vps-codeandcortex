@@ -81,8 +81,6 @@ const applyMultimodalCompareAbDialogBtn = document.getElementById("applyMultimod
 const afcTermsZoomInBtn = document.getElementById("afcTermsZoomInBtn");
 const afcTermsZoomOutBtn = document.getElementById("afcTermsZoomOutBtn");
 const afcTermsZoomResetBtn = document.getElementById("afcTermsZoomResetBtn");
-const afcActiverGgrepel = document.getElementById("afcActiverGgrepel");
-const afcGgrepelEtat = document.getElementById("afcGgrepelEtat");
 const reduceOverlapInput = document.getElementById("reduceOverlap");
 const affichageGgrepelInput = document.getElementById("affichageGgrepel");
 const AFC_PLOT_CONTAINER_IDS = new Set(["afcClassesPlot", "afcTermsPlot", "afcExtremeTermsPlot", "afcVarsPlot"]);
@@ -12169,9 +12167,22 @@ function openChdConfigDialog() {
 
   try {
     populateConfigDialog(chdConfigDialogContent, chdConfigSourceCards, "__dialog");
-    const caseGgrepel = chdConfigDialogContent.querySelector("#affichageGgrepel__dialog");
     const caseChevauchement = chdConfigDialogContent.querySelector("#reduceOverlap__dialog");
-    if (caseGgrepel) caseGgrepel.disabled = !caseChevauchement?.checked;
+    const caseGgrepel = chdConfigDialogContent.querySelector("#affichageGgrepel__dialog");
+    if (caseGgrepel && caseChevauchement) {
+      // Insérer le choix ggrepel sous l'option anti-chevauchement de la boîte CHD.
+      const etiquetteGgrepel = document.createElement("label");
+      etiquetteGgrepel.className = "check-option";
+      etiquetteGgrepel.htmlFor = caseGgrepel.id;
+      caseGgrepel.hidden = false;
+      caseGgrepel.removeAttribute("hidden");
+      etiquetteGgrepel.appendChild(caseGgrepel);
+      const libelleGgrepel = document.createElement("span");
+      libelleGgrepel.textContent = "Affichage ggrepel (mode rapide)";
+      etiquetteGgrepel.appendChild(libelleGgrepel);
+      caseChevauchement.closest("label")?.insertAdjacentElement("afterend", etiquetteGgrepel);
+      caseGgrepel.disabled = !caseChevauchement.checked;
+    }
     renderMorphoPickers(chdConfigDialogContent);
     renderAfcStarredVariablesPickers(chdConfigDialogContent);
     renderClassificationModeCards(chdConfigDialogContent);
@@ -14562,30 +14573,13 @@ async function startAnalysis(analysisKind = "chd") {
   }
 }
 
-// L'anti-chevauchement et le choix de ggrepel sont deux paramètres indépendants.
-// La case de l'onglet AFC reprend le choix du moteur ggrepel dans les paramètres CHD.
+// L'anti-chevauchement et la méthode ggrepel sont indépendants.
+// Le choix ggrepel est affiché uniquement dans la boîte de dialogue CHD.
 function rafraichirOptionsAfc() {
   const eviterChevauchement = Boolean(reduceOverlapInput?.checked);
-  const utiliserGgrepel = Boolean(affichageGgrepelInput?.checked);
-  if (afcActiverGgrepel) {
-    afcActiverGgrepel.checked = utiliserGgrepel;
-    afcActiverGgrepel.disabled = !eviterChevauchement;
-  }
   if (affichageGgrepelInput) affichageGgrepelInput.disabled = !eviterChevauchement;
-  if (afcGgrepelEtat) {
-    afcGgrepelEtat.textContent = !eviterChevauchement
-      ? "L'anti-chevauchement est désactivé : les étiquettes sont affichées aux positions d'origine."
-      : utiliserGgrepel
-        ? "Affichage ggrepel rapide sélectionné pour la prochaine analyse. Le temps de rendu peut varier selon le nombre de mots."
-        : "Placement classique en spirale sélectionné pour la prochaine analyse.";
-  }
 }
 reduceOverlapInput?.addEventListener("change", rafraichirOptionsAfc);
-affichageGgrepelInput?.addEventListener("change", rafraichirOptionsAfc);
-afcActiverGgrepel?.addEventListener("change", () => {
-  if (affichageGgrepelInput) affichageGgrepelInput.checked = afcActiverGgrepel.checked;
-  rafraichirOptionsAfc();
-});
 chdConfigDialogContent?.addEventListener("change", (evenement) => {
   if (evenement.target?.id !== "reduceOverlap__dialog") return;
   const caseMethode = chdConfigDialogContent.querySelector("#affichageGgrepel__dialog");
