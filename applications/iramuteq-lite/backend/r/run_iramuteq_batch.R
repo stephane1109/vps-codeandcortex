@@ -257,6 +257,83 @@ log_info <- function(message, progress = NULL) {
   }
 }
 
+
+# Chronometrage des phases, sans modification des algorithmes.
+journal_performances <- list()
+mesures_performances_actives <- new.env(parent = emptyenv())
+debut_global_performances <- proc.time()[["elapsed"]]
+
+demarrer_mesure_performance <- function(cle) {
+  assign(cle, list(
+    temps = proc.time()[["elapsed"]],
+    horodatage = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+  ), envir = mesures_performances_actives)
+  invisible(NULL)
+}
+
+terminer_mesure_performance <- function(cle, libelle, categorie = "CHD", statut = "termine") {
+  if (!exists(cle, envir = mesures_performances_actives, inherits = FALSE)) {
+    return(invisible(NULL))
+  }
+  mesure <- get(cle, envir = mesures_performances_actives, inherits = FALSE)
+  rm(list = cle, envir = mesures_performances_actives)
+  secondes <- max(0, proc.time()[["elapsed"]] - mesure$temps)
+  journal_performances[[length(journal_performances) + 1L]] <<- list(
+    etape = libelle,
+    categorie = categorie,
+    debut = mesure$horodatage,
+    fin = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    duree_secondes = round(secondes, 3),
+    statut = statut
+  )
+  log_info(sprintf("Performance - %s : %.3f s (%s).", libelle, secondes, statut))
+  invisible(secondes)
+}
+
+enregistrer_journal_performances <- function(n_segments = NA_integer_, n_formes = NA_integer_, n_classes = NA_integer_) {
+  # Conserver les durees deja mesurees en cas d'interruption du traitement.
+  for (cle in ls(mesures_performances_actives, all.names = TRUE)) {
+    terminer_mesure_performance(cle, cle, statut = "interrompu")
+  }
+  tryCatch({
+    if (length(journal_performances) == 0L) return(NULL)
+    tableau <- do.call(rbind, lapply(journal_performances, function(x) {
+      as.data.frame(x, stringsAsFactors = FALSE)
+    }))
+    duree_totale <- max(0, proc.time()[["elapsed"]] - debut_global_performances)
+    tableau$part_temps_total_pct <- round(
+      100 * tableau$duree_secondes / max(duree_totale, .Machine$double.eps), 2
+    )
+    tableau$nombre_segments <- n_segments
+    tableau$nombre_formes <- n_formes
+    tableau$nombre_classes <- n_classes
+    temps_non_mesure <- max(0, duree_totale - sum(tableau$duree_secondes))
+    ligne_autres <- tableau[1L, , drop = FALSE]
+    ligne_autres$etape <- "Autres traitements et orchestration"
+    ligne_autres$categorie <- "Orchestration"
+    ligne_autres$debut <- ""
+    ligne_autres$fin <- ""
+    ligne_autres$duree_secondes <- round(temps_non_mesure, 3)
+    ligne_autres$part_temps_total_pct <- round(
+      100 * temps_non_mesure / max(duree_totale, .Machine$double.eps), 2
+    )
+    ligne_autres$statut <- "termine"
+    ligne_totale <- ligne_autres
+    ligne_totale$etape <- "TOTAL ANALYSE"
+    ligne_totale$categorie <- "Total"
+    ligne_totale$duree_secondes <- round(duree_totale, 3)
+    ligne_totale$part_temps_total_pct <- 100
+    tableau <- rbind(tableau, ligne_autres, ligne_totale)
+    chemin <- file.path(output_dir, "journal_performances_chd.csv")
+    utils::write.csv(tableau, file = chemin, row.names = FALSE, na = "", fileEncoding = "UTF-8")
+    log_info(sprintf("Journal de performances exporte : %.3f s au total.", duree_totale))
+    chemin
+  }, error = function(e) {
+    log_info(paste0("Journal de performances indisponible : ", conditionMessage(e)))
+    NULL
+  })
+}
+
 clamp_int <- function(value, min_value, max_value) {
   value <- as.integer(value)
   value <- max(as.integer(min_value), value, na.rm = TRUE)
@@ -1095,9 +1172,12 @@ run_batch <- function() {
   log_info(paste0("output_dir = ", output_dir), progress = 4)
   log_info("Import du corpus.", progress = 8)
   log_info(paste0("MD5 fichier = ", unname(tools::md5sum(input_path))), progress = 9)
+  demarrer_mesure_performance("import")
   corpus_importe <- import_corpus_iramuteq(input_path)
   log_info(paste0("Nombre de documents importés : ", quanteda::ndoc(corpus_importe)), progress = 10)
+  terminer_mesure_performance("import", "Import du corpus", "Preparation")
 
+  demarrer_mesure_performance("segmentation")
   classif_mode <- scalar_chr(config$iramuteq_classif_mode, "simple")
   if (!classif_mode %in% c("simple", "double")) classif_mode <- "simple"
   if (identical(classif_mode, "double")) {
@@ -1131,7 +1211,9 @@ run_batch <- function() {
   log_info(paste0("Corpus segmenté en ", quanteda::ndoc(segmented_corpus), " segments."), progress = 18)
   log_info(paste0("Nombre de segments analysés : ", quanteda::ndoc(segmented_corpus)), progress = 19)
   log_info(paste0("Nombre de segments après découpage : ", quanteda::ndoc(segmented_corpus)), progress = 20)
+  terminer_mesure_performance("segmentation", "Segmentation du corpus", "Preparation")
 
+  demarrer_mesure_performance("lexique")
   pipeline <- preparer_pipeline_chd(segmented_corpus, config)
   filtered_corpus <- pipeline$filtered_corpus
   dfm_obj <- pipeline$dfm_obj
@@ -1148,6 +1230,7 @@ run_batch <- function() {
     paste0("Nombre de mots conservés pour l'analyse après prétraitements : ", length(unlist(tok, use.names = FALSE))),
     progress = 44
   )
+  terminer_mesure_performance("lexique", "Preparation lexicale et DFM", "Preparation")
 
   chd <- NULL
   classes_info <- NULL
@@ -1194,6 +1277,7 @@ run_batch <- function() {
       ),
       progress = 53
     )
+    demarrer_mesure_performance("moteur_chd")
     res_ira <- lancer_moteur_chd_iramuteq(
       dfm_obj = dfm_obj,
       k = scalar_int(config$k_iramuteq, 10L, 2L),
@@ -1206,6 +1290,7 @@ run_batch <- function() {
       rscripts_dir = file.path(repo_root, "iramuteqlite"),
       max_formes = scalar_int(config$iramuteq_max_formes, 20000L, 1L)
     )
+    terminer_mesure_performance("moteur_chd", "Calcul moteur CHD", "CHD")
     chd <- res_ira$chd
     if (!is.null(res_ira$dfm_utilise)) {
       dfm_obj <- res_ira$dfm_utilise
@@ -1296,6 +1381,7 @@ run_batch <- function() {
     }
 
     log_info("Statistiques CHD : calcul IRaMuTeQ-lite (contingence classe x terme).", progress = 58)
+    demarrer_mesure_performance("statistiques")
     res_stats_df <- construire_stats_classes_iramuteq(
       dfm_obj = dfm_ok,
       classes = classes_ok,
@@ -1362,6 +1448,8 @@ run_batch <- function() {
     ecrire_csv_6_decimales(res_stats_df, stats_file, row.names = FALSE)
     artifacts$stats_par_classe <- relative_to_output(stats_file)
 
+    terminer_mesure_performance("statistiques", "Statistiques et specificites CHD", "Post-CHD")
+    demarrer_mesure_performance("segments")
     segments_vec <- as.character(filtered_corpus_ok)
     ids_segments <- as.character(quanteda::docnames(filtered_corpus_ok))
     names(segments_vec) <- ids_segments
@@ -1375,6 +1463,7 @@ run_batch <- function() {
     writeLines(unlist(lapply(names(segments_by_class), function(cl) c(paste0("Classe ", cl, ":"), unname(segments_by_class[[cl]]), ""))), segments_file)
     artifacts$segments_par_classe <- relative_to_output(segments_file)
 
+    terminer_mesure_performance("segments", "Extraction des segments classes", "Post-CHD")
     dendrogram_width <- clamp_int(
       scalar_int(config$chd_dendrogram_width_px, 1400L, 1200L),
       1200L,
@@ -1386,6 +1475,7 @@ run_batch <- function() {
       1400L
     )
 
+    demarrer_mesure_performance("dendro_iramuteq")
     chd_png <- file.path(output_dir, "dendrogramme_chd.png")
     grDevices::png(chd_png, width = dendrogram_width, height = dendrogram_height, res = 180)
     tracer_dendrogramme_iramuteq_ui(
@@ -1405,7 +1495,9 @@ run_batch <- function() {
     grDevices::dev.off()
     artifacts$dendrogramme_chd <- relative_to_output(chd_png)
     log_info("Export du dendrogramme IRaMuTeQ terminé.", progress = 63)
+    terminer_mesure_performance("dendro_iramuteq", "Dendrogramme IRaMuTeQ et PNG", "Post-CHD")
 
+    demarrer_mesure_performance("dendro_secondaire")
     chd_factoextra_png <- file.path(output_dir, "dendrogramme_chd_factoextra.png")
     grDevices::png(chd_factoextra_png, width = dendrogram_width, height = dendrogram_height, res = 180)
     tracer_dendrogramme_iramuteq_ui(
@@ -1425,7 +1517,9 @@ run_batch <- function() {
     grDevices::dev.off()
     artifacts$dendrogramme_chd_factoextra <- relative_to_output(chd_factoextra_png)
     log_info("Export du dendrogramme factoextra terminé.", progress = 64)
+    terminer_mesure_performance("dendro_secondaire", "Dendrogramme secondaire et PNG", "Post-CHD")
 
+    demarrer_mesure_performance("concordancier")
     html_file <- file.path(output_dir, "segments_par_classe.html")
     textes_index_ok <- textes_indexation[quanteda::docnames(dfm_ok)]
     names(textes_index_ok) <- quanteda::docnames(dfm_ok)
@@ -1503,6 +1597,8 @@ run_batch <- function() {
       }
     }
 
+    terminer_mesure_performance("concordancier", "Concordancier HTML", "Post-CHD")
+    demarrer_mesure_performance("nuages")
     wordcloud_dir <- file.path(output_dir, "wordclouds")
     dir.create(wordcloud_dir, recursive = TRUE, showWarnings = FALSE)
     classes_uniques <- sort(unique(classes_ok))
@@ -1516,6 +1612,7 @@ run_batch <- function() {
     )
     artifacts$wordclouds <- unname(vapply(list.files(wordcloud_dir, pattern = "\\.png$", full.names = TRUE), relative_to_output, character(1)))
     log_info("Mode IRaMuTeQ-lite : nuages de mots générés via wordcloud_iramuteq.R.", progress = 67)
+    terminer_mesure_performance("nuages", "Nuages de mots et PNG", "Post-CHD")
 
     log_info("Exports CHD générés.", progress = 68)
   }
@@ -1533,6 +1630,7 @@ run_batch <- function() {
 
     groupes_docs <- quanteda::docvars(filtered_corpus_ok)$Classes
 
+    demarrer_mesure_performance("afc_classes")
     afc_obj <- executer_afc_classes(
       dfm_obj = dfm_ok,
       groupes = groupes_docs,
@@ -1578,6 +1676,7 @@ run_batch <- function() {
       }
     )
 
+    terminer_mesure_performance("afc_classes", "AFC classes-termes et enrichissement", "AFC")
     afc_classes_png <- NULL
     afc_termes_png <- NULL
     if (coords_have_at_least_one_axis(afc_obj$rowcoord) && coords_have_at_least_one_axis(afc_obj$colcoord)) {
@@ -1588,6 +1687,7 @@ run_batch <- function() {
 
       afc_classes_png <- file.path(afc_dir, "afc_classes.png")
       afc_termes_png <- file.path(afc_dir, "afc_termes.png")
+      demarrer_mesure_performance("png_afc_classes")
       grDevices::png(afc_classes_png, width = 1800, height = 1400, res = 180)
       tryCatch(
         tracer_afc_classes_seules(afc_obj, axes = c(1, 2), cex_labels = 1.05),
@@ -1599,6 +1699,8 @@ run_batch <- function() {
       )
       grDevices::dev.off()
       grDevices::png(afc_termes_png, width = 2000, height = 1600, res = 180)
+      terminer_mesure_performance("png_afc_classes", "PNG AFC classes", "Graphiques")
+      demarrer_mesure_performance("png_afc_termes")
       tryCatch(
         tracer_afc_classes_termes(
           afc_obj,
@@ -1615,6 +1717,7 @@ run_batch <- function() {
       )
       grDevices::dev.off()
       if (coords_have_two_axes(afc_obj$rowcoord) && coords_have_two_axes(afc_obj$colcoord)) {
+      terminer_mesure_performance("png_afc_termes", "PNG AFC termes", "Graphiques")
         log_info("AFC classes x termes : calcul terminé.", progress = 78)
       } else {
         log_info("AFC classes x termes : un seul axe disponible, export PNG en projection 1D.", progress = 78)
@@ -1623,6 +1726,7 @@ run_batch <- function() {
       log_info("AFC classes/termes : aucun axe exploitable, graphiques PNG ignorés.")
     }
 
+    demarrer_mesure_performance("csv_afc")
     ecrire_csv_6_decimales(afc_obj$table, file.path(afc_dir, "table_classes_termes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$rowcoord, file.path(afc_dir, "coords_classes.csv"), row.names = TRUE)
     ecrire_csv_6_decimales(afc_obj$colcoord, file.path(afc_dir, "coords_termes.csv"), row.names = TRUE)
@@ -1638,6 +1742,8 @@ run_batch <- function() {
       valeurs_propres_csv = relative_to_output(file.path(afc_dir, "valeurs_propres.csv"))
     )
 
+    terminer_mesure_performance("csv_afc", "Exports CSV AFC classes-termes", "Exports")
+    demarrer_mesure_performance("afc_variables")
     afc_vars_obj <- tryCatch(
       executer_afc_variables_etoilees(
         corpus_aligne = filtered_corpus_ok,
@@ -1650,10 +1756,12 @@ run_batch <- function() {
       ),
       error = function(e) NULL
     )
+    terminer_mesure_performance("afc_variables", "AFC variables etoilees", "AFC")
     if (!is.null(afc_vars_obj) && !is.null(afc_vars_obj$ca)) {
       activer_repel2 <- scalar_bool(config$afc_reduire_chevauchement, TRUE)
       top_mod <- 120L
       afc_vars_png <- file.path(afc_dir, "afc_variables_etoilees.png")
+      demarrer_mesure_performance("png_afc_variables")
       grDevices::png(afc_vars_png, width = 2000, height = 1600, res = 180)
       tryCatch(
         {
@@ -1691,6 +1799,7 @@ run_batch <- function() {
       )
       grDevices::dev.off()
       if (coords_have_at_least_one_axis(afc_vars_obj$rowcoord) && coords_have_at_least_one_axis(afc_vars_obj$colcoord)) {
+      terminer_mesure_performance("png_afc_variables", "PNG AFC variables etoilees", "Graphiques")
         if (coords_have_two_axes(afc_vars_obj$rowcoord) && coords_have_two_axes(afc_vars_obj$colcoord)) {
           log_info("AFC variables étoilées : calcul terminé.", progress = 80)
         } else {
@@ -1699,6 +1808,7 @@ run_batch <- function() {
       } else {
         log_info("AFC variables étoilées : coordonnées insuffisantes, export PNG de secours généré.", progress = 80)
       }
+      demarrer_mesure_performance("csv_afc_variables")
       ecrire_csv_6_decimales(afc_vars_obj$modalites_stats, file.path(afc_dir, "stats_modalites.csv"), row.names = FALSE)
       if (!is.null(afc_vars_obj$ca$eig)) {
         ecrire_csv_6_decimales(as.data.frame(afc_vars_obj$ca$eig), file.path(afc_dir, "valeurs_propres_vars.csv"), row.names = TRUE)
@@ -1706,10 +1816,12 @@ run_batch <- function() {
       artifacts$afc$afc_variables_png <- relative_to_output(afc_vars_png)
       artifacts$afc$stats_modalites_csv <- relative_to_output(file.path(afc_dir, "stats_modalites.csv"))
       artifacts$afc$valeurs_propres_vars_csv <- relative_to_output(file.path(afc_dir, "valeurs_propres_vars.csv"))
+      terminer_mesure_performance("csv_afc_variables", "Exports CSV AFC variables", "Exports")
     }
   }
 
   if (run_simi) {
+    demarrer_mesure_performance("similitudes")
     log_info("Calcul similitudes.", progress = 84)
     simi_layout_spacing <- scalar_num(config$simi_layout_spacing, 1.7)
     if (!is.finite(simi_layout_spacing) || is.na(simi_layout_spacing)) simi_layout_spacing <- 1.7
@@ -1813,6 +1925,16 @@ run_batch <- function() {
       graph_png = relative_to_output(simi_png)
     )
     log_info("Graphe de similitudes généré.", progress = 86)
+    terminer_mesure_performance("similitudes", "Similitudes et exports graphiques", "Similitudes")
+  }
+
+  chemin_journal_performances <- enregistrer_journal_performances(
+    n_segments = quanteda::ndoc(filtered_corpus),
+    n_formes = quanteda::nfeat(dfm_obj),
+    n_classes = if (is.null(classes_ok)) 0L else length(unique(classes_ok))
+  )
+  if (!is.null(chemin_journal_performances)) {
+    artifacts$journal_performances_chd <- relative_to_output(chemin_journal_performances)
   }
 
   summary <- list(
@@ -1904,6 +2026,7 @@ tryCatch(
   run_batch(),
   error = function(e) {
     log_info(paste0("ERREUR: ", conditionMessage(e)))
+    enregistrer_journal_performances()
     write_status(state = "failed", progress = 100, message = conditionMessage(e))
     jsonlite::write_json(
       list(
