@@ -101,7 +101,6 @@ const corpusPreview = document.getElementById("corpusPreview");
 const analysisSteps = document.getElementById("analysisSteps");
 const analysisSummary = document.getElementById("analysisSummary");
 const zipfChart = document.getElementById("zipfChart");
-const chdDendrogramSelect = document.getElementById("chdDendrogramSelect");
 const chdConfigDialog = document.getElementById("chdConfigDialog");
 const chdConfigDialogContent = document.getElementById("chdConfigDialogContent");
 const closeChdDialogBtn = document.getElementById("closeChdDialogBtn");
@@ -10301,11 +10300,9 @@ function renderImageGallery(container, items, emptyMessage, options = {}) {
 }
 
 function renderSelectableChdDendrogram() {
-  const selectedValue = chdDendrogramSelect?.value || "iramuteq";
-  const file = appState.chdDendrogramFiles.get(selectedValue) || null;
-  const altText = selectedValue === "factoextra" ? "Dendrogramme CHD factoextra" : "Dendrogramme CHD IRaMuTeQ";
+  const file = appState.chdDendrogramFiles.get("iramuteq") || null;
   syncDendrogramSizing();
-  renderImage(resultContainers.chdDendrogramme, file, altText);
+  renderImage(resultContainers.chdDendrogramme, file, "Dendrogramme CHD IRaMuTeQ");
 }
 
 function openImagePreview(title, src, kicker = "Résultat", options = {}) {
@@ -15624,8 +15621,7 @@ async function renderExports(entries, index) {
   let preferredChdSubTab = "dendrogramme";
 
   appState.chdDendrogramFiles = new Map([
-    ["iramuteq", findFile(index, [(path) => path.endsWith("dendrogramme_chd.png")])],
-    ["factoextra", findFile(index, [(path) => path.endsWith("dendrogramme_chd_factoextra.png")])]
+    ["iramuteq", findFile(index, [(path) => path.endsWith("dendrogramme_chd.png")])]
   ]);
   try {
     renderSelectableChdDendrogram();
@@ -16866,10 +16862,6 @@ helpSubNavLinks.forEach((link) => {
 
 enforceExclusiveCheckboxPair(multimodalFrameRate1, multimodalFrameRate25);
 enforceExclusiveCheckboxPair(multimodalFrameQualityLow, multimodalFrameQualityHigh);
-
-chdDendrogramSelect.addEventListener("change", () => {
-  renderSelectableChdDendrogram();
-});
 
 window.addEventListener("resize", () => {
   syncDendrogramSizing();

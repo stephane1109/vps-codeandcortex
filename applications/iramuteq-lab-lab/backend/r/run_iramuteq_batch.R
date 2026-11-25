@@ -595,25 +595,8 @@ run_batch <- function() {
     artifacts$dendrogramme_chd <- relative_to_output(chd_png)
     log_info("Export du dendrogramme IRaMuTeQ terminé.", progress = 63)
 
-    chd_factoextra_png <- file.path(output_dir, "dendrogramme_chd_factoextra.png")
-    grDevices::png(chd_factoextra_png, width = dendrogram_width, height = dendrogram_height, res = 180)
-    tracer_dendrogramme_iramuteq_ui(
-      rv = list(
-        res = list(
-          chd = chd,
-          terminales = classes_info$terminales,
-          classes = classes
-        ),
-        filtered_corpus = filtered_corpus_ok,
-        res_stats_df = res_stats_df
-      ),
-      top_n_terms = 4,
-      orientation = "horizontal",
-      style_affichage = "factoextra"
-    )
-    grDevices::dev.off()
-    artifacts$dendrogramme_chd_factoextra <- relative_to_output(chd_factoextra_png)
-    log_info("Export du dendrogramme factoextra terminé.", progress = 64)
+    # Le dendrogramme factoextra n'est plus calculé ni exporté.
+    # Le dendrogramme IRaMuTeQ demeure le seul rendu CHD.
 
     html_file <- file.path(output_dir, "segments_par_classe.html")
     textes_index_ok <- textes_indexation[quanteda::docnames(dfm_ok)]
