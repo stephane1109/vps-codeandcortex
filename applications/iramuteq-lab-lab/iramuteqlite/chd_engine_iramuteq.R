@@ -276,7 +276,10 @@ lancer_moteur_chd_iramuteq <- function(
     mincl = mincl,
     mincl_mode = mincl_mode,
     classif_mode = classif_mode,
-    nb_classes_cible = NULL,
+    # Le paramètre k représente les classes demandées en première phase.
+    # Il détermine uniquement mincl automatique ; les feuilles CHD
+    # restent sélectionnées par find.terminales comme auparavant.
+    nb_classes_cible = k,
     respecter_nb_classes = FALSE
   )
 

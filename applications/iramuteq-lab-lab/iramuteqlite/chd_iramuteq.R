@@ -303,8 +303,15 @@ reconstruire_classes_terminales_iramuteq <- function(
     stop("CHD IRaMuTeQ-like: objet chd incomplet.")
   }
   
-  nbcl <- length(unique(n1[, ncol(n1)]))
-  nbcl <- max(2L, as.integer(nbcl))
+  # Convention CHD historique : nbcl correspond au nombre de classes
+  # prévu pour la première phase (nbt + 1), et non au nombre de valeurs
+  # distinctes de la dernière colonne, qui peut inclure la classe 0.
+  # Pour une partition intermédiaire sans cible explicite, le nombre
+  # d'étapes de division donne la valeur de référence de cette phase.
+  nbcl <- suppressWarnings(as.integer(nb_classes_cible))
+  if (length(nbcl) != 1L || is.na(nbcl) || !is.finite(nbcl) || nbcl < 2L) {
+    nbcl <- as.integer(ncol(n1) + 1L)
+  }
 
   if (mincl_mode == "auto") {
     mincl_use <- calculer_mincl_auto_iramuteq(
