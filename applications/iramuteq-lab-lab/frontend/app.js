@@ -12873,8 +12873,8 @@ function renderAnalysisSummary(summary) {
         ["Nombre de formes (corpus)", summary.n_formes],
         ["Nombre d'hapax", summary.n_hapax],
         ...(summary.n_tokens_actifs !== undefined ? [
-          ["Occurrences actives (avant seuil)", summary.n_tokens_actifs],
-          ["Formes actives (avant seuil)", summary.n_formes_actives],
+          ["Occurrences actives (avant filtrage par fréquence)", summary.n_tokens_actifs],
+          ["Formes actives (avant filtrage par fréquence)", summary.n_formes_actives],
           ["Occurrences retenues pour la CHD", summary.n_tokens_chd],
           ["Formes retenues pour la CHD", summary.n_formes_chd]
         ] : []),
