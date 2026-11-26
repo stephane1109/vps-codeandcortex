@@ -98,6 +98,8 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Libérer l'accès": "Release access",
   "Analyse du corpus": "Corpus analysis",
   "Synthèse du corpus": "Corpus summary",
+  "Occurrences actives (avant filtrage par fréquence)": "Active occurrences (before frequency filtering)",
+  "Formes actives (avant filtrage par fréquence)": "Active word forms (before frequency filtering)",
   "La synthèse du corpus apparaîtra après l'analyse.": "The corpus summary will appear after the analysis.",
   "Loi de Zipf": "Zipf's law",
   "Étapes de l'analyse": "Analysis steps",
