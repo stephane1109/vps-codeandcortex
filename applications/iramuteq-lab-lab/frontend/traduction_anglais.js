@@ -8,6 +8,7 @@ const ENGLISH_TRANSLATIONS = Object.freeze({
   "Version 0_7beta - modifiée 01-10-2026 - (ajout du test « Analyse chrono croisée »)": "Version 0_7beta - modified 01-10-2026 - (‘Cross-chronological analysis’ test added)",
   "Langue de l'interface": "Interface language",
   "Analyse": "Analysis",
+  "Journal debug/zipf": "Debug log/Zipf",
   "Similitudes": "Similarity",
   "Calcul de spécificités": "Specificity calculation",
   "Analyse chronologique croisée": "Cross-chronological analysis",
