@@ -12855,53 +12855,102 @@ function renderAnalysisSummary(summary) {
     return;
   }
 
+  // Conserver les mêmes cartes et les mêmes données pour toutes les analyses.
+  const creerGrilleIndicateurs = (indicateurs) => {
+    const grille = document.createElement("div");
+    grille.className = "summary-grid";
+
+    indicateurs.forEach(([libelle, valeur]) => {
+      const carte = document.createElement("article");
+      carte.className = "summary-card";
+
+      const titre = document.createElement("p");
+      titre.className = "summary-label";
+      titre.textContent = libelle;
+
+      const contenu = document.createElement("strong");
+      contenu.className = "summary-value";
+      contenu.textContent = formatSummaryValue(valeur);
+
+      carte.appendChild(titre);
+      carte.appendChild(contenu);
+      grille.appendChild(carte);
+    });
+
+    return grille;
+  };
+
   const isSpecificitiesSummary = Boolean(summary.term && summary.variable_label && summary.index_label);
-  const metrics = isSpecificitiesSummary
-    ? [
-        ["Terme étudié", summary.term],
-        ["Modalités comparées", summary.variable_label],
-        ["Indice", summary.index_label],
-        ["Nombre de modalités", summary.n_modalities],
-        ["Modalité la plus spécifique", summary.best_modality],
-        ["Score maximal", summary.best_score]
-      ]
-    : [
-        ["Corpus", summary.corpus],
-        ["Nombre de textes", summary.n_texts],
-        ["Nombre de segments", summary.n_segments],
+  if (isSpecificitiesSummary) {
+    analysisSummary.appendChild(creerGrilleIndicateurs([
+      ["Terme étudié", summary.term],
+      ["Modalités comparées", summary.variable_label],
+      ["Indice", summary.index_label],
+      ["Nombre de modalités", summary.n_modalities],
+      ["Modalité la plus spécifique", summary.best_modality],
+      ["Score maximal", summary.best_score]
+    ]));
+    return;
+  }
+
+  // Les informations générales restent visibles au-dessus des trois étapes lexicales.
+  analysisSummary.appendChild(creerGrilleIndicateurs([
+    ["Corpus", summary.corpus],
+    ["Nombre de textes", summary.n_texts],
+    ["Nombre de segments", summary.n_segments]
+  ]));
+
+  const indicateursActifsDisponibles = summary.n_tokens_actifs !== undefined;
+  const groupes = [
+    {
+      titre: "Vocabulaire initial",
+      description: "Occurrences, formes et hapax comptés après tokenisation, avant lemmatisation et filtrages lexicaux.",
+      indicateurs: [
         ["Nombre d'occurrences (corpus)", summary.n_tokens],
         ["Nombre de formes (corpus)", summary.n_formes],
-        ["Nombre d'hapax", summary.n_hapax],
-        ...(summary.n_tokens_actifs !== undefined ? [
-          ["Occurrences actives (avant filtrage par fréquence)", summary.n_tokens_actifs],
-          ["Formes actives (avant filtrage par fréquence)", summary.n_formes_actives],
+        ["Nombre d'hapax", summary.n_hapax]
+      ]
+    },
+    {
+      titre: "Vocabulaire actif",
+      description: "Formes conservées après les traitements lexicaux activés, avant le filtrage par fréquence.",
+      indicateurs: indicateursActifsDisponibles ? [
+        ["Occurrences actives (avant filtrage par fréquence)", summary.n_tokens_actifs],
+        ["Formes actives (avant filtrage par fréquence)", summary.n_formes_actives]
+      ] : []
+    },
+    {
+      titre: "Vocabulaire CHD",
+      description: "Formes conservées après le seuil de fréquence totale pour le calcul de la CHD.",
+      indicateurs: [
+        ...(indicateursActifsDisponibles ? [
           ["Occurrences retenues pour la CHD", summary.n_tokens_chd],
           ["Formes retenues pour la CHD", summary.n_formes_chd]
         ] : []),
         ["Nombre de classes", summary.n_classes]
-      ];
+      ]
+    }
+  ];
 
-  const grid = document.createElement("div");
-  grid.className = "summary-grid";
+  groupes.forEach(({ titre, description, indicateurs }) => {
+    if (!indicateurs.length) return;
 
-  metrics.forEach(([label, value]) => {
-    const card = document.createElement("article");
-    card.className = "summary-card";
+    const section = document.createElement("section");
+    section.className = "summary-group";
 
-    const title = document.createElement("p");
-    title.className = "summary-label";
-    title.textContent = label;
+    const entete = document.createElement("h4");
+    entete.className = "summary-group-title";
+    entete.textContent = titre;
 
-    const body = document.createElement("strong");
-    body.className = "summary-value";
-    body.textContent = formatSummaryValue(value);
+    const explication = document.createElement("p");
+    explication.className = "summary-group-description";
+    explication.textContent = description;
 
-    card.appendChild(title);
-    card.appendChild(body);
-    grid.appendChild(card);
+    section.appendChild(entete);
+    section.appendChild(explication);
+    section.appendChild(creerGrilleIndicateurs(indicateurs));
+    analysisSummary.appendChild(section);
   });
-
-  analysisSummary.appendChild(grid);
 }
 
 function appendDiscriminationConfigurationDetails(container, configSource) {
