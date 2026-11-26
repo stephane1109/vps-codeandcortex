@@ -98,7 +98,6 @@ const runDistanceLabbeBtn = document.getElementById("runDistanceLabbeBtn");
 const closeDistanceLabbeBtn = document.getElementById("closeDistanceLabbeBtn");
 const logs = document.getElementById("logs");
 const corpusPreview = document.getElementById("corpusPreview");
-const analysisSteps = document.getElementById("analysisSteps");
 const analysisSummary = document.getElementById("analysisSummary");
 const zipfChart = document.getElementById("zipfChart");
 const chdConfigDialog = document.getElementById("chdConfigDialog");
@@ -1574,7 +1573,6 @@ async function activatePersistentAnalysisHistoryEntry(entry) {
   renderAnalysisHistory();
 
   if (!snapshot?.completed) {
-    renderAnalysisSteps(Array.isArray(snapshot?.logs) ? snapshot.logs : []);
     renderAnalysisSummary(snapshot?.summary || null);
     setSidebarRuntimeStatus("Analyse toujours en cours sur le serveur.", "warning");
     log(`[info] ${snapshot?.message || "Analyse toujours en cours."}`);
@@ -1582,7 +1580,6 @@ async function activatePersistentAnalysisHistoryEntry(entry) {
   }
 
   if (!snapshot?.success) {
-    renderAnalysisSteps(Array.isArray(snapshot?.logs) ? snapshot.logs : []);
     renderAnalysisSummary(snapshot?.summary || null);
     setSidebarRuntimeStatus("Cette analyse n'a pas produit de résultats exploitables.", "error");
     log(`[error] ${snapshot?.message || "Analyse terminée sans résultats exploitables."}`);
@@ -1614,7 +1611,6 @@ async function activatePersistentAnalysisHistoryEntry(entry) {
       createVirtualFileFromArtifact(artifact, restoredEntry.folderName || restoredEntry.jobId || restoredEntry.id)
     );
     await handleExportsFolderSelection(virtualFiles, restoredEntry.navigationTarget || "resultats_chd");
-    renderAnalysisSteps(restoredEntry.logs);
     renderAnalysisSummary(restoredEntry.summary || null);
     renderZipfChart(restoredEntry.summary || null);
     setSidebarRuntimeStatus("Résultats restaurés depuis votre historique.", "success");
@@ -1673,7 +1669,6 @@ async function activateAnalysisHistoryEntry(entryId) {
   }
 
   await handleExportsFolderSelection(virtualFiles, entry.navigationTarget || "resultats_chd");
-  renderAnalysisSteps(Array.isArray(entry.logs) ? entry.logs : []);
   renderAnalysisSummary(entry.summary || null);
   renderZipfChart(entry.summary || null);
 
@@ -11174,7 +11169,6 @@ async function runChronologyFromDialog() {
       createVirtualFileFromArtifact(artifact, entry.folderName || entry.jobId || entry.id)
     );
     await handleExportsFolderSelection(virtualFiles, "chronologie_croisee");
-    renderAnalysisSteps(entry.logs);
     renderAnalysisSummary(entry.summary || null);
     closeChronologyDialog();
     const completedLabel = String(payload?.summary?.analysis_mode_label || "Analyse chronologique");
@@ -11317,7 +11311,6 @@ async function runDistanceLabbeFromDialog() {
       createVirtualFileFromArtifact(artifact, entry.folderName || entry.jobId || entry.id)
     );
     await handleExportsFolderSelection(virtualFiles, "distance_intertextuelle");
-    renderAnalysisSteps(entry.logs);
     renderAnalysisSummary(entry.summary || null);
     closeDistanceLabbeDialog();
     setSidebarRuntimeStatus("Distance intertextuelle terminée.", "success");
@@ -12852,26 +12845,6 @@ function formatSummaryValue(value) {
 function getClassesModeLabel(mode) {
   if (mode === "discrimination_simple") return "CHD distance optimisée";
   return "Normal";
-}
-
-function renderAnalysisSteps(logLines) {
-  clearContainer(analysisSteps);
-
-  if (!Array.isArray(logLines) || !logLines.length) {
-    analysisSteps.appendChild(createEmptyState("Les étapes s'afficheront après le lancement d'une analyse."));
-    return;
-  }
-
-  const list = document.createElement("ol");
-  list.className = "steps-list";
-
-  logLines.forEach((line) => {
-    const item = document.createElement("li");
-    item.textContent = String(line).replace(/^\[[^\]]+\]\s*/, "").trim() || String(line);
-    list.appendChild(item);
-  });
-
-  analysisSteps.appendChild(list);
 }
 
 function renderAnalysisSummary(summary) {
@@ -15980,7 +15953,6 @@ function resetResultPanes() {
     container.appendChild(createEmptyState(messages[key]));
   });
 
-  renderAnalysisSteps([]);
   renderAnalysisSummary(null);
   renderZipfChart(null);
   applySimiZoom();
@@ -17770,7 +17742,6 @@ async function startAnalysis(analysisKind = "chd") {
       log(`[info] ${message}`);
     }
 
-    renderAnalysisSteps(checkpoints.map(([, message]) => message));
     renderAnalysisSummary(null);
     renderZipfChart(null);
     await refreshTicketSidebarStatus();
@@ -17970,7 +17941,6 @@ async function startAnalysis(analysisKind = "chd") {
 
     progression.set(96, "Traitement des exports...");
 
-    renderAnalysisSteps(payload.logs || []);
     renderAnalysisSummary(payload.summary || null);
     renderZipfChart(payload.summary || null);
 
