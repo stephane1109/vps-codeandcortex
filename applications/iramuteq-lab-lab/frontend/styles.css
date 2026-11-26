@@ -1403,6 +1403,26 @@ progress {
   gap: 0.9rem;
 }
 
+.summary-group {
+  margin-top: 1.15rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.summary-group-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.summary-group-description {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .summary-card {
   border: 1px solid var(--line);
   border-radius: 16px;
